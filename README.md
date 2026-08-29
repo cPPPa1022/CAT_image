@@ -47,4 +47,4 @@ prompts/            提示词素材（pipeline + roster + 角色卡指令模板�
 
 ---
 
-*基于 cPPPa1022/sillyCAT 重构，v1.0 起独立发布 · 作者 reasonix*
+*v1.0 全新章节：SnowCat 界面 + 画师/导演双模式 · 作者 cPPPa1022*

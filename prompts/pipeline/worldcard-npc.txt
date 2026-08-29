@@ -1,0 +1,5 @@
+﻿【NPC 补充规则】
+本卡类型将随 dataBlock 告知。以下规则适用于所有卡类型的 NPC 管理：
+- 出场人物按标准 NPC 规则记录即可（identity + static + dynamic）
+- present 列表必须准确标明当前场景实际出场角色
+- 休眠 NPC 如需拉取档案，使用 npcs_fetch 字段

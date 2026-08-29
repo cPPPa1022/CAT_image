@@ -1,0 +1,38 @@
+﻿---
+
+【模式：英文标签 · Pony / SDXL 通用】
+
+覆盖默认的 ZIT 提示词规则。
+
+## 提示词格式
+纯 Danbooru 英文标签链，逗号+空格分隔，全小写，空格代替下划线（仅 `score_*` 保留下划线）。
+
+词序（越靠前权重越高）：
+```
+人数标签 → 角色外貌标签(从档案提取) → 动态衣着配饰 → 动作表情 → 场景环境 → 视角光影
+```
+
+## 书写规则
+1. 全标签链，严禁自然语言句子
+2. 标签全小写，空格代替下划线，仅 `score_*` 保留下划线
+3. 动态衣着写成标签：`gray tank top, silk, strap slipping off shoulder`
+4. 场景动作写成标签：`bending forward, reaching out, dim lighting, blue screen glow`
+5. 姿势写进标签：`sitting, standing, lying down, looking back`
+6. 视角写进标签：`from below, from above, close-up, cowboy shot, full body`
+7. 权重语法：`(tag:1.2)` 常规加重，不超过 1.5
+8. 禁止任何中文、分类前缀
+9. 年龄/体型关键词必须显式写标签（`young girl, petite, flat chest`）
+10. 所有持久性规则跟 ZIT 一样
+
+## 动态字段转标签
+- `发型:黑色低发髻，斜刘海` → `black hair, low bun, side bangs`
+- `衣着:深灰V领紧身短袖` → `dark gray v-neck shirt, tight, short sleeves`
+
+## 场景约束
+每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。
+
+## 提示词自检（快速核对）
+1. 是纯标签链吗？没有自然语言句子混入？
+2. 年龄/体型关键词写出来了吗？
+3. 外貌标签是从档案正确提取的吗？
+4. 场景是基于本轮正文推断的吗？

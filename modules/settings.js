@@ -46,9 +46,9 @@ export function getDefaults() {
         // 酒馆AI模式：是否每轮向主LLM注入【生图协作卡+人物档案索引】（setExtensionPrompt）
         injectCards: true,
         // 导演模式：是否把扫描的卡库档案自动导入人物表（人物表=插件AI每轮的"人物外貌"输入）。
-        // true=默认，一致性最好但每轮多付卡库锚点 token；false=仅立绘/档案展示用扫描，
-        // 人物表只保留占位符收集的信息，最省 token。
-        directorCastImport: true,
+        // false=默认（用户决策）：扫描仅用于立绘/档案查看，人物表只保留占位符收集的信息，最省 token；
+        // true=把卡库档案也导入人物表（一致性更好，但每轮多付卡库锚点 token）。
+        directorCastImport: false,
     };
 }
 

@@ -4,7 +4,7 @@
 
 import { slLog } from './log.js';
 import { settings, getSTContext, getActiveMode } from './settings.js';
-import { rosterIndexText } from './roster.js';
+import { rosterEntries, rosterIndexText } from './roster.js';
 
 var MODULE = 'sillycat_coop';
 var POSITION = 2; // BEFORE_PROMPT
@@ -27,9 +27,19 @@ export function buildCoopCardText() {
     // [Fix] 画风预设只在 ZIT 模式实际应用（comfyui.js generateImage），anime 模式不再谎称"已自动应用"（C4）
     lines.push('· 当前模式：' + modeDesc(_modeNow) + '；' + (settings.stylePreset ? ('画风预设：「' + settings.stylePreset + '」' + (_modeNow === 'zit' || !_modeNow ? '已自动应用；' : '（中文预设，生图时未自动应用，按需在画面要点中体现风格）；')) : '画风预设：未选择；') + (settings.nsfwEnhance ? '成人内容：按卡内容如实配图。' : ''));
     lines.push('【人物档案索引】');
-    var names = rosterIndexText(0);
+    // [Fix] *更新* ACK 机制：人物表条目刚建立/更新时带 _updated 标记，索引里显示 *更新*（只显示一轮），
+    // 主 LLM 据此确认"上一轮写的人物指导已入库"，从而不需要重复描写外貌。
+    var entries = rosterEntries();
+    var names = [];
+    for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        var mark = '';
+        if (e._updated) { mark = '*更新*'; e._updated = false; }
+        names.push(e.key + mark);
+    }
     if (names.length) {
         lines.push('已建档（' + (settings.directorCastImport !== false ? '插件的角色卡扫描档案+历轮收集' : '插件历轮从占位符收集') + '，插件认识其长相）：' + names.join('、'));
+        lines.push('索引带 *更新* 的人物 = 上一轮刚建立/更新了档案（你写的人物指导已入库，可放心引用）；不带标记 = 长期未变，无需重复外貌；人物外貌有新变化时才在占位符写明，下一轮该人物会带 *更新* 标记。');
         lines.push('已建档人物只需写“谁+在做什么”，无需描述外貌；未建档的新人物请在占位符中写明外貌，插件将建立长期档案。');
     } else {
         lines.push('（暂无建档人物；出现的所有人物都请在占位符中写明外貌，插件将建档。）');
@@ -48,7 +58,7 @@ export function refreshCoopCards() {
         }
         var text = buildCoopCardText();
         ctx.setExtensionPrompt(MODULE, text, POSITION, 0);
-        slLog('协作卡已注入: ' + text.length + '字, 人物索引 ' + rosterIndexText(0).length + ' 人');
+        slLog('协作卡已注入: ' + text.length + '字, 人物索引 ' + rosterEntries().length + ' 人');
     } catch (e) { slLog('协作卡注入异常: ' + e.message); }
 }
 

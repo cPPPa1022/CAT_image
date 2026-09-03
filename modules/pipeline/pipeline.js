@@ -173,7 +173,7 @@ function buildDataBlock(profiles, cast, pipeMode, bodyText) {
     if (activeList.length) {
         for (var ai = 0; ai < activeList.length; ai++) {
             var a = activeList[ai];
-            lines.push('■ ' + a.name + (a.data.identity ? ' [' + a.data.identity + ']' : '') + '（出现' + (a.data.appearances || 1) + '次' + (presentSet[a.name] ? '' : (findNpcMention(bodyText, a.name) ? '，正文出场' : '，本轮未出场')) + '）');
+            lines.push('■ ' + a.name + (a.data.identity ? ' [' + a.data.identity + ']' : '') + '（出现' + (a.data.appearances || 1) + '次' + (presentSet[a.name] ? '' : (findNpcMention(bodyText, a.name) ? '，正文出场' : '，本轮未出场')) + (a.data._updatedRound === curRound - 1 ? '，档案更新' : '') + '）');
             if (a.data.static) lines.push('  外貌：' + a.data.static);
             if (a.data.dynamic) lines.push('  当前：' + a.data.dynamic);
         }
@@ -527,12 +527,15 @@ export async function runAuxPipeline(bodyText, mesId) {
                         // [Fix] 与 gcNpcs 的 currentRound=(_round||0)+1 同口径：原实现写自增前 _round，
                         // 导致"3 轮未出现才休眠"实际 2 轮就休眠、"近 2 轮在场"只覆盖上一轮（B5）。
                         profiles.chat.npcs[npcName].last_seen_round = (profiles.chat._round || 0) + 1;
+                        // [Fix] 新建档标记：下一轮数据块显示"（档案更新）"，让管线 AI 确认自己的建档输出已被采纳
+                        profiles.chat.npcs[npcName]._updatedRound = (profiles.chat._round || 0) + 1;
                         // [Fix] anime系模式：NPC 也存英文锚点（生图时避免中文被 cleanAnimePrompt 删空）
                         if (npcData.en_prompt) profiles.chat.npcs[npcName].enPrompt = npcData.en_prompt;
                         if (npcData.en_tags) profiles.chat.npcs[npcName].enTags = npcData.en_tags;
                     } else {
                         var existing = profiles.chat.npcs[npcName];
                         existing.last_seen_round = (profiles.chat._round || 0) + 1;
+                        existing._updatedRound = (profiles.chat._round || 0) + 1;
                         if (npcData.wake) { existing.sleep = false; existing.wake = true; }
                         existing.appearances = (existing.appearances || 0) + (npcData.appearances || 1);
                         if (npcData.dynamic) existing.dynamic = mergeDynamicLine(existing.dynamic, npcData.dynamic);

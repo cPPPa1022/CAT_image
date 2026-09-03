@@ -69,16 +69,22 @@ export function upsertPerson(name, identity, appearance, source) {
         if (!key) return null;
         var existing = r.list[key];
         if (!existing) {
-            r.list[key] = { key: key, name: name, identity: identity || '', appearance: appearance || '', source: source || 'roster' };
+            // [Fix] _updated=true：协作卡索引会在下一轮显示 *更新* 标记（一次），
+            // 主 LLM 据此确认"人物指导已入库"，之后不再重复写外貌。
+            r.list[key] = { key: key, name: name, identity: identity || '', appearance: appearance || '', source: source || 'roster', _updated: true };
             slLog('人物表建档: ' + key + (appearance ? '（' + appearance.slice(0, 20) + '…）' : ''));
         } else {
             var newApp = String(appearance || '');
+            var changed = false;
             if (newApp && newApp.length > String(existing.appearance || '').length) {
                 existing.appearance = newApp;
+                changed = true;
                 slLog('人物表更新(更详版): ' + key);
             }
-            if (identity && !existing.identity) existing.identity = identity;
+            if (identity && !existing.identity) { existing.identity = identity; changed = true; }
             existing.source = source || existing.source;
+            // 只在内容真变化时打标，避免没变也显示 *更新*
+            if (changed) existing._updated = true;
         }
         try { refreshCoopCards(); } catch (e2) { /* 协作卡刷新失败不影响建档 */ }
         return r.list[key];
@@ -145,6 +151,7 @@ export function importFromCast(cast) {
         if (existingEntry) {
             if (String(appearance).length > String(existingEntry.appearance || '').length) {
                 existingEntry.appearance = appearance;
+                existingEntry._updated = true;
                 slLog('人物表更新(卡库更详): ' + existingEntry.key);
             }
             n++;

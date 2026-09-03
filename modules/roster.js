@@ -223,6 +223,36 @@ export function rosterDataText() {
     } catch (e) { return ''; }
 }
 
+// ── 清档同步：删掉"角色卡扫描"来源的 base（保留酒馆AI收集的 live） ──
+// 用户删除角色卡档案后，人物表不再持有过期的扫描锚点；若之后重新扫描会自动按规则重建 base。
+export function dropCastBases(charName, chatId) {
+    try {
+        var chat = settings.roster && settings.roster[charName] && settings.roster[charName][chatId];
+        if (!chat) return 0;
+        var n = 0;
+        for (var k in chat) {
+            var e = chat[k];
+            if (e && e.fromCard) {
+                e.fromCard = false;
+                e.base = '';
+                e.appearance = e.live || '';
+                n++;
+            }
+        }
+        if (n) { saveSettings(); try { refreshCoopCards(); } catch (e2) {} }
+        return n;
+    } catch (e) { return 0; }
+}
+export function clearRosterChat(charName, chatId) {
+    try {
+        if (settings.roster && settings.roster[charName] && settings.roster[charName][chatId]) {
+            delete settings.roster[charName][chatId];
+            saveSettings();
+            try { refreshCoopCards(); } catch (e2) {}
+        }
+    } catch (e) {}
+}
+
 // ── 人物表全部条目（供管线判断已建档） ──
 export function rosterEntries() {
     try {

@@ -7,6 +7,7 @@ import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { refreshCoopCards } from '../sync-cards.js';  // [Fix] 扫描后刷新导演模式协作卡/人物索引（否则主 LLM 一直收到"暂无建档人物"）
+import { dropCastBases, clearRosterChat } from '../roster.js';  // 清档时同步人物表
 
 // [AI-Fix] 兼容 半角/全角冒号 与 【维度：】值 / 维度: 值 两种行格式（模块级，供 pipeline 复用）
 export function parseTagLine(line) {
@@ -467,6 +468,8 @@ export function deleteCharacterProfile(fullDelete) {
         try { localStorage.removeItem('slimg_cache'); } catch(e) {}
         // 清理 DOM 里的 img 卡片
         jQuery('.sl_img_block').remove();
+        // [Fix] 全部删除 → 同步清空当前聊天人物表（导演模式人物表不再残留旧档案）
+        clearRosterChat(charName, chatId);
         slLog('档案全部删掉了喵… 需要重新扫描 (｡•́︿•̀｡): ' + charName);
     } else {
         // 仅重新扫描：只清 cast + userProfile
@@ -475,6 +478,8 @@ export function deleteCharacterProfile(fullDelete) {
             pf.root[charName].userProfile = '';
         }
         // [B6] 死字段清理（_castSent 无读取方）
+        // [Fix] 清档同步：丢人物表里"角色卡扫描"来源的 base（保留酒馆AI收集的 live），重扫会自动重建
+        dropCastBases(charName, chatId);
         slLog('角色卡档案已清空(保留聊天数据), 等待重新扫描: ' + charName);
     }
     saveSettings();

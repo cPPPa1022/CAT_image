@@ -61,6 +61,18 @@ export function findAppearance(name, identity) {
 }
 
 // ── 建档/更新（appearance 取更长版本，防覆盖丢失） ──
+// 人物档案优先级规则（导演/画师统一）：
+//   - 插件扫描过该角色卡 → 用插件的档案（base=扫描锚点，权威，LLM 信息不覆盖身份维度）
+//   - 没有扫描 → 用酒馆 AI 发过来的（live=占位符人物指导/正文描写，逐轮更新）
+// 展现/发送时 = base + live 合成（身份维度来自扫描，衣着/状态等变化来自酒馆 AI）
+export function composePersonAppearance(e) {
+    var base = e.base || '', live = e.live || '';
+    if (!live) return base || (e.appearance || '');
+    if (!base) return live;
+    if (live.indexOf(base) >= 0) return live;   // live 已包含 base → 只发 live
+    if (base.indexOf(live) >= 0) return base;   // base 已包含 live → 只发 base
+    return base + '，' + live;
+}
 export function upsertPerson(name, identity, appearance, source) {
     try {
         var r = ensureRoster();
@@ -68,23 +80,53 @@ export function upsertPerson(name, identity, appearance, source) {
         var key = personKey(name, identity);
         if (!key) return null;
         var existing = r.list[key];
+        var isCast = source === 'cast';
         if (!existing) {
-            // [Fix] _updated=true：协作卡索引会在下一轮显示 *更新* 标记（一次），
-            // 主 LLM 据此确认"人物指导已入库"，之后不再重复写外貌。
-            r.list[key] = { key: key, name: name, identity: identity || '', appearance: appearance || '', source: source || 'roster', _updated: true };
-            slLog('人物表建档: ' + key + (appearance ? '（' + appearance.slice(0, 20) + '…）' : ''));
+            // _updated=true（仅 LLM 来源）：协作卡索引下一轮显示 *更新*，主 LLM 确认"人物指导已入库"
+            r.list[key] = {
+                key: key, name: name, identity: identity || '',
+                appearance: appearance || '',
+                source: source || 'roster',
+                fromCard: isCast,
+                base: isCast ? (appearance || '') : '',
+                live: isCast ? '' : (appearance || ''),
+                _updated: !isCast
+            };
+            slLog('人物表建档: ' + key + (isCast ? '（角色卡档案）' : '（酒馆AI收集）') + (appearance ? '，' + appearance.slice(0, 20) + '…' : ''));
         } else {
             var newApp = String(appearance || '');
             var changed = false;
-            if (newApp && newApp.length > String(existing.appearance || '').length) {
-                existing.appearance = newApp;
-                changed = true;
-                slLog('人物表更新(更详版): ' + key);
+            if (isCast) {
+                // 插件扫描档案 → 权威 base（扫描锚点优先，更详者胜），已有 live 不动
+                if (existing.fromCard && existing.base) {
+                    if (newApp && newApp.length > String(existing.base).length) {
+                        existing.base = newApp;
+                        changed = true;
+                    }
+                } else {
+                    existing.base = newApp || existing.appearance || '';
+                    // 旧条目迁移：此前"酒馆AI收集"的外观降级为 live（动态层），不当权威 base
+                    if (existing.appearance && existing.appearance !== existing.base && existing.live == null) {
+                        existing.live = existing.appearance;
+                    }
+                    changed = true;
+                }
+                existing.fromCard = true;
+                existing.source = 'cast';
+            } else {
+                // 酒馆 AI 发来的 → live 逐轮覆盖（不碰 base）
+                if (newApp) {
+                    if (existing.live == null && !existing.fromCard) existing.live = existing.appearance || '';  // 旧条目迁移
+                    existing.live = newApp;
+                    changed = true;
+                }
+                existing.source = source || existing.source;
             }
             if (identity && !existing.identity) { existing.identity = identity; changed = true; }
-            existing.source = source || existing.source;
-            // 只在内容真变化时打标，避免没变也显示 *更新*
-            if (changed) existing._updated = true;
+            // 重组展示/发送内容 = 基础(扫描) + 动态(酒馆AI)
+            existing.appearance = composePersonAppearance(existing);
+            // 只有"酒馆AI发来的"更新才打 *更新* ACK；扫描库导入是后台动作，不打标
+            if (changed && !isCast) existing._updated = true;
         }
         try { refreshCoopCards(); } catch (e2) { /* 协作卡刷新失败不影响建档 */ }
         return r.list[key];
@@ -149,9 +191,11 @@ export function importFromCast(cast) {
             }
         } catch (e4) { existingEntry = null; }
         if (existingEntry) {
-            if (String(appearance).length > String(existingEntry.appearance || '').length) {
-                existingEntry.appearance = appearance;
-                existingEntry._updated = true;
+            if (String(appearance).length > String(existingEntry.base || existingEntry.appearance || '').length) {
+                existingEntry.base = appearance;
+                existingEntry.fromCard = true;
+                existingEntry.appearance = composePersonAppearance(existingEntry);
+                // [Fix] 卡库导入是后台动作，不打 *更新*（ACK 只表示"人物指导已入库"）
                 slLog('人物表更新(卡库更详): ' + existingEntry.key);
             }
             n++;

@@ -90,6 +90,10 @@ function buildDataBlock(profiles, cast, pipeMode, bodyText) {
     var meta = profiles.root[profiles.charName].meta || {};
     var lines = [];
     lines.push('【角色卡档案】');
+    if (Object.keys(cast).length === 0) {
+        // [Fix] 未扫描/无档案时明确声明：角色外貌以正文描写为准并写入 npcs 建档（避免 LLM 误以为档案丢失而拒绝配图）
+        lines.push('（插件未扫描该角色卡，无角色卡档案——人物外貌以【当前正文】描写为准，新人物写入 npcs 建档）');
+    }
 
     if (meta.cardType) lines.push('【卡类型】' + meta.cardType);
     if (meta.styleTag) lines.push('【画风约束】' + meta.styleTag);
@@ -433,9 +437,10 @@ export async function runAuxPipeline(bodyText, mesId) {
     // [Fix] v2.2 把 v2.0 的跳过语义写反了（世界观卡无档案时反而被跳过 → 永不出图）。
     // 恢复 v2.0 语义：世界观卡/混合型卡无档案时照常跑管线（角色由聊天动态生成 + NPC 建档）；
     // 仅"具体角色卡"且扫描完全失败（连 fallback 主角都没有）时才跳过省一次调用。
-    if (!staticResult && meta.cardType !== '世界观卡' && meta.cardType !== '混合型卡') {
-        slLog('无角色卡缓存+具体角色卡扫描失败, 跳过管线');
-        return null;
+    // [Fix] 用户规则：未扫描(或扫描失败)也照常跑管线——人物档案用"酒馆AI发过来的"（正文/占位符描写）建档，
+    // 不再因"具体角色卡无缓存"而跳过（原实现跳过后该卡永远不出图）。
+    if (!staticResult) {
+        slLog('无角色卡缓存：按"酒馆AI发来的"规则建档，外貌以【当前正文】描写为准');
     }
 
     var cast = profiles.root[profiles.charName].cast || {};

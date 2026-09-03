@@ -202,8 +202,9 @@ export function scanDom(messageDiv) {
             var partIdx = rawOriginal.indexOf(part, posCursor);
             if (partIdx >= 0) posCursor = partIdx + part.length;
             var promptContent = extractImagePrompt(rawOriginal, part, partIdx >= 0 ? partIdx : 0) || '';
-            // [Fix] 原代码 promptContent 兜底为 scene 后又拼 scene + ', ' + promptContent，无【提示词】块时场景重复两遍
-            var fullPrompt = resolveFacePrompt(scene ? (promptContent ? scene + ', ' + promptContent : scene) : promptContent);
+            // [Fix] 提示词只用【提示词】块内容（无则回退场景）：场景段是"画面描述/标题"用途，
+            // 拼进提示词会把剧情叙述文字+角色名一起喂给生图模型（与 renderEnhancedBodyHtml 对齐）
+            var fullPrompt = resolveFacePrompt(promptContent || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c2 = cleanAnimePrompt(fullPrompt); if (_c2) fullPrompt = _c2; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文
             return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt));
         }
@@ -298,7 +299,9 @@ export function extractImgBlocksFromEnhanced(enhancedText) {
         var scene = (m[1] || '').trim();
         // [Fix] 用正则匹配位置定位提示词（同场景多图不共用第一块，B4）
         var promptContent = extractImagePrompt(enhancedText, m[0], m.index) || '';
-        var fullPrompt = resolveFacePrompt(scene ? (promptContent ? scene + ', ' + promptContent : scene) : promptContent);
+        // [Fix] 提示词只用【提示词】块内容（无则回退场景）：导演模式场景是主 LLM 写的长叙事
+        // （人物动作/表情/衣着），拼进提示词会把剧情文字+角色名喂给生图模型（与 renderEnhancedBodyHtml 对齐）
+        var fullPrompt = resolveFacePrompt(promptContent || scene);
         if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
         blocks.push({ scene: scene, prompt: fullPrompt, html: buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt)) });
     }

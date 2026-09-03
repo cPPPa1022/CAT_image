@@ -6,6 +6,7 @@ import { imgCacheSet } from '../cache.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { cleanAnimePrompt } from '../text-utils.js';
+import { refreshCoopCards } from '../sync-cards.js';  // [Fix] 扫描后刷新导演模式协作卡/人物索引（否则主 LLM 一直收到"暂无建档人物"）
 
 // [AI-Fix] 兼容 半角/全角冒号 与 【维度：】值 / 维度: 值 两种行格式（模块级，供 pipeline 复用）
 export function parseTagLine(line) {
@@ -409,6 +410,7 @@ export async function scanCharacterProfile(modelMode) {
 
         profiles.root[charName].cast = cast;
         if (userProfile) profiles.root[charName].userProfile = userProfile;
+        try { refreshCoopCards(); } catch (e3) { slLog('扫描后协作卡刷新跳过: ' + (e3.message || '')); }
         // [Fix] anime系模式：英文锚点缺失告警（LLM 未输出 EN-PROMPT/EN-TAGS 块，或角色名不一致导致失配）
         if ((modelMode === 'anime' || modelMode === 'anime_tag') && Object.keys(cast).length) {
             var enField = modelMode === 'anime' ? 'enPrompt' : 'enTags';

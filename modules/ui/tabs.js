@@ -226,7 +226,13 @@ function renderArchiveInto(body) {
 }
 function scanFromArchive(body) {
   var btn = body.find('#sl_btn_scan_cast3'); btn.prop('disabled', true).text('扫描中…');
-  (async function(){ try { var scanMode = body.find('#sl_scan_mode').val() || 'zit'; var cardType = body.find('#sl_card_type').val() || '具体角色卡'; try { setCardType(getCharacterName(), cardType); } catch (e2) {} await scanCharacterProfile(scanMode); toast('success', '扫描完成，已锁定'); renderArchiveInto(body); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } })();
+  (async function(){ try { var scanMode = body.find('#sl_scan_mode').val() || 'zit';
+    // [Fix] 卡类型选择器只存在于扫描页/世界观卡页；具体角色卡页（含混合型卡+有档案）没有该元素，
+    // 原实现取到 undefined 一律按'具体角色卡' setCardType，会把混合型卡/世界观卡静默降级（重扫即丢失）。
+    // 改为：有选择器读选择器，没有则沿用当前 meta.cardType。
+    var cardTypeEl = body.find('#sl_card_type');
+    var cardType = cardTypeEl.length ? cardTypeEl.val() : (function(){ try { var pf = getProfiles(); return (pf && pf.root[pf.charName] && pf.root[pf.charName].meta && pf.root[pf.charName].meta.cardType) || '具体角色卡'; } catch (e5) { return '具体角色卡'; } })();
+    try { setCardType(getCharacterName(), cardType); } catch (e2) {} await scanCharacterProfile(scanMode); toast('success', '扫描完成，已锁定'); renderArchiveInto(body); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } })();
 }
 function userCardInto() {
   var pf = getProfiles();

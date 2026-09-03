@@ -6,6 +6,7 @@
 import { slLog } from './log.js';
 import { settings, saveSettings, getSTContext } from './settings.js';
 import { getCharacterName, getChatId } from './pipeline/profile.js';
+import { refreshCoopCards } from './sync-cards.js';  // [Fix] 人物表变化时刷新导演模式协作卡索引
 
 // ── key 归一化 ──
 export function personKey(name, identity) {
@@ -79,6 +80,7 @@ export function upsertPerson(name, identity, appearance, source) {
             if (identity && !existing.identity) existing.identity = identity;
             existing.source = source || existing.source;
         }
+        try { refreshCoopCards(); } catch (e2) { /* 协作卡刷新失败不影响建档 */ }
         return r.list[key];
     } catch (e) { slLog('人物表upsert异常: ' + e.message); return null; }
 }
@@ -129,6 +131,25 @@ export function importFromCast(cast) {
         else appearance = c.static || '';
         if (c.body && appearance && !/身形/.test(appearance)) appearance += '；身形：' + c.body;
         if (!appearance) continue;
+        // [Fix] 与占位符/身份标签条目去重：人物表里已有同名（含"名字（身份）"key）条目时
+        // 走"更长者胜"更新，不再新建无身份的重复条目（导演模式扫描后同一人会出现两条档案）。
+        var existingEntry = null;
+        try {
+            var r0 = ensureRoster();
+            if (r0) {
+                for (var k0 in r0.list) {
+                    if (k0 === name || k0.indexOf(name + '（') === 0) { existingEntry = r0.list[k0]; break; }
+                }
+            }
+        } catch (e4) { existingEntry = null; }
+        if (existingEntry) {
+            if (String(appearance).length > String(existingEntry.appearance || '').length) {
+                existingEntry.appearance = appearance;
+                slLog('人物表更新(卡库更详): ' + existingEntry.key);
+            }
+            n++;
+            continue;
+        }
         upsertPerson(name, '', appearance, 'cast');
         n++;
     }

@@ -29,7 +29,7 @@ export function buildCoopCardText() {
     lines.push('【人物档案索引】');
     var names = rosterIndexText(0);
     if (names.length) {
-        lines.push('已建档（插件的角色卡扫描档案+历轮收集，插件认识其长相）：' + names.join('、'));
+        lines.push('已建档（' + (settings.directorCastImport !== false ? '插件的角色卡扫描档案+历轮收集' : '插件历轮从占位符收集') + '，插件认识其长相）：' + names.join('、'));
         lines.push('已建档人物只需写“谁+在做什么”，无需描述外貌；未建档的新人物请在占位符中写明外貌，插件将建立长期档案。');
     } else {
         lines.push('（暂无建档人物；出现的所有人物都请在占位符中写明外貌，插件将建档。）');

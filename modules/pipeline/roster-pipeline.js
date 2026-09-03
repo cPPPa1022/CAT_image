@@ -137,12 +137,16 @@ export async function runRosterPipeline(bodyText, mesId) {
     slLog('协作管线启动: ' + placeholders.length + ' 个占位符');
     try {
         // 0. 从卡库扫描档案导入人物表（人物一致性：脸部/身形锚点直接复用扫描产出）
-        try {
-            var _pf = getProfiles();
-            var _cast = _pf && _pf.root && _pf.root[_pf.charName] ? (_pf.root[_pf.charName].cast || {}) : {};
-            var imported = importFromCast(_cast);
-            if (imported) slLog('协作管线: 卡库档案导入人物表 ' + imported + ' 人');
-        } catch (e) { slLog('卡库档案导入跳过: ' + e.message); }
+        // [Fix] 可关闭：导演模式只想用扫描来看立绘/档案时，关闭后人物表只保留占位符收集的信息，
+        // 插件AI每轮不再把卡库全量锚点发过去（省 token）。
+        if (settings.directorCastImport !== false) {
+            try {
+                var _pf = getProfiles();
+                var _cast = _pf && _pf.root && _pf.root[_pf.charName] ? (_pf.root[_pf.charName].cast || {}) : {};
+                var imported = importFromCast(_cast);
+                if (imported) slLog('协作管线: 卡库档案导入人物表 ' + imported + ' 人');
+            } catch (e) { slLog('卡库档案导入跳过: ' + e.message); }
+        }
 
         // 1. 占位符人物段直接建档（无LLM）
         var nApplied = applyPersonSegments(placeholders.map(function(p) { return p.personSegments; }).reduce(function(a, b) { return a.concat(b); }, []));

@@ -3,14 +3,15 @@ import { CAT, CAT_THEMES, TEXT_THEMES, applyTheme, THEME_ORDER, THEME_ICONS } fr
 import { card, groupTitle, cell, cardHead, lbl, chip, btnMain, btnGhost, btnSm, btnDanger, switchHTML, empty } from './primitives.js';
 import { catSVG, catStatusText } from './cat.js';
 import { toast, esc, escAttr, fi, chkProf } from './utils.js';
-import { settings, saveSettings } from '../settings.js';
+import { settings, saveSettings, getActiveMode } from '../settings.js';
 import { slLogDump, getLogCount, slClearLogs, slLog } from '../log.js';
 import { getProfiles, scanCharacterProfile, getCharacterName, deleteCharacterProfile, setCardType } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { openSubPanel } from './sub-panels.js';
-import { createExpandedPanel, pushPage } from './panel.js';
+import * as panel from './panel.js';
+var pushPage = panel.pushPage;
 import * as compact from './compact-bar.js';
 import * as story from '../story.js';
 import { refreshCoopCards } from '../sync-cards.js';
@@ -38,16 +39,13 @@ export function renderHomeTab() {
   h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:' + CAT.text + ';">' + esc(cn) + '</div><div style="font-size:11px;color:' + CAT.sub + ';margin-top:2px;">' + (isMain ? '🎬 导演模式 · 主模型指挥' : '🎨 画师模式 · 专属AI读文') + ' · ' + (settings.autoGen === 1 ? '自动出图' : '手动出图') + '</div></div>';
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
-  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ((settings.modelType === 'anime' || settings.modelType === 'anime_tag') ? '🎬 Anime' : '🖼️ ZIT') + '</span>';
+  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ((getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') ? '🎬 Anime' : '🖼️ ZIT') + '</span>';
   h += '<span style="' + chip(hp ? CAT.green + '1F' : CAT.red + '1F', hp ? CAT.green : CAT.red) + '">' + (hp ? '📦 已扫描' : '🔍 未扫描') + '</span>';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">🐟 队列 ' + ql + '</span>';
   h += '</div></div>';
-  // 快捷操作（两大按钮）
-  if (isMain || settings.autoGen === 1) {
-    h += '<div style="display:flex;gap:8px;"><button id="sl_btn_scan_cast" style="flex:1;' + btnMain() + '">扫描角色卡</button><button id="sl_btn_gen_all" style="flex:1;' + btnGhost() + '">一键排图</button></div>';
-  } else {
-    h += '<div style="display:flex;gap:8px;"><button id="sl_btn_scan_cast" style="flex:1;' + btnMain() + '">扫描角色卡</button><button id="sl_btn_gen_all" style="flex:1;' + btnGhost() + '">一键排图</button></div>';
-  }
+  // 快捷操作（两大按钮）：画师/导演模式通用——扫描建档 + 一键补排。
+  // [B1] 原 if/else 两分支完全一致（条件无意义），合并为单一分支防止"只改一半"。
+  h += '<div style="display:flex;gap:8px;"><button id="sl_btn_scan_cast" style="flex:1;' + btnMain() + '">扫描角色卡</button><button id="sl_btn_gen_all" style="flex:1;' + btnGhost() + '">一键排图</button></div>';
   // 协作模式快捷切换（高频项浅放：一键切换 插件AI/酒馆AI）
   h += '<div style="' + card() + ';padding:8px;display:flex;gap:6px;">';
   h += '<button class="sl_mode_seg' + (isMain ? '' : ' active') + '" data-mode="plugin" style="flex:1;padding:9px 0;border:none;border-radius:12px;cursor:pointer;font-size:11.5px;font-weight:700;' + (isMain ? 'color:' + CAT.sub + ';background:transparent;' : 'color:#fff;background:' + CAT.accent + ';box-shadow:' + CAT.btnShadow + ';') + '">🎨 画师模式</button>';
@@ -133,7 +131,7 @@ export function bindSettingsEvents(b) {
 export function renderThemePage() {
   pushPage(function (body) {
     var h = '';
-    h += '<div style="' + card() + '">' + cardHead('🐱', '主题', '五只小猫，五套皮肤');
+    h += '<div style="' + card() + '">' + cardHead('🐱', '主题', '七只小猫，七套皮肤');
     h += '<div style="display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;">';
     for (var ti = 0; ti < THEME_ORDER.length; ti++) {
       var tname = THEME_ORDER[ti], tcol = CAT_THEMES[tname], active = settings.uiTheme === tname;

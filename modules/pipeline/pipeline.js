@@ -451,8 +451,6 @@ export async function runAuxPipeline(bodyText, mesId) {
     if (!output) { slLog('LLM返回空'); return null; }
 
     slLog('LLM返回, 长度: ' + output.length + ' 前200字: ' + output.slice(0, 200));
-    // [AI-Fix] 调用成功才记录"已发送静态档案"（原实现 buildDataBlock 内提前置位）
-    if (profiles.chat) profiles.chat._castSent = (profiles.chat._castSent || 0) + 1;
       slLog('LLM完整输出: ' + output.slice(0, 800));
 
     // await 后重新获取 profiles
@@ -526,13 +524,15 @@ export async function runAuxPipeline(bodyText, mesId) {
                     }
                     if (!profiles.chat.npcs[npcName]) {
                         profiles.chat.npcs[npcName] = npcData;
-                        profiles.chat.npcs[npcName].last_seen_round = profiles.chat._round || 0;
+                        // [Fix] 与 gcNpcs 的 currentRound=(_round||0)+1 同口径：原实现写自增前 _round，
+                        // 导致"3 轮未出现才休眠"实际 2 轮就休眠、"近 2 轮在场"只覆盖上一轮（B5）。
+                        profiles.chat.npcs[npcName].last_seen_round = (profiles.chat._round || 0) + 1;
                         // [Fix] anime系模式：NPC 也存英文锚点（生图时避免中文被 cleanAnimePrompt 删空）
                         if (npcData.en_prompt) profiles.chat.npcs[npcName].enPrompt = npcData.en_prompt;
                         if (npcData.en_tags) profiles.chat.npcs[npcName].enTags = npcData.en_tags;
                     } else {
                         var existing = profiles.chat.npcs[npcName];
-                        existing.last_seen_round = profiles.chat._round || 0;
+                        existing.last_seen_round = (profiles.chat._round || 0) + 1;
                         if (npcData.wake) { existing.sleep = false; existing.wake = true; }
                         existing.appearances = (existing.appearances || 0) + (npcData.appearances || 1);
                         if (npcData.dynamic) existing.dynamic = mergeDynamicLine(existing.dynamic, npcData.dynamic);

@@ -3,7 +3,7 @@ import { CAT, getCatStatusFace } from './theme.js';
 import { catSVG, catStatusText } from './cat.js';
 import { setHeadStatus } from './panel.js';
 import { toast, chkProf } from './utils.js';
-import { settings, saveSettings } from '../settings.js';
+import { settings, saveSettings, getActiveMode } from '../settings.js';
 import { getCharacterName, scanCharacterProfile } from '../pipeline/profile.js';
 import { getScannerStatus } from '../scanner.js';
 import { getQueueLength } from '../queue.js';
@@ -66,7 +66,7 @@ export function refreshCompactBar() {
   if (!_compactEl || !_compactEl.is(':visible')) return;
   var cn = getCharacterName() || '', hasChat = !!cn;
   jQuery('#sl_comp_char').text(hasChat ? cn : '还没有选角色喵~');
-  jQuery('#sl_comp_model').text(hasChat ? ((settings.modelType === 'anime' || settings.modelType === 'anime_tag') ? '🎬 ANIME' : '🖼️ ZIT') : '');
+  jQuery('#sl_comp_model').text(hasChat ? ((getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') ? '🎬 ANIME' : '🖼️ ZIT') : '');
   var hp = chkProf();
   if (!hasChat) { jQuery('#sl_comp_profile').text('').hide(); jQuery('#sl_comp_scan').hide(); }
   else if (hp) { jQuery('#sl_comp_profile').text('📦 已扫描' + (function(){try{var p=JSON.parse(localStorage.sillab_settings);var cn=Object.keys(p.profiles||{})[0];var m=p.profiles[cn]&&p.profiles[cn].meta&&p.profiles[cn].meta.modelMode;return m?(' 🔒'+({zit:'ZIT',anime:'Anime',anime_tag:'Tag'}[m]||m)):'';}catch(e){return'';}})()).css({ background: CAT.green + '1F', color: CAT.green }).show(); jQuery('#sl_comp_scan').hide(); }

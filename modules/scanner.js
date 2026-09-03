@@ -57,8 +57,22 @@ function doMarkerCheck(sessionId) {
     if (settings.imgMode === 'main') {
         if (text.indexOf('[img:') < 0) {
             // 流式输出中可能尚未写出占位符：继续等，最多 8 次(40s)
-            if (session.tries < 8) { session.lastText = text; scheduleMarkerCheck(sessionId); }
-            else { session.phase = 'done'; slLog('扫描 #' + sessionId + ' 40s 未检测到 [img:]，放弃'); }
+            if (text !== session.lastText) {
+                // [Fix] 文本仍在流式变化（[img:] 常在长消息文末）：流式时间不计入 40s 超时，
+                // 重置等待计数；否则慢流式消息在占位符出现前就被放弃（A2）。
+                session.tries = 0;
+                session.lastText = text;
+                scheduleMarkerCheck(sessionId);
+            } else if (session.tries < 8) {
+                session.lastText = text;
+                scheduleMarkerCheck(sessionId);
+            } else {
+                session.phase = 'done';
+                // [Fix] 放弃时必须清除 sl_session_started，否则该消息被永久标记"已有会话"
+                // 而永远不会重扫（即使随后 [img:] 出现）（A2）。
+                try { session.msgEl.removeData('sl_session_started'); } catch (e) {}
+                slLog('扫描 #' + sessionId + ' 40s 未检测到 [img:]，放弃');
+            }
             return;
         }
         if (session.lastText !== text) {
@@ -70,8 +84,15 @@ function doMarkerCheck(sessionId) {
         session.phase = 'done';
         slLog('扫描 #' + sessionId + ' 占位符文本已稳定，触发协作管线');
         var mainBody = extractBodyText(text);
-        if (mainBody.length >= 10) { runAuxImageScan(session.msgEl); }
-        else { slLog('正文过短(' + mainBody.length + ')，跳过'); }
+        // [Fix] 与 runAuxImageScan 内部阈值(80/20)对齐：10 字会放行后被管线内部判过短
+        // 且不复位会话 phase → 扫描会话永久卡在 scanning 死锁（A1）。
+        var mainMinLen = settings.storyMode === 'comic' ? 20 : 80;
+        if (mainBody.length >= mainMinLen) {
+            runAuxImageScan(session.msgEl);
+        } else {
+            slLog('正文过短(' + mainBody.length + ')，跳过');
+            if (scanSession) scanSession.phase = 'completed';
+        }
         return;
     }
     var clean = stripAiTags(text);
@@ -123,6 +144,15 @@ function scheduleEndCheck(sessionId) {
 function doEndCheck(sessionId) {
     var session = scanSession;
     if (!session || session.id !== sessionId) return;
+    // [Fix] 等待 结尾### 设上限（30 次×2s=60s）：原实现无限轮询，消息若永远没有 结尾###
+    //（停流/手动输入含标记文本/截断）则每 2s 空转一次永不停（C1）。
+    session.tries++;
+    if (session.tries > 30) {
+        session.phase = 'completed';
+        try { session.msgEl.removeData('sl_session_started'); } catch (e) {}
+        slLog('扫描 #' + sessionId + ' 等待结尾###超时(60s)，放弃（消息有变化时会重新扫描）');
+        return;
+    }
     var text = session.msgEl.text();
     var clean = stripAiTags(text);
     var startIdx = clean.indexOf('正文###');
@@ -183,9 +213,12 @@ export async function runAuxImageScan(messageElement) {
     try {
         slLog('auxImageScan 启动');
         if (scanSession) scanSession.phase = 'scanning';
+        // [Fix] 早退统一复位 phase：有分支在 'scanning' 下直接 return 但忘了复位时，
+        // startScanSession 的会话守卫会永久拒绝后续所有消息（静默死锁，A1）。
+        function sessDone() { if (scanSession) scanSession.phase = 'completed'; }
         var lastMsg = messageElement || jQuery('.mes_text').last();
-        if (!lastMsg.length) { slLog('无消息'); return; }
-        if (lastMsg.data('sl_aux_scanned')) { slLog('已扫描过, 跳过'); return; }
+        if (!lastMsg.length) { slLog('无消息'); sessDone(); return; }
+        if (lastMsg.data('sl_aux_scanned')) { slLog('已扫描过, 跳过'); sessDone(); return; }
         lastMsg.removeData('sl_session_started');
         var rawText = lastMsg.text();
         // 记录文本指纹，用于检测重新生成/swipe
@@ -193,7 +226,7 @@ export async function runAuxImageScan(messageElement) {
         lastMsg.data('sl_aux_scanned', 1);
         var bodyText = extractBodyText(rawText);
         var minLen = settings.storyMode === 'comic' ? 20 : 80;
-        if (bodyText.length < minLen) { slLog('过短(' + bodyText.length + ')'); lastMsg.removeData('sl_aux_scanned'); lastMsg.removeData('sl_session_started'); return; }
+        if (bodyText.length < minLen) { slLog('过短(' + bodyText.length + ')'); lastMsg.removeData('sl_aux_scanned'); lastMsg.removeData('sl_session_started'); sessDone(); return; }
         slLog('管线启动, 清洗后: ' + bodyText.length);
         // [AI-Fix] await 前抓取 mesId 和 chatId，await 后据此重新查找 DOM
         var mesContainer = lastMsg.closest('.mes');
@@ -202,10 +235,20 @@ export async function runAuxImageScan(messageElement) {
         var pipeTimeout = (settings.cTimeout || 180) * 1000 + 30000;
         // ── v2.4 模式分发：main=酒馆AI模式（占位符协作管线），plugin=旧管线 ──
         var pipeFn = settings.imgMode === 'main' ? runRosterPipeline : runAuxPipeline;
+        // [Fix] 超时改为 resolve({timedOut:true}) 而不是 reject（C8）：
+        // (1) 底层管线拿不到 signal，reject 后仍在后台跑完（档案/剧情库写入照常落地），
+        //     此时清 sl_aux_scanned 放行重试会跑出第二条管线——双倍 API 调用 + 档案被两次结果互相覆盖；
+        // (2) 保留"已扫描"标记，消息在重新生成/swipe 时才自然重扫。
+        var pipePromise = pipeFn(bodyText, mesId);
         var pipeResult = await Promise.race([
-            pipeFn(bodyText, mesId),
-            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('管线整体超时(' + pipeTimeout + 'ms)')); }, pipeTimeout); })
+            pipePromise,
+            new Promise(function(resolve) { setTimeout(function() { resolve({ ok: false, timedOut: true }); }, pipeTimeout); })
         ]);
+        if (pipeResult && pipeResult.timedOut) {
+            slErr('管线整体超时(' + pipeTimeout + 'ms)，保留扫描标记，后台管线完成后档案会落地');
+            if (scanSession) scanSession.phase = 'completed';
+            return;
+        }
         // [Fix] 无图轮：PROFILE 已更新但无插图，属正常完成（鼓励配图模式）——不缓存、不重试、保留已扫描标记
         if (pipeResult && pipeResult.ok && !pipeResult.enhanced) {
             slLog('无图轮: 档案已更新, 无插图, 正常完成');
@@ -224,7 +267,7 @@ export async function runAuxImageScan(messageElement) {
             slLog('无增强输出(第' + retryCount + '次), 清除标记允许重试');
             lastMsg.data('sl_noimg_retries', retryCount);
             lastMsg.removeData('sl_aux_scanned');
-            try { var pf = getProfiles(); if (pf && pf.chat) pf.chat._castSent = false; } catch(e){}
+            // [B6] 死字段清理（_castSent 无读取方）
         }
         // [Fix] 失败/重试分支复位会话 phase：原实现漏复位，phase 卡在 'scanning'，
         // 会导致后续新消息的扫描被会话守卫永久拒绝（静默死锁）。

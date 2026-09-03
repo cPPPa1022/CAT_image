@@ -46,9 +46,11 @@ export function hasBodyMarker(text) {
 }
 
 // 从增强文本中提取 [image:] 对应的【提示词】
-export function extractImagePrompt(rawText, imageTag) {
+export function extractImagePrompt(rawText, imageTag, fromIndex) {
     if (!rawText || !imageTag) return '';
-    var idx = rawText.indexOf(imageTag);
+    // [Fix] 支持 fromIndex：同场景多张图时按上一次匹配位置向后找，
+    // 否则第二个相同 [image:] 块会取到第一块的【提示词】（B4）。
+    var idx = fromIndex != null ? rawText.indexOf(imageTag, fromIndex) : rawText.indexOf(imageTag);
     if (idx < 0) return '';
     var remaining = rawText.slice(idx + imageTag.length);
     var m = remaining.match(/^\s*\n?\s*【提示词[】:：]*\s*([\s\S]*?)【\/提示词】/);

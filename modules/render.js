@@ -91,10 +91,11 @@ export function buildImgCard(scene, fullPrompt, cachedImage) {
 export function renderEnhancedBodyHtml(enhanced) {
     var imageScenes = [];
     var pid = 0;
-    var safe = enhanced.replace(/\[image:\s*[\s\S]*?\]/g, function(m) {
+    var safe = enhanced.replace(/\[image:\s*[\s\S]*?\]/g, function(m, cap, off) {
         var match = m.match(/\[image:\s*([\s\S]*?)\]/);
         var scene = (match && match[1]) ? match[1].trim() : '';
-        imageScenes.push(scene);
+        // [Fix] 记录该 [image:] 块在原文中的位置，提示词按位置提取（B4）
+        imageScenes.push({ scene: scene, idx: off });
         return '__SLIMG' + (pid++) + '__';
     });
     safe = safe.replace(/\n?\s*【💬 💬 提示词】[^\n]*\n?/g, '\n');
@@ -104,9 +105,11 @@ export function renderEnhancedBodyHtml(enhanced) {
     safe = safe.replace(/\n{1,2}/g, '\n\n');
     return safe.split('\n').map(function(line) { return escapeHtml(line); }).join('<br>')
         .replace(/__SLIMG(\d+)__/g, function(_, n) {
-            var scene = imageScenes[+n] || '';
+            var imgInfo = imageScenes[+n] || {};
+            var scene = imgInfo.scene || '';
             var imageTag = '[image: ' + scene + ']';
-            var fullPrompt = resolveFacePrompt(extractImagePrompt(enhanced, imageTag) || scene);
+            // [Fix] 按该块位置提取提示词：同场景多图不再共用第一块的【提示词】（B4）
+            var fullPrompt = resolveFacePrompt(extractImagePrompt(enhanced, imageTag, imgInfo.idx) || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文（防中文提示词被清成空串）
             return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt));
         });
@@ -190,11 +193,15 @@ export function scanDom(messageDiv) {
     var rawOriginal = raw;
     raw = raw.replace(/\n?\s*【💬 提示词】[^\n]*\n?/g, '\n');
     var parts = raw.split(/(\[image:\s*[\s\S]*?\])/g);
+    var posCursor = 0;
     var html = parts.map(function(part) {
         if (/^\[image:/.test(part)) {
             var match = part.match(/\[image:\s*([\s\S]*?)\]/);
             var scene = (match && match[1]) ? match[1].trim() : '';
-            var promptContent = extractImagePrompt(rawOriginal, part) || '';
+            // [Fix] 从当前位置向后取提示词，同场景多图不共用第一块（B4）
+            var partIdx = rawOriginal.indexOf(part, posCursor);
+            if (partIdx >= 0) posCursor = partIdx + part.length;
+            var promptContent = extractImagePrompt(rawOriginal, part, partIdx >= 0 ? partIdx : 0) || '';
             // [Fix] 原代码 promptContent 兜底为 scene 后又拼 scene + ', ' + promptContent，无【提示词】块时场景重复两遍
             var fullPrompt = resolveFacePrompt(scene ? (promptContent ? scene + ', ' + promptContent : scene) : promptContent);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c2 = cleanAnimePrompt(fullPrompt); if (_c2) fullPrompt = _c2; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文
@@ -222,13 +229,26 @@ export function restoreImageBlocks() {
         if (!mesId) { mesId = jQuery(this).attr('data-mesid') || jQuery(this).attr('id'); }
         if (!mesId || !mesId.trim()) return;
         if (/sl_img_btn/.test(mesEl.html()) || mesEl.find('.sl_img_block').length) return;
+        // [Fix] 与 scanner.findBestCached 同口径按当前文本匹配（B3）：
+        // 原实现按 chatId_mesId_ 前缀取"第一条"，同一消息多条 swipe 分支时会恢复错图
+        var msgMap = settings.msgMap || {};
+        var mesRawText = mesEl.text() || '';
         var key = chatId + '_' + mesId;
-        var cached = (settings.msgMap || {})[key];
-        if (!cached) {
+        var cached = msgMap[key];
+        if (!cached || !/\[image:/.test(cached)) {
             var fpPrefix = key + '_';
-            for (var kk in (settings.msgMap || {})) {
-                if (kk.indexOf(fpPrefix) === 0) { cached = settings.msgMap[kk]; break; }
+            var mHead = (extractBodyContent(mesRawText) || '').slice(0, 40).replace(/\s/g, '');
+            var kvMatch = null, kvFallback = null;
+            for (var kk in msgMap) {
+                if (kk.indexOf(fpPrefix) !== 0 || !msgMap[kk] || !/\[image:/.test(msgMap[kk])) continue;
+                if (!kvFallback) kvFallback = msgMap[kk];
+                var kHead = (extractBodyContent(msgMap[kk]) || '').slice(0, 40).replace(/\s/g, '');
+                if (kHead && mHead && kHead === mHead) {
+                    kvMatch = msgMap[kk];
+                    if (msgMap[kk].indexOf('结尾###') >= 0) break;  // 优先带完整标记的条目
+                }
             }
+            cached = kvMatch || kvFallback;
         }
         // 模糊匹配编辑后的 mesId 变化
         if (!cached) {
@@ -276,7 +296,8 @@ export function extractImgBlocksFromEnhanced(enhancedText) {
     var m;
     while ((m = re.exec(enhancedText)) !== null) {
         var scene = (m[1] || '').trim();
-        var promptContent = extractImagePrompt(enhancedText, m[0]) || '';
+        // [Fix] 用正则匹配位置定位提示词（同场景多图不共用第一块，B4）
+        var promptContent = extractImagePrompt(enhancedText, m[0], m.index) || '';
         var fullPrompt = resolveFacePrompt(scene ? (promptContent ? scene + ', ' + promptContent : scene) : promptContent);
         if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
         blocks.push({ scene: scene, prompt: fullPrompt, html: buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt)) });

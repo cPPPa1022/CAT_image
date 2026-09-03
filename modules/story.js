@@ -187,7 +187,11 @@ export async function summarize(force) {
 
     var input = [];
     if (_lastSummary && _lastSummary.summary) input.push('【旧总结】\n' + _lastSummary.summary);
-    var recent = pending.slice(-15);
+    // [Fix] 输入窗口取"最早的"15 条（滚动总结按时间推进，先总结旧条目）：
+    // 原实现取最近 15 条（slice(-15)），而归档却按全部 pending 的最大轮次删除
+    // （maxRound = 最近15条最后一轮的 round = 全量最大轮）→ 未喂给 LLM 的条目被物理删除，
+    // 剧情永久丢失（A3）。
+    var recent = pending.slice(0, 15);
     input.push('【新增剧情】\n' + recent.map(function (en) { return '【第' + en.round + '轮】' + en.body; }).join('\n\n'));
     var npcNames = Object.keys(prof.chat.npcs || {});
     if (npcNames.length) {

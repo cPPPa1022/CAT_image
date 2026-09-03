@@ -13,7 +13,9 @@ export function parseTagLine(line) {
     var m = line.match(/^【([^】：:]+)[：:】]+(.+)$/) || line.match(/^([^：:]+)[：:]\s*(.+)$/);
     if (!m) return null;
     var key = m[1].replace(/[【】\s]/g, '');
-    var value = m[2].replace(/^】+/, '').trim();
+    // [Fix] 剥尾部全角闭合括号：LLM 常见"【脸型：鹅蛋脸】"（值在括号内）格式，
+    // 原实现只剥开头，导致 鹅蛋脸】 进入动态档案与生图提示词（C3）。
+    var value = m[2].replace(/^】+/, '').replace(/】+$/, '').trim();
     return key && value ? { key: key, value: value } : null;
 }
 
@@ -419,8 +421,7 @@ export async function scanCharacterProfile(modelMode) {
                 slErr('⚠️ ' + enMissing.length + ' 个角色英文锚点缺失（' + enBlock + '）: ' + enMissing.join('、') + ' —— 这些角色生图将回退中文');
             }
         }
-        // [AI-Fix] 重扫角色卡后清标记，下一轮管线会重新发送 cast static
-        profiles.chat._castSent = false;
+        // [B6] _castSent 已无任何读取方（v1.0 每轮全量发送静态档案），删除死字段
         saveSettings();
         slLog('档案生成完毕喵~ ✨ (๑•̀ㅂ•́)و✧, cast:' + Object.keys(cast).length + '个, user:' + (userProfile ? userProfile.length + '字' : '无') + ', 卡类型:' + metaResult.cardType + (metaResult.coreChar ? ', 核心:' + metaResult.coreChar : ''));
         var statusText = Object.keys(cast).length ? '（cast:' + Object.keys(cast).length + '角色' : '（' + metaResult.cardType;
@@ -471,7 +472,7 @@ export function deleteCharacterProfile(fullDelete) {
             pf.root[charName].cast = {};
             pf.root[charName].userProfile = '';
         }
-        if (pf.chat) pf.chat._castSent = false;
+        // [B6] 死字段清理（_castSent 无读取方）
         slLog('角色卡档案已清空(保留聊天数据), 等待重新扫描: ' + charName);
     }
     saveSettings();
@@ -518,11 +519,12 @@ export function resolveFacePrompt(rawPrompt) {
             
             // 1. cast 主角团 → 按模型选语言（Anime:enTags, ZIT:static）
             if (cast[charName]) {
-                var boundMode = (profiles.root[profiles.charName].meta && profiles.root[profiles.charName].meta.modelMode) || 'zit'; var castAnchor = cast[charName].static; if (boundMode === 'anime' && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt; else if (boundMode === 'anime_tag' && cast[charName].enTags) castAnchor = cast[charName].enTags;
+                // [Fix] 统一走 getActiveMode()（锁定>设置>zit）：原实现无 settings.modelType 回退，未锁定时永远按 zit 选锚点语言（C6）。
+                var boundMode = getActiveMode(); var castAnchor = cast[charName].static; if (boundMode === 'anime' && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt; else if (boundMode === 'anime_tag' && cast[charName].enTags) castAnchor = cast[charName].enTags;
                 if (castAnchor) anchor = (boundMode === 'anime' || boundMode === 'anime_tag') ? castAnchor : stripAnchors(castAnchor);
             // 2. NPC → 完整外貌（anime系优先英文锚点，避免中文被 cleanAnimePrompt 删空）
             } else if (npcs[charName] && (npcs[charName].static || npcs[charName].enPrompt || npcs[charName].enTags)) {
-                var npcMode = (profiles.root[profiles.charName].meta && profiles.root[profiles.charName].meta.modelMode) || 'zit';
+                var npcMode = getActiveMode();
                 if (npcMode === 'anime' && npcs[charName].enPrompt) anchor = npcs[charName].enPrompt;
                 else if (npcMode === 'anime_tag' && npcs[charName].enTags) anchor = npcs[charName].enTags;
                 else anchor = stripAnchors(npcs[charName].static);
@@ -568,12 +570,13 @@ export function resolveFacePrompt(rawPrompt) {
                     var usedStatic = {};  // 记录已被 dynamic 覆盖的 static 字段
                     var parts = [];
                     // 第一步：遍历 dynamic 所有字段（含 static 对应的和独有的）
+                    // [Fix] 原实现只 push mergeMap 白名单字段，未映射的动态字段
+                    // （眼睛/耳朵/尾巴/翅膀/新伤/衣服/饰品等自由 tag）被静默丢弃（B2）；
+                    // 现在 dynamic 字段全部输出（动态优先），映射表只用于标记 static 无需补位。
                     for (var dk in dynMap) {
                         var stTag = mergeMap[dk];  // 这个 dynamic 字段对应哪个 static 标签
-                        if (stTag) {
-                            usedStatic[stTag] = true;
-                            parts.push(dynMap[dk]);
-                        }
+                        if (stTag) usedStatic[stTag] = true;
+                        parts.push(dynMap[dk]);
                     }
                     // 第二步：static 中未被 dynamic 覆盖的字段补上
                     var allStaticTags = Object.keys(staticMap);
@@ -582,8 +585,6 @@ export function resolveFacePrompt(rawPrompt) {
                             parts.push(stripOne(staticMap[allStaticTags[ti]]));
                         }
                     }
-                    // 第三步：dynamic 独有字段（衣着/配饰/状态/临时 — 没有对应 static 标签）
-                    ['衣着','配饰','状态','临时'].forEach(function(f) { if (dynMap[f]) parts.push(dynMap[f]); });
                     anchor = parts.join(', ');
                 }
                 // [AI-Fix] per-image override：LLM 在 [FACE:名|字段:值] 中标注本图专属变化

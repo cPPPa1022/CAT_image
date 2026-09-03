@@ -85,7 +85,14 @@ export function parseRosterImages(output) {
         var line = lines[i].trim();
         if (!line) continue;
         // 列表标记（1. / - / • 等）= 新提示词；无标记短行(<15字)且已有上一条 = 上一条的续行（LLM 偶发跨行换行，防拆条错位）
-        if (out.length && !/^(?:\d+[.、)]|[-•·])\s*/.test(line) && line.length < 15 && !/^【/.test(line)) {
+        // [Fix] 续行规则加固（C7）：原实现把所有无标记短行(<15字)并入上一条，
+        // 独立短条目（如"特写：油灯"）也被吞掉，导致与占位符按序配对整体错位。
+        // 现在：形似新条目（含冒号/构图词）不合并；上一条已以句末标点结束不合并；
+        // 其余（典型跨行换行碎片）仍合并。
+        var _prevLine = out.length ? out[out.length - 1] : '';
+        var _looksNewItem = /[:：]/.test(line) || /^(特写|近景|远景|中景|全景|构图|视角|镜头|画面)/.test(line);
+        if (out.length && !/^(?:\d+[.、)]|[-•·])\s*/.test(line) && line.length < 15 && !/^【/.test(line)
+            && !_looksNewItem && !/[。！？!?；;]$/.test(_prevLine)) {
             out[out.length - 1] += '\n' + line;
             continue;
         }
@@ -112,6 +119,10 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         if (!prompt) prompt = ph.scene;  // 无提示词：场景直写（渲染兜底用场景生成）
         return buildImageBlock(ph.scene, prompt);
     });
+    // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见
+    if (prompts.length !== placeholders.length) {
+        slErr('⚠️ 提示词条数(' + prompts.length + ') ≠ 占位符数(' + placeholders.length + ')，按序配对可能错位/漏写——检查插件AI输出');
+    }
     slLog('占位符填充: ' + phIdx + '/' + placeholders.length + ' 占位, 提示词 ' + pIdx + '/' + prompts.length + ' 条');
     return out;
 }

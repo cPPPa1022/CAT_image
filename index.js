@@ -11,6 +11,7 @@ import { setEnqueueGen } from './modules/render.js';
 import { enqueueGen } from './modules/queue.js';
 import { startPolling, stopPolling, getScannerStatus, hasCastCache } from './modules/scanner.js';
 import { refreshCoopCards } from './modules/sync-cards.js';
+import { imgCacheClear } from './modules/cache.js';
 
 // ── 版本 ──
 window.SILLYLAB_VERSION = 'v1.0';
@@ -48,13 +49,13 @@ if (settings.imageMode === 'encourage' && !localStorage.getItem('sillab_image_mo
 // ── 清旧缓存哨兵 ──
 try {
     localStorage.removeItem('slimg_v2_deployed');
-    localStorage.removeItem('slimg_cache');
+    imgCacheClear();  // [Fix] 原 removeItem 只删 localStorage，cache.js 模块加载时已把旧值读进内存（C2）
     localStorage.removeItem('sillab_clean_v102');
 } catch (e) {}
 
 if (!localStorage.getItem('sillab_clean_v210')) {
     try {
-        localStorage.removeItem('slimg_cache');
+        imgCacheClear();  // [C2] 同步清内存缓存，否则下次 imgCacheSet 会把旧值写回
         if (typeof extension_settings !== 'undefined') { delete extension_settings.sillab; }
         Object.assign(settings, getDefaults());
         try { saveSettings(); } catch (e) {}

@@ -22,11 +22,17 @@ export function getDefaults() {
         nsfwEnhance: false,
         modelType: 'zit',
         promptPrefix: '',
-        uiTheme: '奶糖小猫',
+        uiTheme: '雪白猫',  // [Fix] 原默认 '奶糖小猫' 主题不存在，每次启动被重置为'雪白猫'（C9）
         textTheme: '默认',
         debugMode: false,
         // 多轮记忆：每次管线额外重放最近 N 轮角色消息正文（0 = 关闭，默认 5）
         historyRounds: 5,
+        // [C11] 补齐「代码在用但 defaults 缺失」的键：原实现依赖 undefined 碰巧等于默认值
+        storyMode: 'narrative',
+        animeQualityPrefix: '',
+        animeArtist: '',
+        neg: '',
+        workflows: {},
         // 剧情库（长期记忆）：存档开关 / 总结触发条目数 / 总结最小间隔轮数
         storyLib: true,
         summaryThreshold: 40,

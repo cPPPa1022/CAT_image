@@ -23,7 +23,9 @@ export function buildCoopCardText() {
     lines.push('· [img:] 写画面要素：人物（谁+动作+表情）+ 场景氛围 + 可选构图（特写/近景/远景/双人）；想强调细节时用 | 追加： [img:场景|特写手部，琴弦，油灯]');
     lines.push('· 已建档人物（见下方索引）插件认识长相，不用描述外貌；未建档人物必须写明：[img:场景|人物:名字（身份标签），外貌概要；可多人分号分隔]。');
     lines.push('· 人物穿着（上衣/下装/内衣等）如实写入画面要素，生图按描述呈现。');
-    lines.push('· 当前模式：' + modeDesc(getActiveMode()) + '；' + (settings.stylePreset ? '画风预设：「' + settings.stylePreset + '」已自动应用；' : '画风预设：未选择；') + (settings.nsfwEnhance ? '成人内容：按卡内容如实配图。' : ''));
+    var _modeNow = getActiveMode();
+    // [Fix] 画风预设只在 ZIT 模式实际应用（comfyui.js generateImage），anime 模式不再谎称"已自动应用"（C4）
+    lines.push('· 当前模式：' + modeDesc(_modeNow) + '；' + (settings.stylePreset ? ('画风预设：「' + settings.stylePreset + '」' + (_modeNow === 'zit' || !_modeNow ? '已自动应用；' : '（中文预设，生图时未自动应用，按需在画面要点中体现风格）；')) : '画风预设：未选择；') + (settings.nsfwEnhance ? '成人内容：按卡内容如实配图。' : ''));
     lines.push('【人物档案索引】');
     var names = rosterIndexText(0);
     if (names.length) {

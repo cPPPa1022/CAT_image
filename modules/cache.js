@@ -1,4 +1,4 @@
-﻿// ── SillyImage Lab 图片缓存 ──
+// ── SillyImage Lab 图片缓存 ──
 import { slLog } from './log.js';
 import { settings, getSTHeaders, saveSettings } from './settings.js';
 
@@ -18,6 +18,12 @@ export function imgCacheSet(prompt, url) {
 
 export function imgCacheGet(prompt) {
     return imageCache[prompt];
+}
+
+// 清全部图片缓存（内存 + localStorage）：index.js 部署清理使用（C2）
+export function imgCacheClear() {
+    imageCache = {};
+    try { localStorage.removeItem('slimg_cache'); } catch (e) {}
 }
 
 // 清理旧 base64 缓存

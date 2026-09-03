@@ -40,8 +40,10 @@ export var CAT = CAT_THEMES['雪白猫'];
 
 export var TEXT_THEMES = { '默认': { font: 'inherit', lineHeight: '1.6', color: 'inherit', bg: 'transparent', fontSize: 'inherit' }, '暖纸阅读': { font: 'Noto Serif SC, SimSun, serif', lineHeight: '2.0', color: '#4a3728', bg: '#fef9f2', fontSize: '15px' }, '深夜模式': { font: 'inherit', lineHeight: '1.7', color: '#d0d0d0', bg: '#1a1a1e', fontSize: '14px' }, '紧凑模式': { font: 'Noto Sans SC, sans-serif', lineHeight: '1.4', color: '#1a1a1a', bg: 'transparent', fontSize: '13px' } };
 
-export var THEME_ORDER = ['雪白猫', '墨黑夜猫', '奶油麻薯猫', '抹茶拿铁猫', '星空夜猫'];
-export var THEME_ICONS = { '雪白猫': '🐱', '墨黑夜猫': '🐈‍⬛', '奶油麻薯猫': '🍮', '抹茶拿铁猫': '🍵', '星空夜猫': '🌙' };
+// [Fix] 补上 CAT_THEMES/injectThemeStyle 已处理但从未入列的 2 套主题（C9）：
+// 原列表只有 5 套：云朵棉花猫/焦糖布丁猫 定义齐全却永远无法在 UI 中选中，对应分支成为死代码。
+export var THEME_ORDER = ['雪白猫', '墨黑夜猫', '奶油麻薯猫', '焦糖布丁猫', '云朵棉花猫', '抹茶拿铁猫', '星空夜猫'];
+export var THEME_ICONS = { '雪白猫': '🐱', '墨黑夜猫': '🐈‍⬛', '奶油麻薯猫': '🍮', '焦糖布丁猫': '🍯', '云朵棉花猫': '☁️', '抹茶拿铁猫': '🍵', '星空夜猫': '🌙' };
 
 export function applyTheme(n) {
   if (typeof CAT_THEMES === 'undefined') return;

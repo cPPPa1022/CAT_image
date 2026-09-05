@@ -7,7 +7,7 @@ import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
-import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
+import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments } from '../roster.js';
 import { getProfiles } from './profile.js';
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
@@ -199,7 +199,20 @@ export async function runRosterPipeline(bodyText, mesId) {
             } catch (e) { slLog('卡库档案导入跳过: ' + e.message); }
         }
 
-        // 1. 占位符人物段直接建档（无LLM）
+        // 1. 占位符人物段直接建档（无LLM）——先做"已知人名拆段"（人物:柳如烟，赵云飞 逗号多人 → 拆两人）
+        var _known = [];
+        try {
+            var _re = rosterEntries();
+            for (var _ri = 0; _ri < _re.length; _ri++) _known.push(String(_re[_ri].name || '').replace(/（[^）]*）$/, ''));
+            var _pf2 = getProfiles();
+            if (_pf2 && _pf2.root && _pf2.root[_pf2.charName]) { for (var _ck in _pf2.root[_pf2.charName].cast) _known.push(_ck); }
+        } catch (e4) {}
+        placeholders = placeholders.map(function(p) {
+            if (p.personSegments && p.personSegments.length) {
+                p.personSegments = splitKnownPersonSegments(p.personSegments, _known);
+            }
+            return p;
+        });
         var nApplied = applyPersonSegments(placeholders.map(function(p) { return p.personSegments; }).reduce(function(a, b) { return a.concat(b); }, []));
         if (nApplied) slLog('占位符建档: ' + nApplied + ' 人');
 

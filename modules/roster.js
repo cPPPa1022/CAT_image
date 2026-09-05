@@ -311,6 +311,42 @@ export function clearRosterChat(charName, chatId) {
     } catch (e) {}
 }
 
+// ── 已知人名拆段（多人解析） ──
+// 酒馆AI 可能写"人物:柳如烟，赵云飞"（逗号分隔多人）：解析器会把"赵云飞"误当柳如烟外貌。
+// 用已知人名集（人物表+卡库）判断：外貌块中被逗号/分号切出的已知人名 → 拆为独立人物段。
+// 返回修正后的 segments（原对象不改，新建）。
+export function splitKnownPersonSegments(segments, knownNames) {
+    if (!segments || !segments.length) return segments || [];
+    var names = {};
+    for (var i = 0; i < (knownNames || []).length; i++) {
+        var nm = String(knownNames[i] || '').trim();
+        if (nm.length >= 2) names[nm] = true;
+    }
+    var out = [];
+    for (var j = 0; j < segments.length; j++) {
+        var s = segments[j];
+        if (!s || !s.name) { if (s) out.push(s); continue; }
+        if (!s.appearance || !names[s.name]) { out.push(s); continue; }
+        var parts = String(s.appearance).split(/[，,；;]/);
+        var keepApp = [];
+        var extra = [];
+        for (var k = 0; k < parts.length; k++) {
+            var p = (parts[k] || '').trim();
+            if (!p) continue;
+            if (names[p] && p !== s.name) extra.push({ name: p, identity: '', appearance: '' });
+            else keepApp.push(p);
+        }
+        if (extra.length) {
+            var ns = { name: s.name, identity: s.identity || '', appearance: keepApp.join('，') };
+            out.push(ns);
+            for (var e = 0; e < extra.length; e++) out.push(extra[e]);
+        } else {
+            out.push(s);
+        }
+    }
+    return out;
+}
+
 // ── 人物表全部条目（供管线判断已建档） ──
 export function rosterEntries() {
     try {

@@ -31,7 +31,7 @@ async function processImageQueue() {
         } else {
             task.btn.text('\u21bb \u91cd\u65b0\u751f\u6210').css({ background: COLORS.card, color: COLORS.text });
             task.btn.siblings('img').remove();
-            var imgEl = jQuery('<img src="' + escapeHtml(result.url) + '" style="max-width:60%;border-radius:12px;margin-top:6px;display:block;" onload="this.style.display=\'block\'">');
+            var imgEl = jQuery('<img src="' + escapeHtml(result.url) + '" style="max-width:' + (settings.imgBlockWidth || '55%') + ';border-radius:12px;margin-top:6px;display:block;" onload="this.style.display=\'block\'">');
             task.btn.after(imgEl);
             imgEl[0].offsetHeight;
             task.btn.parent()[0].offsetHeight;

@@ -147,6 +147,14 @@ export function extractDynamicBits(text) {
     return out;
 }
 
+// ── 消息头部指纹（占位符感知） ──
+// 导演模式正文可能整个就是占位符：原文以 [img:…] 开头、缓存以 [image: …] 开头，
+// 前40字直接比较永远失配。取首个占位符的场景开头(≤30字)比较；无占位符回退前40字。
+export function imgBlockHead(text) {
+    var m = String(text || '').match(/\[(?:img|image):\s*([^\]]{2,30})/);
+    return m ? m[1].replace(/\s/g, '') : String(text || '').slice(0, 40).replace(/\s/g, '');
+}
+
 // 组装成现有 [image:] 图卡格式（render.js 零改动）：
 // [image:场景]\n【提示词】提示词【/提示词】
 export function buildImageBlock(scene, prompt, styleHint) {

@@ -73,7 +73,7 @@ export function getThemeCSS() {
     }
 }
 import { imgCacheGet, imgCacheSet, imgCacheGetById } from './cache.js';
-import { extractImagePrompt, extractBodyContent, hasBodyMarker, cleanAnimePrompt } from './text-utils.js';
+import { extractImagePrompt, extractBodyContent, hasBodyMarker, cleanAnimePrompt, imgBlockHead } from './text-utils.js';
 import { resolveFacePrompt } from './pipeline/profile.js';
 import { generateImage } from './comfyui.js';
 
@@ -246,11 +246,11 @@ export function restoreImageBlocks() {
         var cachedKey = key;
         if (!cached || !/\[image:/.test(cached)) {
             var fpPrefix = key + '_';
-            var mHead = (extractBodyContent(mesRawText) || '').slice(0, 40).replace(/\s/g, '');
+            var mHead = imgBlockHead(mesRawText);
             var kvMatch = null, kvMatchK = null;
             for (var kk in msgMap) {
                 if (kk.indexOf(fpPrefix) !== 0 || !msgMap[kk] || !/\[image:/.test(msgMap[kk])) continue;
-                var kHead = (extractBodyContent(msgMap[kk]) || '').slice(0, 40).replace(/\s/g, '');
+                var kHead = imgBlockHead(msgMap[kk]);
                 if (kHead && mHead && kHead === mHead) {
                     kvMatch = msgMap[kk]; kvMatchK = kk;
                     if (msgMap[kk].indexOf('结尾###') >= 0) break;  // 优先带完整标记的条目

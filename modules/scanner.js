@@ -1,7 +1,7 @@
 // ── SillyImage Lab 消息扫描与触发 ──
 import { slLog, slErr } from './log.js';
 import { settings, getSTContext, escapeHtml, saveSettings } from './settings.js';
-import { extractBodyText, extractBodyContent, hasBodyMarker, stripAiTags } from './text-utils.js';
+import { extractBodyText, extractBodyContent, hasBodyMarker, stripAiTags, imgBlockHead } from './text-utils.js';
 import { getProfiles, getChatId } from './pipeline/profile.js';
 import { runAuxPipeline } from './pipeline/pipeline.js';
 import { runRosterPipeline } from './pipeline/roster-pipeline.js';
@@ -353,8 +353,8 @@ export function findBestCachedEntry(chid, mesid, text) {
     var prefix = chid + '_' + mesid + '_';
     for (var k in msgMap) {
         if (k.indexOf(prefix) === 0 && msgMap[k] && /\[image:/.test(msgMap[k])) {
-            var cachedText = extractBodyContent(msgMap[k]).slice(0, 40).replace(/\s/g, '');
-            var msgText = extractBodyContent(text).slice(0, 40).replace(/\s/g, '');
+            var cachedText = imgBlockHead(msgMap[k]);
+            var msgText = imgBlockHead(text);
             if (cachedText && msgText && cachedText === msgText) {
                 var best = { key: k, value: msgMap[k] }, foundComplete = msgMap[k].indexOf('结尾###') >= 0;
                 for (var k2 in msgMap) {

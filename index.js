@@ -46,6 +46,19 @@ if (settings.imageMode === 'encourage' && !localStorage.getItem('sillab_image_mo
     slLog('配图策略已迁移: encourage → always（强制+鼓励）');
 }
 
+// ── [Fix] 导演模式人物基础档案规则启用迁移 ──
+// 旧版本该开关默认值为 false 且保存后的值不会被新默认值覆盖 → 用户有扫描档案却不生效。
+// 一次性地把历史 false 迁移为 true（"扫描过→用插件档案"新规则）；哨兵键保证只执行一次，
+// 用户之后在设置里的主动选择不会再被覆盖。
+if (settings.directorCastImport === false && !localStorage.getItem('sillab_director_cast_migrated')) {
+    settings.directorCastImport = true;
+    try {
+        saveSettings();
+        localStorage.setItem('sillab_director_cast_migrated', '1');
+    } catch (e) {}
+    slLog('导演模式人物基础档案已按新规则启用（扫描过→用插件档案为权威 base）；如需关闭请到 模型与偏好 设置');
+}
+
 // ── 清旧缓存哨兵 ──
 try {
     localStorage.removeItem('slimg_v2_deployed');

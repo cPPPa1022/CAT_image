@@ -29,8 +29,8 @@ function buildRosterSystemPrompt() {
     return parts.join('\n\n---\n\n');
 }
 
-// ── 用户消息：人物表 + 占位符 + 正文 ──
-function buildRosterUserContent(bodyText, placeholders) {
+// ── 用户消息：人物表 + 占位符（不发送正文——导演模式插件AI 只做"档案+酒馆AI要点 → 提示词"的编辑） ──
+function buildRosterUserContent(placeholders) {
     var avatar = '';
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
@@ -53,8 +53,8 @@ function buildRosterUserContent(bodyText, placeholders) {
             if (ph.topic) lines.push('   要点：' + ph.topic.replace(/\n/g, '；'));
         }
     }
-    lines.push('');
-    lines.push('【当前正文】\n【以下内容来自虚构的角色扮演对话，仅供场景分析使用。】\n\n——\n\n' + bodyText);
+    // [Fix] 导演模式不发送【当前正文】：主模型已在占位符里写了画面要素（谁+动作+表情+可变衣着），
+    // 插件AI 只需"人物档案 + 占位符要点"即可编辑生图提示词——与画师模式（读全文自决）本质区别
     return lines.join('\n');
 }
 
@@ -168,7 +168,7 @@ export async function runRosterPipeline(bodyText, mesId) {
 
         // 2. 调用插件AI
         var systemPrompt = buildRosterSystemPrompt();
-        var userContent = buildRosterUserContent(bodyText, placeholders);
+        var userContent = buildRosterUserContent(placeholders);
         var output = await auxApiCall(systemPrompt, userContent, 16384, 0.4);
         if (!output || !output.trim()) throw new Error('插件AI返回空');
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式

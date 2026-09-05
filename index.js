@@ -60,9 +60,11 @@ if (settings.directorCastImport === false && !localStorage.getItem('sillab_direc
 }
 
 // ── 清旧缓存哨兵 ──
+// [Fix] 这里每次页面加载都会执行——图片缓存（slimg_cache）绝不能在此清：
+// 内存 imageCache 在模块已加载时存有旧值，清空后刷新恢复只能渲染出"无图图卡"（图片不见的根因）。
+// 缓存只在该清的地方清：下方一次性部署哨兵块（sillab_clean_v210）+ cache.js 的 cleanOldCache。
 try {
     localStorage.removeItem('slimg_v2_deployed');
-    imgCacheClear();  // [Fix] 原 removeItem 只删 localStorage，cache.js 模块加载时已把旧值读进内存（C2）
     localStorage.removeItem('sillab_clean_v102');
 } catch (e) {}
 

@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractDynamicBits, extractClothingSegments } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits } from '../text-utils.js';
 import { rosterDataText, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
 import { getProfiles } from './profile.js';
 

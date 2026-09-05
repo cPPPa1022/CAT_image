@@ -79,11 +79,19 @@ import { generateImage } from './comfyui.js';
 
 // ── 构造 img 卡片 HTML ──
 export function buildImgCard(scene, fullPrompt, cachedImage, blockId) {
-    return '<div class="sl_img_block" style="margin:8px 0;padding:10px 12px;border-radius:10px;background:' + COLORS.card + ';border:1px solid ' + COLORS.line + ';" title="' + escapeHtml(fullPrompt) + '">' +
-        '<div style="font-size:11px;color:' + COLORS.sub + ';margin-bottom:4px;">' + escapeHtml(scene.slice(0, 100)) + '</div>' +
-        (cachedImage ? '<img src="' + escapeHtml(cachedImage) + '" style="max-width:100%;border-radius:12px;margin-top:6px;display:block;">' : '') +
+    // [Fix] 短标题：详细字段只走生成链（【提示词】/data属性/缓存），不外显——
+    // 标题取场景首句(≤14字)，提示词小字默认隐藏（设置 showGenPrompt 可开，调试用）
+    var shortTitle = String(scene || '');
+    var commaAt = shortTitle.search(/[，。！？、,;!?]/);
+    if (commaAt > 0) shortTitle = shortTitle.slice(0, commaAt);
+    var truncated = shortTitle.length > 14;
+    if (truncated) shortTitle = shortTitle.slice(0, 14);
+    var titleText = shortTitle + (truncated ? '…' : '');
+    return '<div class="sl_img_block" style="margin:8px 0;padding:10px 12px;border-radius:10px;background:' + COLORS.card + ';border:1px solid ' + COLORS.line + ';" title="' + escapeHtml(titleText) + '">' +
+        '<div style="font-size:11px;color:' + COLORS.sub + ';margin-bottom:4px;">🖼️ ' + escapeHtml(titleText) + '</div>' +
+        (cachedImage ? '<img src="' + escapeHtml(cachedImage) + '" style="max-width:60%;border-radius:12px;margin-top:6px;display:block;">' : '') +
         '<span class="sl_img_btn" data-prompt="' + escapeHtml(fullPrompt) + '"' + (blockId ? ' data-slid="' + escapeHtml(blockId) + '"' : '') + ' style="display:inline-block;padding:5px 14px;margin-top:4px;background:' + (cachedImage ? COLORS.card : COLORS.blue) + ';color:' + (cachedImage ? COLORS.text : '#fff') + ';border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;">' + (cachedImage ? '\u21bb \u91cd\u65b0\u751f\u6210' : '\u2726 \u751f\u6210\u56fe\u7247') + '</span>' +
-        (fullPrompt !== scene ? '<div style="font-size:10px;color:#aeaeb2;font-family:Consolas,monospace;line-height:1.4;margin-top:6px;padding-top:4px;border-top:1px dotted ' + COLORS.line + ';word-break:break-all;">🐱 ' + escapeHtml(fullPrompt) + '</div>' : '') +
+        (settings.showGenPrompt && fullPrompt !== scene ? '<div style="font-size:10px;color:#aeaeb2;font-family:Consolas,monospace;line-height:1.4;margin-top:6px;padding-top:4px;border-top:1px dotted ' + COLORS.line + ';word-break:break-all;">🐱 ' + escapeHtml(fullPrompt) + '</div>' : '') +
         '</div>';
 }
 

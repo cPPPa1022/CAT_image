@@ -109,9 +109,11 @@ export function renderEnhancedBodyHtml(enhanced) {
             var scene = imgInfo.scene || '';
             var imageTag = '[image: ' + scene + ']';
             // [Fix] 按该块位置提取提示词：同场景多图不再共用第一块的【提示词】（B4）
-            var fullPrompt = resolveFacePrompt(extractImagePrompt(enhanced, imageTag, imgInfo.idx) || scene);
+            var pc = extractImagePrompt(enhanced, imageTag, imgInfo.idx) || '';
+            var fullPrompt = resolveFacePrompt(pc || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文（防中文提示词被清成空串）
-            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt));
+            // [Fix] 旧缓存 key 兼容：644d40c 前缓存 key=scene+', '+prompt，否则刷新后需重新生成
+            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (pc && scene ? imgCacheGet(scene + ', ' + pc) : null));
         });
 }
 
@@ -206,7 +208,8 @@ export function scanDom(messageDiv) {
             // 拼进提示词会把剧情叙述文字+角色名一起喂给生图模型（与 renderEnhancedBodyHtml 对齐）
             var fullPrompt = resolveFacePrompt(promptContent || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c2 = cleanAnimePrompt(fullPrompt); if (_c2) fullPrompt = _c2; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文
-            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt));
+            // [Fix] 旧缓存 key 兼容（644d40c 前缓存 key=scene+', '+prompt）
+            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null));
         }
         return escapeHtml(part).replace(/\n/g, '<br>');
     }).join('');
@@ -285,6 +288,17 @@ export function restoreImageBlocks() {
         }
     });
     _restoringBlocks = false;
+    // [Fix] 恢复阶段不自动点击（_restoringBlocks），如果确实缺图（缓存未命中）用户得手点——
+    // 恢复结束 800ms 后补一次兜底自动出图（仅"⚡ 生成图片"未生成按钮；已缓存/排队/重新生成不触发）
+    if (settings.autoGen === 1) {
+        setTimeout(function() {
+            if (_restoringBlocks) return;
+            jQuery('.sl_img_btn').each(function() {
+                var b = jQuery(this);
+                if (b.text().indexOf('排队') < 0 && b.text().indexOf('🔄') < 0 && b.text().indexOf('生成图片') >= 0) b.trigger('click');
+            });
+        }, 800);
+    }
 }
 
 // ══════════════════════════════
@@ -303,7 +317,8 @@ export function extractImgBlocksFromEnhanced(enhancedText) {
         // （人物动作/表情/衣着），拼进提示词会把剧情文字+角色名喂给生图模型（与 renderEnhancedBodyHtml 对齐）
         var fullPrompt = resolveFacePrompt(promptContent || scene);
         if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
-        blocks.push({ scene: scene, prompt: fullPrompt, html: buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt)) });
+        // [Fix] 旧缓存 key 兼容（644d40c 前缓存 key=scene+', '+prompt），否则刷新后需重新生成
+        blocks.push({ scene: scene, prompt: fullPrompt, html: buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null)) });
     }
     return blocks;
 }

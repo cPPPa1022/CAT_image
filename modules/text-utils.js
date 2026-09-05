@@ -150,6 +150,12 @@ export function extractDynamicBits(text) {
 // ── 消息头部指纹（占位符感知） ──
 // 导演模式正文可能整个就是占位符：原文以 [img:…] 开头、缓存以 [image: …] 开头，
 // 前40字直接比较永远失配。取首个占位符的场景开头(≤30字)比较；无占位符回退前40字。
+// 匹配归一化：去空白与助词（的/地/得/色/个），用于"是否已包含"判断——
+// AI 润色把"浅灰开衫"写成"浅灰色开衫"时仍能认出已包含，避免重复补入
+export function normForMatch(s) {
+    return String(s || '').replace(/\s+/g, '').replace(/[的地得色个只]/g, '');
+}
+
 export function imgBlockHead(text) {
     var m = String(text || '').match(/\[(?:img|image):\s*([^\]]{2,30})/);
     return m ? m[1].replace(/\s/g, '') : String(text || '').slice(0, 40).replace(/\s/g, '');

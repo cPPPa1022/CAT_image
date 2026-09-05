@@ -20,6 +20,17 @@ export function imgCacheGet(prompt) {
     return imageCache[prompt];
 }
 
+// ── 图块精确缓存（用户方案：块标识 = 消息缓存key + 块序号 → 图片URL） ──
+// 提示词内容相同不再互相覆盖；刷新/恢复按标识精确对应，零模糊匹配
+export function imgCacheSetById(blockId, url) {
+    if (!blockId) return;
+    imageCache[blockId] = url;
+    try { localStorage.setItem('slimg_cache', JSON.stringify(imageCache)); } catch (e) {}
+}
+export function imgCacheGetById(blockId) {
+    return blockId ? imageCache[blockId] : undefined;
+}
+
 // 清全部图片缓存（内存 + localStorage）：index.js 部署清理使用（C2）
 export function imgCacheClear() {
     imageCache = {};

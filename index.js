@@ -79,6 +79,13 @@ if (!localStorage.getItem('sillab_clean_v210')) {
     localStorage.setItem('sillab_clean_v210', '1');
 }
 
+// ── 图块精确缓存上线：一次性清理旧"提示词→图"缓存（旧键内容会互相覆盖，且与块标识不兼容） ──
+if (!localStorage.getItem('sillab_slid_cache_v1')) {
+    try { imgCacheClear(); } catch (e2) {}
+    localStorage.setItem('sillab_slid_cache_v1', '1');
+    slLog('🧹 图块精确缓存上线：旧图片缓存已清理（旧消息图片需重新生成一次，新图按块标识精确记录）');
+}
+
 slLog('v1.0 init');
 
 // ── 注册斜杠命令 ──

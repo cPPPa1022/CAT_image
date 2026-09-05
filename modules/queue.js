@@ -1,7 +1,7 @@
 // ── SillyImage Lab 生图排队 ──
 import { slLog } from './log.js';
 import { settings, COLORS, getSTContext, getActiveMode, escapeHtml } from './settings.js';
-import { imgCacheSet } from './cache.js';
+import { imgCacheSet, imgCacheSetById } from './cache.js';
 import { generateImage } from './comfyui.js';
 import { cleanAnimePrompt } from './text-utils.js';
 import { resolveFacePrompt } from './pipeline/profile.js';
@@ -21,6 +21,9 @@ async function processImageQueue() {
         if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _clean = cleanAnimePrompt(prompt); if (_clean) prompt = _clean; }
         var result = await generateImage(workflow, prompt);
         imgCacheSet(task.prompt, result.url);
+        // [Fix] 图块精确缓存：按块标识（消息key#序号）记录，同一提示词内容不再互相覆盖
+        var _slid = task.btn && task.btn.data ? task.btn.data('slid') : '';
+        if (_slid) imgCacheSetById(_slid, result.url);
         if (task.custom) {
             // [Fix] 通用任务（如生成立绘）：由调用方回调处理结果
             task.custom.onSuccess(result);

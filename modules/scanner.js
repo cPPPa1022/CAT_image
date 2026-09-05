@@ -189,16 +189,16 @@ export function scanAllMsgs() {
             if (!mesEl.length) return;
             var mesId = jQuery(this).attr('mesid');
             if (!mesId || !mesId.trim()) return;
-            var cached = findBestCached(chatId, mesId, mesEl.text());
-            if (cached && /\[image:/.test(cached)) {
+            var fb = findBestCachedEntry(chatId, mesId, mesEl.text());
+            if (fb && /\[image:/.test(fb.value)) {
                 if (/sl_img_btn/.test(mesEl.html()) || /sl_img_block/.test(mesEl.html())) return;
-                if (hasBodyMarker(cached)) {
-                    var bodyContent = cached.slice(cached.indexOf('正文###') + 5, cached.indexOf('结尾###', cached.indexOf('正文###') + 5));
-                    renderBodyEnhanced(mesEl, bodyContent);
+                if (hasBodyMarker(fb.value)) {
+                    var bodyContent = fb.value.slice(fb.value.indexOf('正文###') + 5, fb.value.indexOf('结尾###', fb.value.indexOf('正文###') + 5));
+                    renderBodyEnhanced(mesEl, bodyContent, undefined, undefined, fb.key);
                 } else if (settings.imgMode === 'main') {
-                    renderEnhancedLite(mesEl, cached);
+                    renderEnhancedLite(mesEl, fb.value, fb.key);
                 } else {
-                    renderEnhanced(mesEl, cached);
+                    renderEnhanced(mesEl, fb.value, fb.key);
                 }
             }
         });
@@ -292,19 +292,19 @@ export async function runAuxImageScan(messageElement) {
             settings.msgMap[key] = reconstructed;
             if (!settings.msgMapTs) settings.msgMapTs = {};
             settings.msgMapTs[key] = Date.now();
-            renderBodyEnhanced(freshMsg, enhanced, startIdx, endIdx);
+            renderBodyEnhanced(freshMsg, enhanced, startIdx, endIdx, key);
             slLog('标记模式: 增强文本已回填到 正文###...结尾### 区间');
         } else if (settings.imgMode === 'main') {
             // v2.4 酒馆AI模式：只替换占位符为图卡，正文/状态栏原文保留（不重建）
             settings.msgMap[key] = enhanced;
             if (!settings.msgMapTs) settings.msgMapTs = {};
             settings.msgMapTs[key] = Date.now();
-            renderEnhancedLite(freshMsg, enhanced);
+            renderEnhancedLite(freshMsg, enhanced, key);
         } else {
             settings.msgMap[key] = enhanced;
             if (!settings.msgMapTs) settings.msgMapTs = {};
             settings.msgMapTs[key] = Date.now();
-            renderEnhanced(freshMsg, enhanced);
+            renderEnhanced(freshMsg, enhanced, key);
         }
         var keys = Object.keys(settings.msgMap);
         if (keys.length > 50) {
@@ -345,40 +345,43 @@ export function getMsgFingerprint(text) {
 export function getMsgKey(chid, mesid, text) {
     return chid + '_' + mesid + '_' + getMsgFingerprint(text || '').slice(0, 20);
 }
-// ── 模糊匹配缓存（支持 swipe 分支 + 编辑恢复） ──
-export function findBestCached(chid, mesid, text) {
+// ── 精确条目版：返回 {key, value}，供渲染时生成"消息key#序号"块标识 ──
+export function findBestCachedEntry(chid, mesid, text) {
     var msgMap = settings.msgMap || {};
     var key = getMsgKey(chid, mesid, text);
-    if (msgMap[key] && /\[image:/.test(msgMap[key])) return msgMap[key];
+    if (msgMap[key] && /\[image:/.test(msgMap[key])) return { key: key, value: msgMap[key] };
     var prefix = chid + '_' + mesid + '_';
     for (var k in msgMap) {
         if (k.indexOf(prefix) === 0 && msgMap[k] && /\[image:/.test(msgMap[k])) {
             var cachedText = extractBodyContent(msgMap[k]).slice(0, 40).replace(/\s/g, '');
             var msgText = extractBodyContent(text).slice(0, 40).replace(/\s/g, '');
             if (cachedText && msgText && cachedText === msgText) {
-                // 如果有多条匹配，选有 结尾### 的完整条目
-                var best = msgMap[k], foundComplete = msgMap[k].indexOf('结尾###') >= 0;
+                var best = { key: k, value: msgMap[k] }, foundComplete = msgMap[k].indexOf('结尾###') >= 0;
                 for (var k2 in msgMap) {
                     if (k2 === k || k2.indexOf(prefix) !== 0) continue;
                     if (!msgMap[k2] || !/\[image:/.test(msgMap[k2])) continue;
                     var ct2 = extractBodyContent(msgMap[k2]).slice(0,40).replace(/\s/g,'');
-                    if (ct2 === msgText && msgMap[k2].indexOf('结尾###') >= 0) { best = msgMap[k2]; foundComplete = true; break; }
+                    if (ct2 === msgText && msgMap[k2].indexOf('结尾###') >= 0) { best = { key: k2, value: msgMap[k2] }; foundComplete = true; break; }
                 }
                 return best;
             }
         }
     }
-    // [兜底] mesId 前缀不匹配时，遍历全部 msgMap 按正文内容匹配
-    // 解决 ST 刷新 DOM 后 mesId 变化导致 img 块无法恢复的问题
     for (var k3 in msgMap) {
         if (!msgMap[k3] || !/\[image:/.test(msgMap[k3])) continue;
         var cachedText3 = extractBodyContent(msgMap[k3]).slice(0, 40).replace(/\s/g, '');
         var msgText3 = extractBodyContent(text).slice(0, 40).replace(/\s/g, '');
         if (cachedText3 && msgText3 && cachedText3 === msgText3) {
-            return msgMap[k3];
+            return { key: k3, value: msgMap[k3] };
         }
     }
     return null;
+}
+
+// ── 模糊匹配缓存（支持 swipe 分支 + 编辑恢复；旧调用保留返回 value） ──
+export function findBestCached(chid, mesid, text) {
+    var e = findBestCachedEntry(chid, mesid, text);
+    return e ? e.value : null;
 }
 // ── 清理某条消息的所有 swipe 分支缓存 ──
 export function clearMsgCache(chid, mesid) {

@@ -72,30 +72,30 @@ export function getThemeCSS() {
             };
     }
 }
-import { imgCacheGet, imgCacheSet } from './cache.js';
+import { imgCacheGet, imgCacheSet, imgCacheGetById } from './cache.js';
 import { extractImagePrompt, extractBodyContent, hasBodyMarker, cleanAnimePrompt } from './text-utils.js';
 import { resolveFacePrompt } from './pipeline/profile.js';
 import { generateImage } from './comfyui.js';
 
 // ── 构造 img 卡片 HTML ──
-export function buildImgCard(scene, fullPrompt, cachedImage) {
+export function buildImgCard(scene, fullPrompt, cachedImage, blockId) {
     return '<div class="sl_img_block" style="margin:8px 0;padding:10px 12px;border-radius:10px;background:' + COLORS.card + ';border:1px solid ' + COLORS.line + ';" title="' + escapeHtml(fullPrompt) + '">' +
         '<div style="font-size:11px;color:' + COLORS.sub + ';margin-bottom:4px;">' + escapeHtml(scene.slice(0, 100)) + '</div>' +
         (cachedImage ? '<img src="' + escapeHtml(cachedImage) + '" style="max-width:100%;border-radius:12px;margin-top:6px;display:block;">' : '') +
-        '<span class="sl_img_btn" data-prompt="' + escapeHtml(fullPrompt) + '" style="display:inline-block;padding:5px 14px;margin-top:4px;background:' + (cachedImage ? COLORS.card : COLORS.blue) + ';color:' + (cachedImage ? COLORS.text : '#fff') + ';border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;">' + (cachedImage ? '\u21bb \u91cd\u65b0\u751f\u6210' : '\u2726 \u751f\u6210\u56fe\u7247') + '</span>' +
+        '<span class="sl_img_btn" data-prompt="' + escapeHtml(fullPrompt) + '"' + (blockId ? ' data-slid="' + escapeHtml(blockId) + '"' : '') + ' style="display:inline-block;padding:5px 14px;margin-top:4px;background:' + (cachedImage ? COLORS.card : COLORS.blue) + ';color:' + (cachedImage ? COLORS.text : '#fff') + ';border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;">' + (cachedImage ? '\u21bb \u91cd\u65b0\u751f\u6210' : '\u2726 \u751f\u6210\u56fe\u7247') + '</span>' +
         (fullPrompt !== scene ? '<div style="font-size:10px;color:#aeaeb2;font-family:Consolas,monospace;line-height:1.4;margin-top:6px;padding-top:4px;border-top:1px dotted ' + COLORS.line + ';word-break:break-all;">🐱 ' + escapeHtml(fullPrompt) + '</div>' : '') +
         '</div>';
 }
 
 // ── 纯渲染 enhanced 正文为 HTML ──
-export function renderEnhancedBodyHtml(enhanced) {
+export function renderEnhancedBodyHtml(enhanced, blockKey) {
     var imageScenes = [];
     var pid = 0;
     var safe = enhanced.replace(/\[image:\s*[\s\S]*?\]/g, function(m, cap, off) {
         var match = m.match(/\[image:\s*([\s\S]*?)\]/);
         var scene = (match && match[1]) ? match[1].trim() : '';
-        // [Fix] 记录该 [image:] 块在原文中的位置，提示词按位置提取（B4）
-        imageScenes.push({ scene: scene, idx: off });
+        // [Fix] 记录该 [image:] 块在原文中的位置，提示词按位置提取（B4）；块标识=消息key#序号（精确缓存）
+        imageScenes.push({ scene: scene, idx: off, id: (blockKey ? blockKey + '#' + pid : '') });
         return '__SLIMG' + (pid++) + '__';
     });
     safe = safe.replace(/\n?\s*【💬 💬 提示词】[^\n]*\n?/g, '\n');
@@ -112,21 +112,21 @@ export function renderEnhancedBodyHtml(enhanced) {
             var pc = extractImagePrompt(enhanced, imageTag, imgInfo.idx) || '';
             var fullPrompt = resolveFacePrompt(pc || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文（防中文提示词被清成空串）
-            // [Fix] 旧缓存 key 兼容：644d40c 前缓存 key=scene+', '+prompt，否则刷新后需重新生成
-            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (pc && scene ? imgCacheGet(scene + ', ' + pc) : null));
+            // [Fix] 精确缓存优先：块标识 → 图片；提示词键/旧场景键仅作兼容回退
+            return buildImgCard(scene, fullPrompt, imgCacheGetById(imgInfo.id) || imgCacheGet(fullPrompt) || (pc && scene ? imgCacheGet(scene + ', ' + pc) : null), imgInfo.id);
         });
 }
 
 // ── 正文###...结尾### 区间渲染 ──
-export function renderBodyEnhanced(element, enhanced, startIdx, endIdx) {
+export function renderBodyEnhanced(element, enhanced, startIdx, endIdx, blockKey) {
     // 外部传入了纯文本定位 → 用纯文本切分重建
     if (startIdx !== undefined && endIdx !== undefined) {
         var html2 = element.html();
         var bodyIdx = html2.indexOf('正文###');
-        if (bodyIdx === -1) { renderEnhanced(element, enhanced); return; }
+        if (bodyIdx === -1) { renderEnhanced(element, enhanced, blockKey); return; }
         var beforeHtml = html2.slice(0, bodyIdx);
         var afterHtml = html2.slice(html2.indexOf('结尾###', bodyIdx + 1) + 5);
-        var rebuilt = beforeHtml + renderEnhancedBodyHtml(enhanced) + afterHtml;
+        var rebuilt = beforeHtml + renderEnhancedBodyHtml(enhanced, blockKey) + afterHtml;
         element.html(rebuilt);
     } else {
         // 旧逻辑：HTML 地图找标记
@@ -188,7 +188,7 @@ export function setEnqueueGen(fn) { _enqueueGen = fn; }
 function enqueueGen(btn, prompt) { if (_enqueueGen) _enqueueGen(btn, prompt); else { slErr('enqueueGen 未初始化'); } }
 
 // ── 扫描 DOM 中的 [image:] 标记 ──
-export function scanDom(messageDiv) {
+export function scanDom(messageDiv, blockKey) {
     if (/sl_img_btn/.test(messageDiv.html()) || /sl_img_block/.test(messageDiv.html())) return;
     var raw = messageDiv.text();
     if (!/\[image:/.test(raw)) return;
@@ -196,6 +196,7 @@ export function scanDom(messageDiv) {
     raw = raw.replace(/\n?\s*【💬 提示词】[^\n]*\n?/g, '\n');
     var parts = raw.split(/(\[image:\s*[\s\S]*?\])/g);
     var posCursor = 0;
+    var blockIdx = 0;
     var html = parts.map(function(part) {
         if (/^\[image:/.test(part)) {
             var match = part.match(/\[image:\s*([\s\S]*?)\]/);
@@ -209,7 +210,9 @@ export function scanDom(messageDiv) {
             var fullPrompt = resolveFacePrompt(promptContent || scene);
             if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c2 = cleanAnimePrompt(fullPrompt); if (_c2) fullPrompt = _c2; }  // 使用 getActiveMode 统一查询锁定的模式；删空则保留原文
             // [Fix] 旧缓存 key 兼容（644d40c 前缓存 key=scene+', '+prompt）
-            return buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null));
+            var bid = blockKey ? blockKey + '#' + blockIdx : '';
+            blockIdx++;
+            return buildImgCard(scene, fullPrompt, imgCacheGetById(bid) || imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null), bid);
         }
         return escapeHtml(part).replace(/\n/g, '<br>');
     }).join('');
@@ -240,20 +243,22 @@ export function restoreImageBlocks() {
         var mesRawText = mesEl.text() || '';
         var key = chatId + '_' + mesId;
         var cached = msgMap[key];
+        var cachedKey = key;
         if (!cached || !/\[image:/.test(cached)) {
             var fpPrefix = key + '_';
             var mHead = (extractBodyContent(mesRawText) || '').slice(0, 40).replace(/\s/g, '');
-            var kvMatch = null, kvFallback = null;
+            var kvMatch = null, kvMatchK = null, kvFallback = null, kvFallbackK = null;
             for (var kk in msgMap) {
                 if (kk.indexOf(fpPrefix) !== 0 || !msgMap[kk] || !/\[image:/.test(msgMap[kk])) continue;
-                if (!kvFallback) kvFallback = msgMap[kk];
+                if (!kvFallback) { kvFallback = msgMap[kk]; kvFallbackK = kk; }
                 var kHead = (extractBodyContent(msgMap[kk]) || '').slice(0, 40).replace(/\s/g, '');
                 if (kHead && mHead && kHead === mHead) {
-                    kvMatch = msgMap[kk];
+                    kvMatch = msgMap[kk]; kvMatchK = kk;
                     if (msgMap[kk].indexOf('结尾###') >= 0) break;  // 优先带完整标记的条目
                 }
             }
             cached = kvMatch || kvFallback;
+            cachedKey = kvMatchK || kvFallbackK || key;
         }
         // 模糊匹配编辑后的 mesId 变化
         if (!cached) {
@@ -264,13 +269,14 @@ export function restoreImageBlocks() {
                     var cachedText = extractBodyContent(msgMap[k]).slice(0, 120);
                     if (cachedText && msgText && (cachedText.indexOf(msgText.slice(0, 40)) >= 0 || msgText.indexOf(cachedText.slice(0, 40)) >= 0)) {
                         // 多条匹配时选有 结尾### 的完整条目
-                        var best = msgMap[k];
+                        var best = msgMap[k], bestK = k;
                         for (var k2 in msgMap) {
                             if (k2 === k || k2.indexOf(chatId + '_') !== 0) continue;
                             var ct2 = extractBodyContent(msgMap[k2]).slice(0,120);
-                            if (ct2 && (ct2.indexOf(msgText.slice(0,40))>=0 || msgText.indexOf(ct2.slice(0,40))>=0) && msgMap[k2].indexOf('结尾###')>=0) { best = msgMap[k2]; break; }
+                            if (ct2 && (ct2.indexOf(msgText.slice(0,40))>=0 || msgText.indexOf(ct2.slice(0,40))>=0) && msgMap[k2].indexOf('结尾###')>=0) { best = msgMap[k2]; bestK = k2; break; }
                         }
                         cached = best;
+                        cachedKey = bestK;
                         slLog('编辑恢复: 模糊匹配', k, '→', mesId);
                         break;
                     }
@@ -281,11 +287,11 @@ export function restoreImageBlocks() {
         var bodyOnly = hasBodyMarker(cached) ? extractBodyContent(cached) : null;
         // v2.4 酒馆AI模式：只替换占位符，保留原文 HTML（状态栏等）
         if (settings.imgMode === 'main' && !bodyOnly) {
-            renderEnhancedLite(mesEl, cached); restoreImageBlocks._lastCount++;
+            renderEnhancedLite(mesEl, cached, cachedKey); restoreImageBlocks._lastCount++;
         } else if (bodyOnly && /\[image:/.test(bodyOnly)) {
-            renderBodyEnhanced(mesEl, bodyOnly); restoreImageBlocks._lastCount++;
+            renderBodyEnhanced(mesEl, bodyOnly, undefined, undefined, cachedKey); restoreImageBlocks._lastCount++;
         } else {
-            renderEnhanced(mesEl, cached); restoreImageBlocks._lastCount++;
+            renderEnhanced(mesEl, cached, cachedKey); restoreImageBlocks._lastCount++;
         }
     });
     _restoringBlocks = false;
@@ -305,11 +311,12 @@ export function restoreImageBlocks() {
 // ══════════════════════════════
 // ── v2.4 轻量渲染（酒馆AI模式）：只替换 [img:…] 占位符为图卡，正文/状态栏原文 HTML 全部保留 ──
 // 修复：旧 renderEnhanced 全量重建（escape+<br>）→ 文字挤成一坨、原文 HTML 结构（状态栏等）丢失
-export function extractImgBlocksFromEnhanced(enhancedText) {
+export function extractImgBlocksFromEnhanced(enhancedText, blockKey) {
     var blocks = [];
     if (!enhancedText) return blocks;
     var re = /\[image:\s*([\s\S]*?)\]/g;
     var m;
+    var blockIdx = 0;
     while ((m = re.exec(enhancedText)) !== null) {
         var scene = (m[1] || '').trim();
         // [Fix] 用正则匹配位置定位提示词（同场景多图不共用第一块，B4）
@@ -319,15 +326,17 @@ export function extractImgBlocksFromEnhanced(enhancedText) {
         var fullPrompt = resolveFacePrompt(promptContent || scene);
         if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
         // [Fix] 旧缓存 key 兼容（644d40c 前缓存 key=scene+', '+prompt），否则刷新后需重新生成
-        blocks.push({ scene: scene, prompt: fullPrompt, html: buildImgCard(scene, fullPrompt, imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null)) });
+        var bid = blockKey ? blockKey + '#' + blockIdx : '';
+        blockIdx++;
+        blocks.push({ scene: scene, prompt: fullPrompt, id: bid, html: buildImgCard(scene, fullPrompt, imgCacheGetById(bid) || imgCacheGet(fullPrompt) || (promptContent && scene ? imgCacheGet(scene + ', ' + promptContent) : null), bid) });
     }
     return blocks;
 }
 
-export function renderEnhancedLite(element, enhancedText) {
+export function renderEnhancedLite(element, enhancedText, blockKey) {
     if (!element || !element.length) return;
     if (element.find('.sl_img_block').length) return;  // 已渲染防重
-    var blocks = extractImgBlocksFromEnhanced(enhancedText);
+    var blocks = extractImgBlocksFromEnhanced(enhancedText, blockKey);
     if (!blocks.length) return;
     var bi = 0;
     try {

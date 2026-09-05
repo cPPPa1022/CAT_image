@@ -81,6 +81,26 @@ export function upsertPerson(name, identity, appearance, source) {
         if (!key) return null;
         var existing = r.list[key];
         var isCast = source === 'cast';
+        // [Fix] 同人识别：精确 key 不存在时按名字找同名条目（同一人不同 key 形式：
+        // "温若兰" vs "温若兰（邻家人妻）"）——单条→合并；多条→按新来标签精确匹配；仍无→才新建
+        if (!existing) {
+            var _sameName = [];
+            for (var _sk in r.list) {
+                if (_sk === name || _sk.indexOf(name + '（') === 0) _sameName.push(r.list[_sk]);
+            }
+            if (_sameName.length === 1) {
+                existing = _sameName[0];
+            } else if (_sameName.length > 1 && identity) {
+                for (var _mi = 0; _mi < _sameName.length; _mi++) {
+                    if (_sameName[_mi] && String(_sameName[_mi].identity || '') === String(identity)) { existing = _sameName[_mi]; break; }
+                }
+            } else if (_sameName.length > 1 && !identity) {
+                // 同名多条且未指定标签：无法安全合并（避免把 A 的信息并给 B），跳过并告警
+                slLog('同名多条且人物段未带标签，跳过更新（避免合并错人）: ' + name + '（共' + _sameName.length + '条，建议人物段带身份标签）');
+                try { refreshCoopCards(); } catch (e5) {}
+                return null;
+            }
+        }
         if (!existing) {
             // _updated=true（仅 LLM 来源）：协作卡索引下一轮显示 *更新*，主 LLM 确认"人物指导已入库"
             r.list[key] = {
@@ -129,7 +149,7 @@ export function upsertPerson(name, identity, appearance, source) {
             if (changed && !isCast) existing._updated = true;
         }
         try { refreshCoopCards(); } catch (e2) { /* 协作卡刷新失败不影响建档 */ }
-        return r.list[key];
+        return existing || r.list[key];
     } catch (e) { slLog('人物表upsert异常: ' + e.message); return null; }
 }
 

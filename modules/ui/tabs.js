@@ -71,7 +71,7 @@ export function renderHomeTab() {
   h += cell('⚙️', '高级与重置', 'NSFW · Debug · 重置插件', '', 'data-nav="advanced"');
   h += '</div>';
   // 底部品牌
-  h += '<div style="text-align:center;padding:14px 0 6px;color:' + CAT.mute + ';font-size:10px;letter-spacing:1px;">小猫的生图插件 v1.1</div>';
+  h += '<div style="text-align:center;padding:14px 0 6px;color:' + CAT.mute + ';font-size:10px;letter-spacing:1px;">小猫的生图插件 v1.1.1</div>';
   body.html(h);
   // 交互绑定
   body.off('click', '#sl_btn_scan_cast').on('click', '#sl_btn_scan_cast', async function () { var b = jQuery(this); b.prop('disabled', true).text('扫描中…'); try { var sr = await scanCharacterProfile(); if (sr) { toast('success', '扫描完成'); } else { toast('error', '扫描没成功'); } renderHomeTab(); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } b.prop('disabled', false).text('扫描角色卡'); });

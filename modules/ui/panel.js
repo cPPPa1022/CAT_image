@@ -6,13 +6,14 @@ import { settings, saveSettings } from '../settings.js';
 import * as tabs from './tabs.js';
 import * as compact from './compact-bar.js';
 
-var _panelEl = null, _maskEl = null, _expandedVisible = false, _pageStack = [];
+var _panelEl = null, _maskEl = null, _expandedVisible = false, _pageStack = [], _openGuard = 0;
 
 export function getPanelEl() { return _panelEl; }
 // 打开抽屉（渲染主视图 + 清栈）
 export function showPanel() {
   if (!_panelEl) createExpandedPanel();
   _expandedVisible = true;
+  _openGuard = Date.now();
   applyTheme(settings.uiTheme || '雪白猫');
   _pageStack = [];
   _panelEl.css('display', 'flex');
@@ -35,18 +36,23 @@ export function createExpandedPanel() {
   var isM = window.innerWidth < 640;
   // 遮罩
   _maskEl = jQuery('<div id="sl_mask" style="position:fixed;z-index:9990;top:0;left:0;width:100%;height:100%;background:rgba(20,20,24,0.32);backdrop-filter:blur(3px);display:none;"></div>').appendTo('body');
-  _maskEl.on('click', function () { hidePanel(); });
+  _maskEl.on('click', function () {
+    // [Fix v1.1.1] 手机端点击穿透：打开面板的这次触控（含幽灵点击）会落在刚显示的遮罩上 → 面板刚开即关。
+    // 打开后 350ms 内的遮罩点击一律忽略（覆盖“双击放大”判定窗口）。
+    if (Date.now() - _openGuard < 350) return;
+    hidePanel();
+  });
   // 右侧抽屉（贴边，左缘大圆角）
-  var ps = 'position:fixed;z-index:10000;top:0;bottom:0;right:0;width:' + (isM ? '100vw' : '400px') + ';background:var(--sl-bg);border-radius:' + (isM ? '0' : '24px 0 0 24px') + ';box-shadow:-24px 0 64px rgba(20,20,24,0.22);font-family:' + CAT.font + ';color:' + CAT.text + ';display:none;flex-direction:column;overflow:hidden;';
+  var ps = 'position:fixed;z-index:10000;top:0;bottom:0;right:0;width:' + (isM ? '100vw' : '400px') + ';background:var(--sl-bg);border-radius:' + (isM ? '0' : '24px 0 0 24px') + ';box-shadow:-24px 0 64px rgba(20,20,24,0.22);font-family:' + CAT.font + ';color:' + CAT.text + ';display:none;flex-direction:column;overflow:hidden;max-width:100vw;';
   var h = '<div id="sl_panel" style="' + ps + '">';
   // 品牌行（几何猫头 呼吸动画 + 状态点）
-  h += '<div id="sl_panel_header" style="display:flex;align-items:center;gap:10px;padding:14px 18px;flex-shrink:0;">';
+  h += '<div id="sl_panel_header" style="display:flex;align-items:center;gap:10px;padding:14px 18px;padding:calc(14px + env(safe-area-inset-top)) 18px;flex-shrink:0;">';
   h += '<span id="sl_panel_cat" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:' + CAT.accent + ';">' + catSVG('healthy', 30) + '</span>';
   h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;letter-spacing:0.3px;color:' + CAT.text + ';">偷懒小猫</div><div style="font-size:10px;color:' + CAT.sub + ';margin-top:1px;">小猫的生图插件</div></div>';
   h += '<span id="sl_head_status" style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:' + CAT.sub + ';padding:4px 9px;border-radius:999px;background:' + CAT.bg + ';"><span style="width:7px;height:7px;border-radius:50%;background:' + CAT.green + ';box-shadow:0 0 0 3px ' + CAT.green + '22;"></span><span id="sl_head_status_txt">空闲</span></span>';
   h += '<button id="sl_close_panel" style="border:none;background:none;cursor:pointer;font-size:15px;color:' + CAT.sub + ';padding:6px 8px;border-radius:10px;">✕</button>';
   h += '</div>';
-  h += '<div id="sl_panel_body" style="flex:1;overflow-y:auto;padding:4px 18px 20px;min-height:0;position:relative;"></div></div>';
+  h += '<div id="sl_panel_body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 18px 20px;padding:4px 18px calc(20px + env(safe-area-inset-bottom));min-height:0;position:relative;"></div></div>';
   _panelEl = jQuery(h).appendTo('body');
   jQuery('#sl_close_panel').on('click', function () { hidePanel(); });
 }
@@ -125,6 +131,9 @@ export function buildUI(extSettings) {
     css.push('#sl_panel .sl-cell{transition:background .15s ease}');
     css.push('#sl_panel .sl-cell:hover{background:var(--sl-bg)}');
     css.push('#sl_panel .sl-cell:active{opacity:0.7}');
+    css.push('#sl_panel button,#sl_compact button,#sl_compact,#sl_panel{-webkit-tap-highlight-color:transparent!important}');
+    css.push('#sl_panel button,#sl_compact button,#sl_compact{touch-action:manipulation}');
+    css.push('#sl_panel{-webkit-overflow-scrolling:touch}');
     css.push('#sl_panel input,#sl_panel select,#sl_panel textarea{border-radius:12px!important;border:1px solid var(--sl-line)!important;background:var(--sl-card)!important;color:var(--sl-text)!important;font-size:12.5px}');
     css.push('#sl_panel input:focus,#sl_panel select:focus,#sl_panel textarea:focus{border-color:var(--sl-accent)!important;box-shadow:0 0 0 3px rgba(255,159,10,0.12)!important;outline:none!important}');
     css.push('#sl_panel select{appearance:none;-webkit-appearance:none;padding-right:30px!important;cursor:pointer;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M1 1l4 4 4-4%27 stroke=%27%2398989f%27 stroke-width=%271.8%27 fill=%27none%27 stroke-linecap=%27round%27/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 12px center!important}');

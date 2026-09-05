@@ -1,5 +1,21 @@
 # 📜 更新日志（Changelog）
 
+## v1.1.1 — 2026-09-05
+**主题：手机端修复**
+
+### 🐛 修复
+
+- **手机端面板开即关（点击穿透）**：点猫条打开面板的同一触控（含幽灵点击）会落到刚显示的遮罩上 → 面板闪现即关；打开后 350ms 内屏蔽遮罩点击（`_openGuard`）
+- **手机端猫条头部点按无效**：`touchstart` 直接 `preventDefault()` 吞掉了合成 click（整个猫条本体只有 🐾 和底部按钮能点）；改为仅 `mousedown` 阻止默认，触屏拖动用 `_compDragMoved` 继续拦截误点，拖动后点击仍被吞（防拖错开面板）
+- 拖动区 `touch-action:none`（拖动不滚动页面），按钮/面板 `touch-action:manipulation`（去 300ms 双击延迟、防双击缩放）
+
+### 🛠 调整（手机端适配）
+
+- 面板全屏适配：`max-width:100vw` 防溢出、刘海/底部安全区（`env(safe-area-inset-*)`）、`-webkit-overflow-scrolling:touch` 顺畅滚动
+- 全局去掉点击高亮（`-webkit-tap-highlight-color:transparent`）
+
+---
+
 ## v1.1.0 — 2026-09-05
 **主题：人物档案分层 + 导演模式两轮信息交换 + 精确缓存**
 

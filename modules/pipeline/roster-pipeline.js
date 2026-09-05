@@ -143,7 +143,14 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
         // [Fix] 动态要素保真兜底1：占位符里的可变片段（衣着/发型/表情/光线/动作…），
         // 若提示词没有对应内容则补入（用前6字核心匹配，AI 润色加词也认）
-        var _dynBits = extractDynamicBits((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
+        // 各源分开提取再合并去重：场景+要点拼串会把跨界两段合成一段（示例：场景末句+要点），归一化失配 → 重复补入
+        var _dynSrcs = [(ph.scene || ''), (ph.topic || ''), (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join('、')];
+        var _dynBits = [];
+        for (var _si = 0; _si < _dynSrcs.length; _si++) {
+            if (!_dynSrcs[_si]) continue;
+            var _partBits = extractDynamicBits(_dynSrcs[_si]);
+            for (var _bi = 0; _bi < _partBits.length; _bi++) { if (_dynBits.indexOf(_partBits[_bi]) < 0) _dynBits.push(_partBits[_bi]); }
+        }
         // 比较前剥离已知人名：插件AI 会把"温若兰端着瓜盘"润色成"双手端着瓜盘"（去名），
         // 不带人名剥离会误判"缺失"而重复补入
         var _namesHere = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (p) { return p.length >= 2; });

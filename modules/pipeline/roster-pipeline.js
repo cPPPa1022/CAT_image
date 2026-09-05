@@ -34,7 +34,11 @@ function buildRosterUserContent(placeholders) {
     var avatar = '';
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
-    lines.push('【任务】请对正文中的每个 [img:] 占位符输出对应生图提示词；按【占位符】顺序一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
+    lines.push('【任务】为每个 [img:] 占位符输出 1 条提示词，按【占位符】编号一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
+    // [Fix] 格式硬约束（格式缺失=整轮作废，是此前 0 条提示词/串味的主因）
+    lines.push('【输出格式·必须严格遵守·漏一段整轮作废】');
+    lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
+    lines.push('只输出以上两段，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
     lines.push('');
     lines.push('【人物档案】（按本轮占位符注明的人物名字过滤，插件自动匹配——同名不同身份全部给出，由你按场景选用；写提示词必须引用外貌锚点，禁止只写名字）');
     var _phNames = [];
@@ -202,7 +206,7 @@ export async function runRosterPipeline(bodyText, mesId) {
         // 2. 调用插件AI
         var systemPrompt = buildRosterSystemPrompt();
         var userContent = buildRosterUserContent(placeholders);
-        var output = await auxApiCall(systemPrompt, userContent, 16384, 0.4);
+        var output = await auxApiCall(systemPrompt, userContent, 16384, 0.25);
         if (!output || !output.trim()) throw new Error('插件AI返回空');
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
         slLog('协作管线LLM返回, 长度=' + output.length + ' 前200: ' + output.slice(0, 200).replace(/\n/g, '⏎'));

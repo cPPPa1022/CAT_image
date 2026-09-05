@@ -60,7 +60,8 @@ function buildRosterUserContent(bodyText, placeholders) {
 
 // ── 输出解析 ──
 export function parseRosterProfile(output) {
-    var m = output.match(/---PROFILE---\s*([\s\S]*?)\s*---END---/);
+    // [Fix] 容错：END 缺失/用其它分隔符时，PROFILE 段截至 ---IMAGES--- 或文尾
+    var m = output.match(/---\s*PROFILE\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
     if (!m) return null;
     try {
         var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
@@ -75,7 +76,8 @@ export function parseRosterProfile(output) {
 }
 
 export function parseRosterImages(output) {
-    var m = output.match(/---IMAGES---\s*([\s\S]*?)\s*---END---/);
+    // [Fix] 容错：END 缺失时截至文尾；大小写/间隔符变体也接受
+    var m = output.match(/---\s*IMAGES\s*---\s*([\s\S]*?)(?:---\s*END\s*---|$)/);
     if (!m) return [];
     var text = m[1].trim();
     if (!text || text === '（无）' || text === '(无)') return [];
@@ -128,6 +130,7 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             if (prompt.length < 12) prompt = (ph.scene + '，' + prompt);
         }
         if (!prompt) prompt = ph.scene;  // 无提示词：场景直写（渲染兜底用场景生成）
+        if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
         return buildImageBlock(ph.scene, prompt);
     });
     // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见
@@ -168,6 +171,9 @@ export async function runRosterPipeline(bodyText, mesId) {
         var userContent = buildRosterUserContent(bodyText, placeholders);
         var output = await auxApiCall(systemPrompt, userContent, 16384, 0.4);
         if (!output || !output.trim()) throw new Error('插件AI返回空');
+        // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
+        slLog('协作管线LLM返回, 长度=' + output.length + ' 前200: ' + output.slice(0, 200).replace(/\n/g, '⏎'));
+        slLog('协作管线LLM返回, 尾200: ' + output.slice(-200).replace(/\n/g, '⏎'));
 
         // 3. 解析 PROFILE（人物表更新）
         var profileData = parseRosterProfile(output);

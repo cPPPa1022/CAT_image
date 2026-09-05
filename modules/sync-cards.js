@@ -29,20 +29,29 @@ export function buildCoopCardText() {
     lines.push('【人物档案索引】');
     // [Fix] *更新* ACK 机制：人物表条目刚建立/更新时带 _updated 标记，索引里显示 *更新*（只显示一轮），
     // 主 LLM 据此确认"上一轮写的人物指导已入库"，从而不需要重复描写外貌。
+    // [Fix] 用户规则：区分【角色卡人物】（插件扫描：脸/身材档案权威）与【剧情收集人物】（历轮从占位符收集），
+    // 索引 key = 名字（通俗身份标签），同名不同身份会同时列出（由画师按标签+场景自决）。
     var entries = rosterEntries();
-    var names = [];
+    var cardNames = [], chatNames = [];
     for (var i = 0; i < entries.length; i++) {
         var e = entries[i];
         var mark = '';
         if (e._updated) { mark = '*更新*'; e._updated = false; }
-        names.push(e.key + mark);
+        (e.fromCard ? cardNames : chatNames).push(e.key + mark);
     }
-    if (names.length) {
-        lines.push('已建档（' + (settings.directorCastImport !== false ? '插件的角色卡扫描档案+历轮收集' : '插件历轮从占位符收集') + '，插件认识其长相）：' + names.join('、'));
-        lines.push('索引带 *更新* 的人物 = 上一轮刚建立/更新了档案（你写的人物指导已入库，可放心引用）；不带标记 = 长期未变，无需重复外貌；人物外貌有新变化时才在占位符写明，下一轮该人物会带 *更新* 标记。');
-        lines.push('已建档人物只需写“谁+在做什么”，无需描述外貌；未建档的新人物请在占位符中写明外貌，插件将建立长期档案。');
+    if (cardNames.length || chatNames.length) {
+        if (cardNames.length) {
+            lines.push('【角色卡人物】（插件扫描：脸部/身形档案权威，见括号身份标签）：' + cardNames.join('、'));
+            lines.push('· 角色卡人物不要写脸部/身材外貌（插件有档案）；只写“谁+在做什么”，并把本轮可变的衣着/发型/表情/状态写进画面要素；身份标签必须与档案一致（同名人物按标签区分）。');
+        }
+        if (chatNames.length) {
+            lines.push('【剧情收集人物】（插件历轮从占位符收集，同样认识长相）：' + chatNames.join('、'));
+            lines.push('· 剧情收集人物同样无需重复外貌，只需“谁+在做什么”+本轮可变要素。');
+        }
+        lines.push('· 索引带 *更新* 的人物 = 上一轮刚建立/更新了档案（你写的人物指导已入库，可放心引用）；不带标记 = 长期未变，无需重复外貌。');
+        lines.push('· 未建档的新人物/非角色卡人物：写明【外貌+通俗身份标签】（如 人物:阿福（车夫），络腮胡壮汉，粗布短褐），插件将建立长期档案。');
     } else {
-        lines.push('（暂无建档人物；出现的所有人物都请在占位符中写明外貌，插件将建档。）');
+        lines.push('（暂无建档人物；出现的所有人物都请在占位符中写明外貌+通俗身份标签，插件将建档。）');
     }
     return lines.join('\n');
 }

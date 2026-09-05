@@ -389,7 +389,12 @@ export async function scanCharacterProfile(modelMode) {
             var anchorMatch = content.match(/【外貌锚点】\s*(.+)/);
             var anchor = anchorMatch ? anchorMatch[1].trim() : (rigidText ? rigidText.slice(0, 80) : '');
 
-            cast[name] = { static: skeleton, semi: semi, anchor: anchor, body: bodyText, enTags: enTagsMap[name] || "", enPrompt: (enPromptMap||{})[name] || "" };
+            // [Fix] 身份标签（通俗易懂：千金大小姐/同船歌女/车夫…）：
+            // 导演模式人物表 key = 名字（身份标签），同名人物（两个柳如烟）靠标签区分，两个档案都发过去让画师自决
+            var labelMatch = content.match(/【身份标签[】:：]*\s*([^\n【]+)/);
+            var charLabel = labelMatch ? labelMatch[1].trim() : '';
+
+            cast[name] = { static: skeleton, semi: semi, anchor: anchor, body: bodyText, enTags: enTagsMap[name] || "", enPrompt: (enPromptMap||{})[name] || "", label: charLabel };
             slLog('🔍CAST存入:', name, 'static长度=' + (skeleton? skeleton.length : 0));
         }
 
@@ -398,8 +403,8 @@ export async function scanCharacterProfile(modelMode) {
         // 扫描与具体角色卡一样尽力提取；但提取失败时不硬塞"主角"（剧情自由，按世界观卡模式跑）
         if (Object.keys(cast).length === 0 && metaResult.cardType !== '世界观卡' && metaResult.cardType !== '混合型卡') {
             var semiIdx = result.indexOf('---SEMI---');
-            if (semiIdx >= 0) { cast['主角'] = { static: result.slice(0, semiIdx).trim(), semi: result.slice(semiIdx + 9).trim(), anchor: '' }; }
-            else { cast['主角'] = { static: result.trim(), semi: '', anchor: '' }; }
+            if (semiIdx >= 0) { cast['主角'] = { static: result.slice(0, semiIdx).trim(), semi: result.slice(semiIdx + 9).trim(), anchor: '', label: '' }; }
+            else { cast['主角'] = { static: result.trim(), semi: '', anchor: '', label: '' }; }
         }
 
         // 世界观卡模式：如果 LLM 没有输出任何具体角色才清空

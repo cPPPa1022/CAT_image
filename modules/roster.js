@@ -166,6 +166,21 @@ export function rosterIndexText(limit) {
 // mode: 'zit' | 'anime' | 'anime_tag' → 选对应语言锚点
 // 返回值：导入/更新条数
 import { getActiveMode } from './settings.js';
+// 身份维度过滤器：档案只保留"脸部/身材/永久标记"（用户规则）——
+// 发型/衣着/配饰/状态等可变维度由酒馆AI按轮次写（插件AI只做 档案+酒馆AI提示词 → 图片prompt）。
+export function identityAnchorOnly(text) {
+    if (!text) return '';
+    var lines = String(text).split('\n');
+    var keep = [];
+    for (var i = 0; i < lines.length; i++) {
+        var ln = lines[i].trim();
+        if (!ln) continue;
+        if (/^(发型|衣着|配饰|状态|临时|服饰|发型与发色|衣着与配饰)/.test(ln)) continue;  // 可变维度 → 丢弃
+        keep.push(ln);
+    }
+    return keep.join('\n').replace(/【[^】]+】/g, '').trim();
+}
+
 export function importFromCast(cast) {
     if (!cast) return 0;
     var n = 0;
@@ -173,35 +188,16 @@ export function importFromCast(cast) {
     for (var name in cast) {
         var c = cast[name];
         if (!c) continue;
+        var label = (c.label || '').trim();
         var appearance = '';
-        if (mode === 'anime' && c.enPrompt) appearance = c.enPrompt;
+        if (mode === 'anime' && c.enPrompt) appearance = c.enPrompt;      // 英文锚点为整体描述，暂不拆维度
         else if (mode === 'anime_tag' && c.enTags) appearance = c.enTags;
-        else appearance = c.static || '';
+        else appearance = identityAnchorOnly(c.static || '');             // 中文：只保留脸/身形/永久标记
         if (c.body && appearance && !/身形/.test(appearance)) appearance += '；身形：' + c.body;
         if (!appearance) continue;
-        // [Fix] 与占位符/身份标签条目去重：人物表里已有同名（含"名字（身份）"key）条目时
-        // 走"更长者胜"更新，不再新建无身份的重复条目（导演模式扫描后同一人会出现两条档案）。
-        var existingEntry = null;
-        try {
-            var r0 = ensureRoster();
-            if (r0) {
-                for (var k0 in r0.list) {
-                    if (k0 === name || k0.indexOf(name + '（') === 0) { existingEntry = r0.list[k0]; break; }
-                }
-            }
-        } catch (e4) { existingEntry = null; }
-        if (existingEntry) {
-            if (String(appearance).length > String(existingEntry.base || existingEntry.appearance || '').length) {
-                existingEntry.base = appearance;
-                existingEntry.fromCard = true;
-                existingEntry.appearance = composePersonAppearance(existingEntry);
-                // [Fix] 卡库导入是后台动作，不打 *更新*（ACK 只表示"人物指导已入库"）
-                slLog('人物表更新(卡库更详): ' + existingEntry.key);
-            }
-            n++;
-            continue;
-        }
-        upsertPerson(name, '', appearance, 'cast');
+        // 用户规则：人物表 key = 名字（身份标签）；同名不同身份标签 = 各存各条
+        //（两个柳如烟都发给插件AI，由其按占位符里的标签+场景自决）；同 key 由 upsert 做"更长者胜"。
+        upsertPerson(name, label, appearance, 'cast');
         n++;
     }
     return n;

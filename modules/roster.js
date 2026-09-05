@@ -89,7 +89,10 @@ export function upsertPerson(name, identity, appearance, source) {
                 if (_sk === name || _sk.indexOf(name + '（') === 0) _sameName.push(r.list[_sk]);
             }
             if (_sameName.length === 1) {
-                existing = _sameName[0];
+                // [Fix] 仅"至少一侧无标签"才合并（同一人不同 key 形式：裸名↔带标签）；
+                // 双方都有非空标签且不同 → 视为同名不同人，各存各条（用户规则：两个柳如烟）
+                var _cand = _sameName[0];
+                if (!identity || !_cand.identity) existing = _cand;
             } else if (_sameName.length > 1 && identity) {
                 for (var _mi = 0; _mi < _sameName.length; _mi++) {
                     if (_sameName[_mi] && String(_sameName[_mi].identity || '') === String(identity)) { existing = _sameName[_mi]; break; }

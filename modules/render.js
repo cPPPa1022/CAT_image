@@ -223,6 +223,7 @@ export function setRestoreDeps(getChatIdFn, getContextFn) { _getChatId = getChat
 export function restoreImageBlocks() {
     if (!_getChatId || !_getSTContext) return;
     _restoringBlocks = true;
+    restoreImageBlocks._lastCount = 0;  // 本次恢复渲染的图卡数（诊断日志用）
     // [AI-Fix] 所有早退路径都归零 _restoringBlocks，否则 autoGen 永久停摆
     if (jQuery('.edit_textarea').length || jQuery('#curEditTextarea').length) { _restoringBlocks = false; return; }
     var chatId = _getChatId();
@@ -280,11 +281,11 @@ export function restoreImageBlocks() {
         var bodyOnly = hasBodyMarker(cached) ? extractBodyContent(cached) : null;
         // v2.4 酒馆AI模式：只替换占位符，保留原文 HTML（状态栏等）
         if (settings.imgMode === 'main' && !bodyOnly) {
-            renderEnhancedLite(mesEl, cached);
+            renderEnhancedLite(mesEl, cached); restoreImageBlocks._lastCount++;
         } else if (bodyOnly && /\[image:/.test(bodyOnly)) {
-            renderBodyEnhanced(mesEl, bodyOnly);
+            renderBodyEnhanced(mesEl, bodyOnly); restoreImageBlocks._lastCount++;
         } else {
-            renderEnhanced(mesEl, cached);
+            renderEnhanced(mesEl, cached); restoreImageBlocks._lastCount++;
         }
     });
     _restoringBlocks = false;

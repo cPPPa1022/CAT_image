@@ -504,24 +504,19 @@ function initialRestore(attempt) {
     attempt = attempt || 0;
     try {
         var mesCount = jQuery('.mes').length;
-        var chatReady = false;
-        try {
-            var _ctx = getSTContext();
-            chatReady = !!(_ctx && (_ctx.chatId || _ctx.chatMetadata || (_ctx.chat && _ctx.chat.length)));
-        } catch (e) { chatReady = false; }
-        if (mesCount > 0 && chatReady) {
+        if (mesCount > 0) {
+            // [Fix] 日志实锤：硬刷新后酒馆需数秒才把聊天渲染进 DOM（首个 pass 只见 1 条消息）。
+            // "有消息就算就绪"太弱 → 改为 12s 内每秒重试（恢复幂等，已渲染图卡的消息自动跳过）。
             restoreImageBlocks();
             scanAllMsgs();
-            slLog('初始恢复: 历史图片扫描完成 (' + mesCount + ' 条消息, 第' + (attempt + 1) + '次尝试)');
-            if (attempt === 0) {
-                setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); } catch (e2) {} }, 4000);
-                setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); } catch (e2) {} }, 8000);
-            }
-        } else if (attempt < 10) {
-            setTimeout(function () { initialRestore(attempt + 1); }, 1000);
-            slLog('初始恢复: 等待消息DOM/聊天上下文就绪 (第' + (attempt + 1) + '次, mes=' + mesCount + ' chatReady=' + chatReady + ')');
+            slLog('初始恢复: 第' + (attempt + 1) + '次, mes=' + mesCount + ', 本次渲染图卡=' + (restoreImageBlocks._lastCount || 0));
         } else {
-            slErr('初始恢复失败: 10s 内消息DOM/聊天上下文未就绪');
+            slLog('初始恢复: 等待消息DOM (第' + (attempt + 1) + '次, mes=' + mesCount + ')');
+        }
+        if (attempt < 12) {
+            setTimeout(function () { initialRestore(attempt + 1); }, 1000);
+        } else {
+            slLog('初始恢复: 12s 轮询窗口结束（DOM观察器持续兜底）');
         }
     } catch (e) { slErr('初始恢复异常: ' + e.message); }
 }

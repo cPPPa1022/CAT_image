@@ -465,6 +465,35 @@ function handleMessageChanged(messageId) {
     } catch (e) { slErr('消息变更处理异常: ' + e.message); }
 }
 
+// [Fix] 初始恢复（事件驱动改革后刷新无事件可依赖）：1.5s 一次太早——
+// 酒馆消息 DOM/聊天上下文未就绪时 getChatId 走兜底 key → 缓存匹配失败 → 图片"凭空消失"；
+// 改为：等 DOM+上下文就绪（最多10s），恢复后再补两轮（4s/8s）兜底后续加载。
+function initialRestore(attempt) {
+    attempt = attempt || 0;
+    try {
+        var mesCount = jQuery('.mes').length;
+        var chatReady = false;
+        try {
+            var _ctx = getSTContext();
+            chatReady = !!(_ctx && (_ctx.chatId || _ctx.chatMetadata || (_ctx.chat && _ctx.chat.length)));
+        } catch (e) { chatReady = false; }
+        if (mesCount > 0 && chatReady) {
+            restoreImageBlocks();
+            scanAllMsgs();
+            slLog('初始恢复: 历史图片扫描完成 (' + mesCount + ' 条消息, 第' + (attempt + 1) + '次尝试)');
+            if (attempt === 0) {
+                setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); } catch (e2) {} }, 4000);
+                setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); } catch (e2) {} }, 8000);
+            }
+        } else if (attempt < 10) {
+            setTimeout(function () { initialRestore(attempt + 1); }, 1000);
+            slLog('初始恢复: 等待消息DOM/聊天上下文就绪 (第' + (attempt + 1) + '次, mes=' + mesCount + ' chatReady=' + chatReady + ')');
+        } else {
+            slErr('初始恢复失败: 10s 内消息DOM/聊天上下文未就绪');
+        }
+    } catch (e) { slErr('初始恢复异常: ' + e.message); }
+}
+
 export function startPolling() {
     // [AI-Fix] 幂等守卫：防止重复注册定时器和事件钩子
     if (startPolling._active) return;
@@ -499,10 +528,10 @@ export function startPolling() {
         slLog('ST 事件钩子就绪喵~ ✨');
         // [BugFix v3.1] 退出重进/刷新后历史图片不恢复：事件驱动改革删除了旧轮询恢复，
         // 但刷新后无任何事件 → restoreImageBlocks/scanAllMsgs 永不被调。首次延迟统一恢复。
-        setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); slLog('初始恢复: 历史图片扫描完成'); } catch (e) { slErr('初始恢复异常: ' + e.message); } }, 1500);
+        initialRestore();
     } else {
         slLog('事件源不可用, 降级为 10s 兜底轮询');
-        setTimeout(function () { try { restoreImageBlocks(); scanAllMsgs(); } catch (e) { slErr('初始恢复异常: ' + e.message); } }, 1500);
+        initialRestore();
     }
 
     // [AI-Fix] 10s 低频兜底轮询（事件丢失保护），替代原 2s+3s 双轮询

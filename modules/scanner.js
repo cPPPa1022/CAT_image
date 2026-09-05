@@ -367,14 +367,8 @@ export function findBestCachedEntry(chid, mesid, text) {
             }
         }
     }
-    for (var k3 in msgMap) {
-        if (!msgMap[k3] || !/\[image:/.test(msgMap[k3])) continue;
-        var cachedText3 = extractBodyContent(msgMap[k3]).slice(0, 40).replace(/\s/g, '');
-        var msgText3 = extractBodyContent(text).slice(0, 40).replace(/\s/g, '');
-        if (cachedText3 && msgText3 && cachedText3 === msgText3) {
-            return { key: k3, value: msgMap[k3] };
-        }
-    }
+    // [Fix] 已删除"全表跨消息兜底"（原子串匹配会把旧消息条目盗用给新消息——覆盖/串台的根源）。
+    // 宁可空缓存（按钮重生成）也不跨消息盗图。
     return null;
 }
 

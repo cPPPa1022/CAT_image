@@ -247,42 +247,21 @@ export function restoreImageBlocks() {
         if (!cached || !/\[image:/.test(cached)) {
             var fpPrefix = key + '_';
             var mHead = (extractBodyContent(mesRawText) || '').slice(0, 40).replace(/\s/g, '');
-            var kvMatch = null, kvMatchK = null, kvFallback = null, kvFallbackK = null;
+            var kvMatch = null, kvMatchK = null;
             for (var kk in msgMap) {
                 if (kk.indexOf(fpPrefix) !== 0 || !msgMap[kk] || !/\[image:/.test(msgMap[kk])) continue;
-                if (!kvFallback) { kvFallback = msgMap[kk]; kvFallbackK = kk; }
                 var kHead = (extractBodyContent(msgMap[kk]) || '').slice(0, 40).replace(/\s/g, '');
                 if (kHead && mHead && kHead === mHead) {
                     kvMatch = msgMap[kk]; kvMatchK = kk;
                     if (msgMap[kk].indexOf('结尾###') >= 0) break;  // 优先带完整标记的条目
                 }
             }
-            cached = kvMatch || kvFallback;
-            cachedKey = kvMatchK || kvFallbackK || key;
+            // [Fix] 不再"取任意前缀首条"（swipe 分支随机取错）；仅接受正文前40字全等的条目
+            cached = kvMatch;
+            cachedKey = kvMatchK || key;
         }
-        // 模糊匹配编辑后的 mesId 变化
-        if (!cached) {
-            var msgText = mesEl.text().slice(0, 120);
-            var msgMap = settings.msgMap || {};
-            for (var k in msgMap) {
-                if (k.indexOf(chatId + '_') === 0 && msgMap[k] && /\[image:/.test(msgMap[k])) {
-                    var cachedText = extractBodyContent(msgMap[k]).slice(0, 120);
-                    if (cachedText && msgText && (cachedText.indexOf(msgText.slice(0, 40)) >= 0 || msgText.indexOf(cachedText.slice(0, 40)) >= 0)) {
-                        // 多条匹配时选有 结尾### 的完整条目
-                        var best = msgMap[k], bestK = k;
-                        for (var k2 in msgMap) {
-                            if (k2 === k || k2.indexOf(chatId + '_') !== 0) continue;
-                            var ct2 = extractBodyContent(msgMap[k2]).slice(0,120);
-                            if (ct2 && (ct2.indexOf(msgText.slice(0,40))>=0 || msgText.indexOf(ct2.slice(0,40))>=0) && msgMap[k2].indexOf('结尾###')>=0) { best = msgMap[k2]; bestK = k2; break; }
-                        }
-                        cached = best;
-                        cachedKey = bestK;
-                        slLog('编辑恢复: 模糊匹配', k, '→', mesId);
-                        break;
-                    }
-                }
-            }
-        }
+        // [Fix] 已删除"跨聊天/子串模糊兜底"——它会把旧消息的缓存盗用给新消息（覆盖/串台根源）。
+        // 消息→缓存仅允许：精确 key / 前缀内正文前40字全等；失败即放弃（按钮自动重生，绝不盗图）。
         if (!cached || !/\[image:/.test(cached)) return;
         var bodyOnly = hasBodyMarker(cached) ? extractBodyContent(cached) : null;
         // v2.4 酒馆AI模式：只替换占位符，保留原文 HTML（状态栏等）

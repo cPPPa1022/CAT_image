@@ -7,7 +7,7 @@ import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
-import { rosterDataText, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
+import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
 import { getProfiles } from './profile.js';
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
@@ -34,11 +34,13 @@ function buildRosterUserContent(placeholders) {
     var avatar = '';
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
-    lines.push('【任务】请对正文中的每个 [img:] 占位符输出对应生图提示词；按【占位符】顺序一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。');
+    lines.push('【任务】请对正文中的每个 [img:] 占位符输出对应生图提示词；按【占位符】顺序一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
     lines.push('');
-    lines.push('【人物档案】（插件从角色卡扫描+占位符收集；写提示词必须引用对应人物的外貌锚点，禁止只写名字、禁止只写场景）');
-    var rosterTxt = rosterDataText();
-    lines.push(rosterTxt || '（无建档人物；从正文中对出场人物的外观描写提取外貌，并在 PROFILE 中建档）');
+    lines.push('【人物档案】（按本轮占位符注明的人物名字过滤，插件自动匹配——同名不同身份全部给出，由你按场景选用；写提示词必须引用外貌锚点，禁止只写名字）');
+    var _phNames = [];
+    for (var nI = 0; nI < placeholders.length; nI++) { for (var nJ = 0; nJ < placeholders[nI].personSegments.length; nJ++) { _phNames.push(placeholders[nI].personSegments[nJ].name); } }
+    var rosterTxt = rosterDataTextFor(_phNames);
+    lines.push(rosterTxt || '（占位符未注明人物名或人物未建档；画师直接按【占位符】场景/要点描述画面，并可用 PROFILE 为新人物建档）');
     lines.push('');
     lines.push('【占位符】（输出顺序必须与本列表一致）');
     if (placeholders.length) {
@@ -146,7 +148,10 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         for (var _di = 0; _di < _dynBits.length; _di++) {
             var _db = _dynBits[_di];
             var _dbNorm = normForMatch(_stripNames(_db));
-            if (_pNorm.indexOf(_dbNorm) < 0) prompt = prompt + '，' + _db;
+            if (_pNorm.indexOf(_dbNorm) < 0) {
+                prompt = prompt + '，' + _db;
+                slLog('动态要素兜底补入: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
+            }
             _pNorm = normForMatch(_stripNames(prompt));
         }
         // [Fix] 动态要素保真兜底2：场景/要点整体覆盖检查——润色后通常会保留部分连续词，

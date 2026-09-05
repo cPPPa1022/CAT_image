@@ -203,7 +203,34 @@ export function importFromCast(cast) {
     return n;
 }
 
-// ── 人物表正文（发给插件AI用；每行 名字（身份）：外貌） ──
+// ── 人物表正文（按名字过滤，不再全量发送） ──
+// 酒馆AI 只在占位符人物段注明"图里出现了谁"（名字即可）；插件按名字匹配：
+// 档案里有几个同名（不同身份标签）就发几个，由画师按场景自选。
+export function rosterDataTextFor(nameList) {
+    try {
+        var r = ensureRoster();
+        if (!r || !nameList || !nameList.length) return '';
+        var keys = Object.keys(r.list);
+        var lines = [];
+        var seen = {};
+        for (var i = 0; i < nameList.length; i++) {
+            var nm = String(nameList[i] || '').trim();
+            if (!nm) continue;
+            for (var j = 0; j < keys.length; j++) {
+                var k = keys[j];
+                if (seen[k]) continue;
+                if (k === nm || k.indexOf(nm + '（') === 0) {
+                    var e = r.list[k];
+                    lines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
+                    seen[k] = true;
+                }
+            }
+        }
+        return lines.join('\n');
+    } catch (e) { return ''; }
+}
+
+// ── 人物表正文旧接口（全量；保留兼容，管线改用上面的过滤版） ──
 export function rosterDataText() {
     try {
         var r = ensureRoster();

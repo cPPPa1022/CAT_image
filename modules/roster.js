@@ -216,14 +216,26 @@ export function rosterDataTextFor(nameList) {
         for (var i = 0; i < nameList.length; i++) {
             var nm = String(nameList[i] || '').trim();
             if (!nm) continue;
+            var nmCount = 0;
+            var nmLabels = [];
+            var nmLines = [];
             for (var j = 0; j < keys.length; j++) {
                 var k = keys[j];
                 if (seen[k]) continue;
                 if (k === nm || k.indexOf(nm + '（') === 0) {
                     var e = r.list[k];
-                    lines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
+                    nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
+                    nmCount++;
+                    if (e.identity) nmLabels.push(e.identity);
                     seen[k] = true;
                 }
+            }
+            // [Fix] 同名提醒：多重档案让画师明确"这是同一名字的不同身份，按本轮场景/要点选用"，防止误当重复
+            if (nmCount > 1) {
+                for (var q = 0; q < nmLines.length; q++) lines.push(nmLines[q]);
+                lines.push('（同名提醒：名字"' + nm + '"档案共 ' + nmCount + ' 份（' + nmLabels.join('/') + '）——请按本轮【占位符】场景/要点选用正确的一位，其余忽略）');
+            } else {
+                for (var q2 = 0; q2 < nmLines.length; q2++) lines.push(nmLines[q2]);
             }
         }
         return lines.join('\n');

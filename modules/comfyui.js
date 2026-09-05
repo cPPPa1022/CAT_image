@@ -147,6 +147,13 @@ export async function fetchComfyModels() {
 }
 
 export async function generateImage(workflow, prompt) {
+    // [Fix] 最后防线：剥掉图块/提示词包装残留（插件AI偶发输出 [image:…]【提示词】…格式，原样会进生图模型）
+    prompt = String(prompt || '')
+        .replace(/\[image:[^\]]*\]/g, '')
+        .replace(/【提示词[】:：]*/g, '').replace(/【\/提示词】/g, '')
+        .replace(/【\s*💬[^\n]*/g, '')
+        .replace(/\n\s*【[^】]*】/g, '\n')
+        .trim();
     // [Fix] 角色名过滤（LLM 违规写人名 / FACE 占位符残留的最后防线）
     prompt = stripCharacterNames(prompt);
     slLog('🎨ComfyUI-prompt('+prompt.length+'字):', prompt);

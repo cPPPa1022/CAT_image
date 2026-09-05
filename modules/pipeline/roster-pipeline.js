@@ -97,7 +97,18 @@ export function parseRosterImages(output) {
             continue;
         }
         line = line.replace(/^(?:\d+[.、)]|[-•·])\s*/, '').replace(/^【提示词[】:：]*\s*/, '');
-        if (line) out.push(line.trim());
+        // [Fix] 容错：插件AI偶发输出完整图块（[image:…]【提示词】…【/提示词】）而非纯提示词——
+        // 剥掉图块包装取内部提示词，否则嵌套图块 → 多渲染一张卡 + 原始图块文本进生成提示词
+        if (line.indexOf('[image:') >= 0 || line.indexOf('【／提示词】') >= 0 || line.indexOf('【/提示词】') >= 0) {
+            var innerM = line.match(/【提示词[】:：]*([\s\S]*?)【\/提示词】/);
+            if (innerM) {
+                line = innerM[1].trim();
+            } else {
+                line = line.replace(/^\s*\[image:[^\]]*\]\s*/, '').replace(/【提示词[】:：]*/g, '').replace(/【\/提示词】/g, '').trim();
+            }
+        }
+        // 连续去重：包装剥离后可能与后续行重复
+        if (line) { var _lt = line.trim(); if (out.length === 0 || out[out.length - 1] !== _lt) out.push(_lt); }
     }
     return out;
 }

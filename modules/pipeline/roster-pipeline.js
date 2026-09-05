@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractClothingSegments } from '../text-utils.js';
 import { rosterDataText, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
 import { getProfiles } from './profile.js';
 
@@ -51,6 +51,9 @@ function buildRosterUserContent(placeholders) {
                 lines.push('   人物：' + ps.join('、'));
             }
             if (ph.topic) lines.push('   要点：' + ph.topic.replace(/\n/g, '；'));
+            // [Fix] 着装保真：占位符里出现的衣着/鞋袜等片段单独列出，提示插件AI 必须逐项引用
+            var _dress = extractClothingSegments((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
+            if (_dress.length) lines.push('   着装要点：' + _dress.join('、'));
         }
     }
     // [Fix] 导演模式不发送【当前正文】：主模型已在占位符里写了画面要素（谁+动作+表情+可变衣着），
@@ -131,6 +134,14 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         }
         if (!prompt) prompt = ph.scene;  // 无提示词：场景直写（渲染兜底用场景生成）
         if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
+        // [Fix] 着装保真兜底：占位符里写到的衣着片段，若插件AI提示词里没有对应内容则补入
+        //（AI 可能改写"浅灰开衫"→"浅灰色开衫"，用前6字核心匹配；避免重复才补）
+        var _dressBits = extractClothingSegments((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
+        for (var _di = 0; _di < _dressBits.length; _di++) {
+            var _db = _dressBits[_di];
+            var _core = _db.length > 6 ? _db.slice(0, 6) : _db;
+            if (prompt.indexOf(_db) < 0 && prompt.indexOf(_core) < 0) prompt = prompt + '，' + _db;
+        }
         return buildImageBlock(ph.scene, prompt);
     });
     // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见

@@ -132,6 +132,20 @@ export function findImagePlaceholders(text) {
     return result;
 }
 
+// ── 着装/可变要素提取（导演模式着装保真：占位符里写到的衣着必须出现在提示词里） ──
+var CLOTH_CUE = /(穿|着|披|围|戴|系|套|衣|裤|裙|袜|丝|鞋|靴|帽|开衫|风衣|马甲|吊带|抹胸|内衣|内搭|束腰|领口|束带)/;
+export function extractClothingSegments(text) {
+    if (!text) return [];
+    var parts = String(text).split(/[，。；、\n,;]/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+        var seg = (parts[i] || '').trim();
+        if (!seg) continue;
+        if (CLOTH_CUE.test(seg) && seg.length >= 4 && seg.length <= 40 && out.indexOf(seg) === -1) out.push(seg);
+    }
+    return out;
+}
+
 // 组装成现有 [image:] 图卡格式（render.js 零改动）：
 // [image:场景]\n【提示词】提示词【/提示词】
 export function buildImageBlock(scene, prompt, styleHint) {

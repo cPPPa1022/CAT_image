@@ -468,6 +468,38 @@ function handleMessageChanged(messageId) {
 // [Fix] 初始恢复（事件驱动改革后刷新无事件可依赖）：1.5s 一次太早——
 // 酒馆消息 DOM/聊天上下文未就绪时 getChatId 走兜底 key → 缓存匹配失败 → 图片"凭空消失"；
 // 改为：等 DOM+上下文就绪（最多10s），恢复后再补两轮（4s/8s）兜底后续加载。
+// [Fix] DOM 观察器：酒馆聊天区任何渲染变化（硬刷新后的再渲染/聊天加载/流式完成/文本替换）
+// 都会触发自动恢复——不再赌"什么时候就绪"，无论 ST 何时/几次重渲都能接住。
+// 幂等：已渲染出 sl_img_block 的消息会被跳过，不会循环。
+var _restoreObserver = null, _restoreDebounce = null;
+function scheduleRestoreNow() {
+    if (_restoreDebounce) clearTimeout(_restoreDebounce);
+    _restoreDebounce = setTimeout(function () {
+        try { restoreImageBlocks(); scanAllMsgs(); } catch (e) { slErr('DOM变化恢复异常: ' + e.message); }
+    }, 600);
+}
+function startDomObserver() {
+    if (_restoreObserver || typeof MutationObserver === 'undefined') return;
+    try {
+        var target = document.getElementById('chat') || document.body;
+        _restoreObserver = new MutationObserver(function (mutations) {
+            for (var i = 0; i < mutations.length; i++) {
+                var t = mutations[i].target;
+                if (t && t.closest && (t.closest('#chat') || t.closest('.mes_text') || t.closest('.mes'))) {
+                    scheduleRestoreNow();
+                    return;
+                }
+            }
+        });
+        _restoreObserver.observe(target, { childList: true, subtree: true, characterData: false });
+        slLog('DOM观察器已启动：聊天渲染变化自动恢复图片');
+    } catch (e) { slLog('DOM观察器启动失败: ' + e.message); }
+}
+function stopDomObserver() {
+    if (_restoreObserver) { try { _restoreObserver.disconnect(); } catch (e) {} _restoreObserver = null; }
+    if (_restoreDebounce) { clearTimeout(_restoreDebounce); _restoreDebounce = null; }
+}
+
 function initialRestore(attempt) {
     attempt = attempt || 0;
     try {
@@ -526,11 +558,13 @@ export function startPolling() {
         if (evTypes.CHAT_CHANGED) evSrc.on(evTypes.CHAT_CHANGED, onChatChanged);
         startPolling._handlers = { onReceived: onReceived, onGenEnded: onGenEnded, onMsgUpdated: onMsgUpdated, onMsgChanged: onMsgChanged, onChatChanged: onChatChanged };
         slLog('ST 事件钩子就绪喵~ ✨');
+        startDomObserver();
         // [BugFix v3.1] 退出重进/刷新后历史图片不恢复：事件驱动改革删除了旧轮询恢复，
         // 但刷新后无任何事件 → restoreImageBlocks/scanAllMsgs 永不被调。首次延迟统一恢复。
         initialRestore();
     } else {
         slLog('事件源不可用, 降级为 10s 兜底轮询');
+        startDomObserver();
         initialRestore();
     }
 
@@ -546,6 +580,7 @@ export function startPolling() {
 export function stopPolling() {
     slLog('stopPolling: 停止扫描');
     startPolling._active = false;
+    stopDomObserver();
     if (startPolling._fallback) { clearInterval(startPolling._fallback); startPolling._fallback = null; }
     if (startPolling._hookTimer) { clearTimeout(startPolling._hookTimer); startPolling._hookTimer = null; }
     try {

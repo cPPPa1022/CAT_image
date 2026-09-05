@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractClothingSegments } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits, extractClothingSegments } from '../text-utils.js';
 import { rosterDataText, rosterEntries, upsertPerson, applyPersonSegments, importFromCast } from '../roster.js';
 import { getProfiles } from './profile.js';
 
@@ -51,9 +51,10 @@ function buildRosterUserContent(placeholders) {
                 lines.push('   人物：' + ps.join('、'));
             }
             if (ph.topic) lines.push('   要点：' + ph.topic.replace(/\n/g, '；'));
-            // [Fix] 着装保真：占位符里出现的衣着/鞋袜等片段单独列出，提示插件AI 必须逐项引用
-            var _dress = extractClothingSegments((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
-            if (_dress.length) lines.push('   着装要点：' + _dress.join('、'));
+            // [Fix] 动态要素保真：酒馆AI写的本轮可变内容（衣着/发型/表情/光线/氛围/动作）逐项列出，
+            // 插件AI 必须逐项润色进提示词（这是评分重点）
+            var _dyn = extractDynamicBits((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
+            if (_dyn.length) lines.push('   动态要素（必须逐项润色进提示词，禁止省略）：' + _dyn.join('、'));
         }
     }
     // [Fix] 导演模式不发送【当前正文】：主模型已在占位符里写了画面要素（谁+动作+表情+可变衣着），
@@ -134,13 +135,23 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         }
         if (!prompt) prompt = ph.scene;  // 无提示词：场景直写（渲染兜底用场景生成）
         if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
-        // [Fix] 着装保真兜底：占位符里写到的衣着片段，若插件AI提示词里没有对应内容则补入
-        //（AI 可能改写"浅灰开衫"→"浅灰色开衫"，用前6字核心匹配；避免重复才补）
-        var _dressBits = extractClothingSegments((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
-        for (var _di = 0; _di < _dressBits.length; _di++) {
-            var _db = _dressBits[_di];
+        // [Fix] 动态要素保真兜底1：占位符里的可变片段（衣着/发型/表情/光线/动作…），
+        // 若提示词没有对应内容则补入（用前6字核心匹配，AI 润色加词也认）
+        var _dynBits = extractDynamicBits((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
+        for (var _di = 0; _di < _dynBits.length; _di++) {
+            var _db = _dynBits[_di];
             var _core = _db.length > 6 ? _db.slice(0, 6) : _db;
             if (prompt.indexOf(_db) < 0 && prompt.indexOf(_core) < 0) prompt = prompt + '，' + _db;
+        }
+        // [Fix] 动态要素保真兜底2：场景/要点整体覆盖检查——润色后通常会保留部分连续词，
+        // 若提示词连场景/要点的任意 4 字连续片段都没有 → 说明画面要素整体被丢，补场景+要点原文（保真优先）
+        if (prompt.length < (ph.scene || '').length) {
+            var _scene4 = (ph.scene || '').replace(/[\s，。、；,;]/g, '');
+            var _topic4 = (ph.topic || '').replace(/[\s，。、；,;]/g, '');
+            var _cov = false;
+            for (var _ci = 0; _ci + 4 <= _scene4.length && !_cov; _ci++) { if (prompt.indexOf(_scene4.slice(_ci, _ci + 4)) >= 0) _cov = true; }
+            for (var _ci2 = 0; _ci2 + 4 <= _topic4.length && !_cov; _ci2++) { if (prompt.indexOf(_topic4.slice(_ci2, _ci2 + 4)) >= 0) _cov = true; }
+            if (!_cov) prompt = prompt + '，' + (ph.scene || '') + (ph.topic ? '，' + ph.topic : '');
         }
         return buildImageBlock(ph.scene, prompt);
     });

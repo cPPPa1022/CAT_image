@@ -132,16 +132,17 @@ export function findImagePlaceholders(text) {
     return result;
 }
 
-// ── 着装/可变要素提取（导演模式着装保真：占位符里写到的衣着必须出现在提示词里） ──
-var CLOTH_CUE = /(穿|着|披|围|戴|系|套|衣|裤|裙|袜|丝|鞋|靴|帽|开衫|风衣|马甲|吊带|抹胸|内衣|内搭|束腰|领口|束带)/;
-export function extractClothingSegments(text) {
+// ── 动态要素提取（导演模式保真：占位符里酒馆AI写的一切动态内容——衣着/发型/表情/光线/氛围/动作——
+// 都是"本轮可变、由酒馆AI写"的部分，必须逐项润色进提示词，不得省略）
+var DYNAMIC_CUE = /(穿|着|披|围|戴|系|套|衣|裤|裙|袜|丝|鞋|靴|帽|开衫|风衣|马甲|吊带|抹胸|内衣|内搭|束腰|领口|束带|头发|发丝|发色|刘海|马尾|表情|神态|眼神|目光|微笑|皱眉|浅笑|光线|灯光|烛光|阳光|阴影|氛围|动作|姿势|站|坐|靠|蹲|跪|转身|弯腰|低头|抬头|抬手|伸手|撑|倚|抱|吻)/;
+export function extractDynamicBits(text) {
     if (!text) return [];
     var parts = String(text).split(/[，。；、\n,;]/);
     var out = [];
     for (var i = 0; i < parts.length; i++) {
         var seg = (parts[i] || '').trim();
         if (!seg) continue;
-        if (CLOTH_CUE.test(seg) && seg.length >= 4 && seg.length <= 40 && out.indexOf(seg) === -1) out.push(seg);
+        if (DYNAMIC_CUE.test(seg) && seg.length >= 4 && seg.length <= 40 && out.indexOf(seg) === -1) out.push(seg);
     }
     return out;
 }

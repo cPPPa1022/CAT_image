@@ -138,12 +138,16 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
         // [Fix] 动态要素保真兜底1：占位符里的可变片段（衣着/发型/表情/光线/动作…），
         // 若提示词没有对应内容则补入（用前6字核心匹配，AI 润色加词也认）
         var _dynBits = extractDynamicBits((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
-        var _pNorm = normForMatch(prompt);
+        // 比较前剥离已知人名：插件AI 会把"温若兰端着瓜盘"润色成"双手端着瓜盘"（去名），
+        // 不带人名剥离会误判"缺失"而重复补入
+        var _namesHere = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (p) { return p.length >= 2; });
+        function _stripNames(t) { for (var i = 0; i < _namesHere.length; i++) t = t.split(_namesHere[i]).join(''); return t; }
+        var _pNorm = normForMatch(_stripNames(prompt));
         for (var _di = 0; _di < _dynBits.length; _di++) {
             var _db = _dynBits[_di];
-            var _dbNorm = normForMatch(_db);
+            var _dbNorm = normForMatch(_stripNames(_db));
             if (_pNorm.indexOf(_dbNorm) < 0) prompt = prompt + '，' + _db;
-            _pNorm = normForMatch(prompt);
+            _pNorm = normForMatch(_stripNames(prompt));
         }
         // [Fix] 动态要素保真兜底2：场景/要点整体覆盖检查——润色后通常会保留部分连续词，
         // 若提示词连场景/要点的任意 4 字连续片段都没有 → 说明画面要素整体被丢，补场景+要点原文（保真优先）

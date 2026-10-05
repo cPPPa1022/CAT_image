@@ -16,6 +16,7 @@
 import { slLog, slErr } from './log.js';
 import { settings } from './settings.js';
 import { runAuxPipeline } from './pipeline/pipeline.js';
+import { runRosterPipeline } from './pipeline/roster-pipeline.js';
 import { extractImgBlocksFromEnhanced, buildImgCard } from './render.js';
 import { enqueueGen } from './queue.js';
 import { stripAiTags } from './text-utils.js';
@@ -140,6 +141,34 @@ function wrapGenerate(win, label) {
         return true;
     } catch (e) {
         slLog('前端桥: 挂钩 ' + label + ' 失败 ' + (e.message || ''));
+        return false;
+    }
+}
+
+// TavernHelper 赋值拦截器：
+// 酒馆助手（JS-Slash-Runner, loading_order 100）比插件（10）后加载，插件 init 时 window.TavernHelper 还不存在；
+// 而定时补挂会被浏览器"后台标签页节流"（最长 1 分钟才跑一次）→ 钩子迟迟挂不上、整轮剧情漏抓。
+// 这里用 defineProperty 拦住对 window.TavernHelper 的赋值：酒馆助手一赋值，我们立刻挂钩。
+function trapTavernHelper() {
+    try {
+        if (window.__sl_th_trapped) return true;
+        var desc = Object.getOwnPropertyDescriptor(window, 'TavernHelper');
+        if (desc && desc.configurable === false) { slLog('前端桥: TavernHelper 不可拦截（非可配置属性），改用定时补挂'); return false; }
+        var cur = window.TavernHelper;
+        Object.defineProperty(window, 'TavernHelper', {
+            configurable: true,
+            get: function () { return cur; },
+            set: function (v) {
+                cur = v;
+                try { if (v && typeof v.generate === 'function') wrapGenerate(window, 'top(赋值拦截)'); } catch (e) {}
+            }
+        });
+        window.__sl_th_trapped = true;
+        if (cur && typeof cur.generate === 'function') wrapGenerate(window, 'top(拦截器)');
+        slLog('前端桥: 已安装 TavernHelper 赋值拦截器（酒馆助手一加载就自动挂钩）');
+        return true;
+    } catch (e) {
+        slLog('前端桥: TavernHelper 拦截器安装失败 ' + (e.message || ''));
         return false;
     }
 }
@@ -501,6 +530,11 @@ function autoGenNode(node) {
 
 export function initFrontendBridge() {
     if (settings.feBridge === false) { slLog('前端桥: 设置里已关闭，未启用'); return; }
+    // 自检：管线函数必须真的导入成功，否则导演/画师分支会在运行时才炸（曾踩过：runRosterPipeline is not defined）
+    if (typeof runRosterPipeline !== 'function') slErr('前端桥自检失败: roster 管线未导入 → 导演模式不可用');
+    if (typeof runAuxPipeline !== 'function') slErr('前端桥自检失败: 画师管线未导入 → 配图不可用');
+    if (typeof extractImgBlocksFromEnhanced !== 'function' || typeof buildImgCard !== 'function') slErr('前端桥自检失败: render 辅助函数未导入');
+    trapTavernHelper();
     installFrontendHook();
     var hasTH = !!(window.TavernHelper && window.TavernHelper.generate);
     slLog('前端桥: ' + (hasTH ? '已挂钩 TavernHelper.generate（前端卡出图已接管）' : '未发现 TavernHelper（酒馆助手未装/未启用 → 前端卡本身跑不起来，桥不生效）'));
@@ -517,7 +551,7 @@ export function initFrontendBridge() {
             }
         } catch (e) {}
     }, 4000);
-    try { window.SILLAB_FE = { probe: probeFrontendApp, test: injectTestCard, testDirector: injectTestDirector, status: getFeBridgeStatus }; } catch (e) {}
+    try { window.SILLAB_FE = { probe: probeFrontendApp, test: injectTestCard, testDirector: injectTestDirector, status: getFeBridgeStatus, install: installFrontendHook }; } catch (e) {}
 }
 
 export function stopFrontendBridge() {

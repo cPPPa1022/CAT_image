@@ -48,7 +48,7 @@ export function createExpandedPanel() {
   // 品牌行（几何猫头 呼吸动画 + 状态点）
   h += '<div id="sl_panel_header" style="display:flex;align-items:center;gap:10px;padding:14px 18px;padding:calc(14px + env(safe-area-inset-top)) 18px;flex-shrink:0;">';
   h += '<span id="sl_panel_cat" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:' + CAT.accent + ';">' + catSVG('healthy', 30) + '</span>';
-  h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;letter-spacing:0.3px;color:' + CAT.text + ';">偷懒小猫</div><div style="font-size:10px;color:' + CAT.sub + ';margin-top:1px;">小猫的生图插件</div></div>';
+  h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:15px;letter-spacing:0.3px;color:' + CAT.text + ';">偷懒小猫</div><div style="font-size:10px;color:' + CAT.sub + ';margin-top:1px;">小猫的生图插件 ' + ((typeof window !== 'undefined' && window.SILLYLAB_VERSION) ? window.SILLYLAB_VERSION : '') + '</div></div>';
   h += '<span id="sl_head_status" style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:' + CAT.sub + ';padding:4px 9px;border-radius:999px;background:' + CAT.bg + ';"><span style="width:7px;height:7px;border-radius:50%;background:' + CAT.green + ';box-shadow:0 0 0 3px ' + CAT.green + '22;"></span><span id="sl_head_status_txt">空闲</span></span>';
   h += '<button id="sl_close_panel" style="border:none;background:none;cursor:pointer;font-size:15px;color:' + CAT.sub + ';padding:6px 8px;border-radius:10px;">✕</button>';
   h += '</div>';

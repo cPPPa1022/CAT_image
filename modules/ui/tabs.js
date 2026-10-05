@@ -72,7 +72,9 @@ export function renderHomeTab() {
   h += cell('⚙️', '高级与重置', 'NSFW · Debug · 重置插件', '', 'data-nav="advanced"');
   h += '</div>';
   // 底部品牌
-  h += '<div style="text-align:center;padding:14px 0 6px;color:' + CAT.mute + ';font-size:10px;letter-spacing:1px;">小猫的生图插件 v1.1.1</div>';
+  // [Fix v1.1.3] 版本号原先是写死的字符串（一直是 v1.1.1，升版本也不变，排查时误导人）→ 跟随实际版本变量
+  var _ver = (typeof window !== 'undefined' && window.SILLYLAB_VERSION) ? window.SILLYLAB_VERSION : '';
+  h += '<div style="text-align:center;padding:14px 0 6px;color:' + CAT.mute + ';font-size:10px;letter-spacing:1px;">小猫的生图插件 ' + esc(_ver) + '</div>';
   body.html(h);
   // 交互绑定
   body.off('click', '#sl_btn_scan_cast').on('click', '#sl_btn_scan_cast', async function () { var b = jQuery(this); b.prop('disabled', true).text('扫描中…'); try { var sr = await scanCharacterProfile(); if (sr) { toast('success', '扫描完成'); } else { toast('error', '扫描没成功'); } renderHomeTab(); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } b.prop('disabled', false).text('扫描角色卡'); });

@@ -111,15 +111,26 @@ function wrapGenerate(win, label) {
         if (g.__sillab_fe) return false;                      // 已包过
         if (g.__sillab_orig && g.__sillab_orig.__sillab_fe) return false;
         var wrapped = function (params) {
-            var self = this, args = arguments;
-            var ret = g.apply(self, args);
+            var self = this;
+            var callParams = params;
+            // 导演模式：先把 [img:] 占位符协议塞进本轮请求（只对画面类调用做）
+            try {
+                if (shouldInjectDirector(params)) {
+                    callParams = withDirectorInstruction(params);
+                    slLog('前端桥(导演): 已注入 [img:] 占位符指令 → ' + label);
+                }
+            } catch (eInj) { callParams = params; }
+            // 保留原调用的其余实参（TavernHelper.generate(params, ...) 可能带额外参数）
+            var rest = [];
+            for (var ai = 1; ai < arguments.length; ai++) rest.push(arguments[ai]);
+            var ret = g.apply(self, [callParams].concat(rest));
             if (ret && typeof ret.then === 'function') {
                 return ret.then(function (res) {
-                    try { onExternalRaw(params, res, label); } catch (e) { slErr('前端桥处理异常: ' + (e.message || e)); }
+                    try { onExternalRaw(callParams, res, label); } catch (e) { slErr('前端桥处理异常: ' + (e.message || e)); }
                     return res;
                 });
             }
-            try { onExternalRaw(params, ret, label); } catch (e) { slErr('前端桥处理异常: ' + (e.message || e)); }
+            try { onExternalRaw(callParams, ret, label); } catch (e) { slErr('前端桥处理异常: ' + (e.message || e)); }
             return ret;
         };
         wrapped.__sillab_fe = true;
@@ -186,6 +197,45 @@ function isSceneCall(params) {
         if (ui && ui.length < 1200 && SKIP_PROMPT_RE.test(ui)) { slLog('前端桥: 跳过非画面调用（结构化提取提示词）'); return false; }
     } catch (e) {}
     return true;
+}
+
+// ══════════ 导演模式（前端卡版） ══════════
+// 前端卡的主模型不会自己写 [img:] 占位符（卡内的 schema/提示词里没有这套协议），
+// 所以导演模式必须由插件把占位符协议"追加"到卡内这一轮的请求里：
+//   注入指令 → 主模型在 narrative 里写 [img:…] → roster 管线补提示词 → 原位替换成图卡。
+var DIRECTOR_INSTRUCTION = [
+    '',
+    '## 【配图占位符 · 只约束 narrative 字段的内容，不影响上面关于工具调用/输出格式的任何要求】',
+    '在 narrative 正文里，挑最值得配图的 1~2 个位置，直接写入占位符（它属于 narrative 字符串的一部分）：',
+    '[img:画面描述|人物:名字（身份标签），外貌要点；人物:名字|要点]',
+    '- 必须半角 [img: 开头、以 ] 收尾；用 | 分三段：场景 | 人物段 | 要点（要点可省略）',
+    '- 人物段必须以 "人物:" 开头；已建档人物只写名字，新人物写 "名字（标签），外貌要点"',
+    '- 衣着/发型/表情/动作/光线等本轮可变细节写进场景或要点里（写详细，这是画面重点）',
+    '- 占位符前后不要解释、不要换行包裹；正文其余部分照常写，不要在正文里提到"占位符/图片"这类元话'
+].join('\n');
+
+// 桥用哪种管线：
+//   auto（默认）—— 看本轮剧情里有没有 [img:]：有 → 导演（占位符原位出图）；没有 → 画师
+//   artist      —— 强制画师管线（不看占位符）
+//   director    —— 强制导演管线，并把占位符指令注入卡内请求（给"预设里没缝小猫指令"的人兜底）
+function bridgeMode() {
+    var m = settings.feBridgeMode || 'auto';
+    if (m === 'director' || m === 'artist') return m;
+    return 'auto';
+}
+// 只有"强制导演"才注入指令；预设里缝过小猫指令的人（auto）不需要注入，避免重复
+function shouldInjectDirector(params) {
+    try { return bridgeMode() === 'director' && isSceneCall(params); } catch (e) { return false; }
+}
+
+// 把占位符指令追加进本轮请求（用浅拷贝，不改卡自己的 params 对象）
+function withDirectorInstruction(params) {
+    try {
+        var p = {};
+        for (var k in params) p[k] = params[k];
+        p.user_input = String(p.user_input || '') + '\n' + DIRECTOR_INSTRUCTION;
+        return p;
+    } catch (e) { return params; }
 }
 
 // LLM 返回 → 抽叙事正文
@@ -268,17 +318,94 @@ async function runTurn(text) {
     _state.turns++;
     var turn = _state.turns;
     var key = 'fe_' + getChatId() + '_' + turn;
-    slLog('前端桥: 第' + turn + '轮 → 画师管线（key=' + key + '）');
+    var mode = bridgeMode();
+    var hasPh = /\[img:/.test(text);
+    // auto：剧情里已经有 [img:]（预设里缝了小猫指令）→ 导演管线；否则画师管线
+    var director = (mode === 'director') || (mode === 'auto' && hasPh);
     var res = null;
-    try { res = await runAuxPipeline(text, key); } catch (e) { slErr('前端桥管线异常: ' + (e.message || e)); return; }
+    if (director) {
+        slLog('前端桥: 第' + turn + '轮 → 导演管线（剧情含 [img:] 占位符' + (mode === 'director' ? '·已注入指令' : '·自动识别') + '，key=' + key + '）');
+        try { res = await runRosterPipeline(text, key); } catch (e) { slErr('前端桥导演管线异常: ' + (e.message || e)); res = null; }
+        if (!res) {
+            // 导演管线报错（辅助 API 未配/超时）→ 兜底画师管线；正文里的占位符照样会被原位换图
+            slLog('前端桥(导演): 管线失败（辅助 API/解析问题）→ 兜底改用画师管线');
+            try { res = await runAuxPipeline(text, key); } catch (e2) { slErr('前端桥兜底管线异常: ' + (e2.message || e2)); return; }
+        } else if (res.noPlaceholder) {
+            if (mode === 'director') {
+                slLog('前端桥(导演): 模型没写 [img:] 占位符（指令已注入仍无效）→ 兜底改用画师管线');
+                try { res = await runAuxPipeline(text, key); } catch (e3) { slErr('前端桥兜底管线异常: ' + (e3.message || e3)); return; }
+            } else { slLog('前端桥: 本轮剧情没有可用的 [img:] 占位符，跳过'); return; }
+        }
+    } else {
+        slLog('前端桥: 第' + turn + '轮 → 画师管线（key=' + key + '）');
+        try { res = await runAuxPipeline(text, key); } catch (e) { slErr('前端桥管线异常: ' + (e.message || e)); return; }
+    }
     if (!res) { slLog('前端桥: 管线返回空（辅助 API 未配置/报错，或本轮判无图）—— 详见上一行管线日志'); return; }
     if (!res.enhanced) { slLog('前端桥: 管线本轮无图块（无图轮），跳过'); return; }
     var blocks = extractImgBlocksFromEnhanced(res.enhanced, key);
     if (!blocks.length) { slLog('前端桥: 解析不到图块，跳过'); return; }
-    var record = { turn: turn, key: key, blocks: blocks, node: null };
+    var record = { turn: turn, key: key, blocks: blocks, node: null, inline: director, placed: 0 };
     _state.records.push(record);
     if (_state.records.length > 30) _state.records.shift();
+    _state.lastPath = director ? '导演（原位）' : '画师（末尾）';
     injectRecord(record);
+}
+
+// 导演模式：把应用正文里的 [img:…] 占位符"原位"换成图卡（顺手把占位符原文吃掉）
+function replacePlaceholdersInApp(target, blocks) {
+    var doc = target.doc, root = target.area;
+    if (!doc || !root || !doc.createTreeWalker || !blocks || !blocks.length) return 0;
+    var NF = (target.win && target.win.NodeFilter) ? target.win.NodeFilter : (typeof NodeFilter !== 'undefined' ? NodeFilter : null);
+    var nodes = collectMarkerTextNodes(doc, root, NF);
+    var bi = 0, replaced = 0;
+    for (var i = 0; i < nodes.length && bi < blocks.length; i++) {
+        var node = nodes[i];
+        var val = node.nodeValue || '';
+        if (val.indexOf('[img:') < 0) continue;
+        var frag = doc.createDocumentFragment();
+        var rest = val;
+        while (bi < blocks.length) {
+            var idx = rest.indexOf('[img:');
+            if (idx < 0) break;
+            var close = rest.indexOf(']', idx);
+            if (close < 0) break;
+            if (idx > 0) frag.appendChild(doc.createTextNode(rest.slice(0, idx)));
+            var tmp = doc.createElement('div');
+            tmp.innerHTML = blocks[bi].html;
+            while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+            bi++; replaced++;
+            rest = rest.slice(close + 1);
+        }
+        if (rest) frag.appendChild(doc.createTextNode(rest));
+        try { node.parentNode.replaceChild(frag, node); } catch (e) {}
+    }
+    // 模型写多了占位符（提示词条数不够）→ 剩余标记直接抹掉，不留原文
+    stripLeftoverMarkers(target, NF);
+    return replaced;
+}
+
+function collectMarkerTextNodes(doc, root, NF) {
+    var out = [];
+    try {
+        var walker = doc.createTreeWalker(root, NF ? NF.SHOW_TEXT : 4, null);
+        while (walker.nextNode()) {
+            var v = walker.currentNode.nodeValue || '';
+            if (v.indexOf('[img:') >= 0) out.push(walker.currentNode);
+        }
+    } catch (e) {}
+    return out;
+}
+
+function stripLeftoverMarkers(target, NF) {
+    var nodes = collectMarkerTextNodes(target.doc, target.area, NF);
+    var n = 0;
+    for (var i = 0; i < nodes.length; i++) {
+        var v = nodes[i].nodeValue || '';
+        var cleaned = v.replace(/\[img:[^\]]*\]?/g, '');
+        if (cleaned !== v) { nodes[i].nodeValue = cleaned; n++; }
+    }
+    if (n) slLog('前端桥: 抹掉 ' + n + ' 处未配对/残留的 [img:] 标记');
+    return n;
 }
 
 function makeTurnNode(doc, record) {
@@ -297,6 +424,17 @@ function injectRecord(record) {
     var where = '前端应用叙事区';
     if (!target) { target = topOverlayTarget(); where = '酒馆页浮层'; }
     bindFrameClicks(target.doc);
+    // 导演模式：先在正文里"原位"替换 [img:] 占位符（图卡就落在剧情那个位置）
+    if (record.inline && target.area) {
+        var placed = replacePlaceholdersInApp(target, record.blocks);
+        record.placed = placed;
+        if (placed) {
+            slLog('前端桥(导演): 正文原位替换 ' + placed + '/' + record.blocks.length + ' 个占位符');
+            autoGenNode(target.area);
+            if (placed >= record.blocks.length) return;          // 全部就位，不再追加
+            record.blocks = record.blocks.slice(placed);          // 剩下的追加到末尾
+        }
+    }
     var node = makeTurnNode(target.doc, record);
     var parent;
     if (target.area && settings.feBridgeInline !== false) {
@@ -379,7 +517,7 @@ export function initFrontendBridge() {
             }
         } catch (e) {}
     }, 4000);
-    try { window.SILLAB_FE = { probe: probeFrontendApp, test: injectTestCard, status: getFeBridgeStatus }; } catch (e) {}
+    try { window.SILLAB_FE = { probe: probeFrontendApp, test: injectTestCard, testDirector: injectTestDirector, status: getFeBridgeStatus }; } catch (e) {}
 }
 
 export function stopFrontendBridge() {
@@ -395,7 +533,9 @@ export function getFeBridgeStatus() {
     if (!window.TavernHelper) return '未检测到酒馆助手（JS-Slash-Runner）';
     var hooked = !!(window.TavernHelper.generate && window.TavernHelper.generate.__sillab_fe);
     var t = findAppTarget();
-    return (hooked ? '钩子已挂' : '钩子未挂（刷新页面重试）') + ' · ' + (t ? '已找到前端应用' : '等待前端应用') + ' · 已注入 ' + _state.records.length + ' 组图卡';
+    return (hooked ? '钩子已挂' : '钩子未挂（刷新页面重试）') + ' · ' + (t ? '已找到前端应用' : '等待前端应用') +
+        ' · 已注入 ' + _state.records.length + ' 组图卡' + (_state.lastPath ? ' · 上轮走的是' + _state.lastPath : '') +
+        ' · 模式=' + bridgeMode();
 }
 
 export function probeFrontendApp() {
@@ -411,11 +551,38 @@ export function probeFrontendApp() {
         areaChildren: (t && t.area) ? t.area.children.length : -1,
         turns: _state.turns,
         records: _state.records.length,
+        bridgeMode: bridgeMode(),
+        lastPath: _state.lastPath || '',
+        lastPlaced: _state.records.length ? (_state.records[_state.records.length - 1].placed || 0) : 0,
         imgMode: settings.imgMode,
         autoGen: settings.autoGen,
     };
     slLog('前端桥探针: ' + JSON.stringify(r));
     return r;
+}
+
+// 手动测试（导演式）：写一段带 [img:] 的假剧情进应用，再原位替换成图卡，验证"占位符→图卡"通道
+export function injectTestDirector() {
+    var t = findAppTarget();
+    if (!t) { slLog('前端桥测试(导演): 当前聊天里没找到前端应用'); return false; }
+    var doc = t.doc;
+    _state.turns++;
+    var key = 'fe_testd_' + Date.now();
+    var host = doc.createElement('div');
+    host.className = 'msg sl_fe_testd';
+    host.innerHTML = '<div class="msg-narrator" style="background:#f5f0eb;color:#2d3e4f;padding:10px 12px;border-radius:10px;line-height:1.8;">夜深了，检查官把名册合上。[img:检查官合上名册|人物:检查官（中士），短发，深蓝制服|暖黄烛光] 窗外的队伍已经散尽，只剩风穿过石缝。[img:石砌检查室全景|无人物|油灯与铜镜，冷色月光]</div>';
+    t.area.appendChild(host);
+    var blocks = [
+        { scene: '检查官合上名册', prompt: '（占位图·导演原位测试）', id: key + '#0', html: buildImgCard('检查官合上名册', '（占位图·导演原位测试）', TEST_IMG, key + '#0') },
+        { scene: '石砌检查室全景', prompt: '（占位图·导演原位测试）', id: key + '#1', html: buildImgCard('石砌检查室全景', '（占位图·导演原位测试）', TEST_IMG, key + '#1') }
+    ];
+    var record = { turn: _state.turns, key: key, blocks: blocks, node: host, inline: true, placed: 0 };
+    _state.records.push(record);
+    var n = replacePlaceholdersInApp(t, blocks);
+    record.placed = n;
+    _state.lastPath = '导演（原位·测试）';
+    slLog('前端桥测试(导演): 原位替换 ' + n + '/2（测试节点保留在应用里，刷新页面即消失）');
+    return n > 0;
 }
 
 // 手动测试：不调 API、不出图，只往叙事区插一张占位图卡，验证注入通道

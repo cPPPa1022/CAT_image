@@ -60,6 +60,11 @@ export function getDefaults() {
         feBridge: true,
         // 图卡注入位置：true=优先注入前端应用自己的叙事区（推荐）；false=只放应用内浮层
         feBridgeInline: true,
+        // 前端卡走哪条管线：
+        //   auto（默认）—— 本轮剧情里有 [img:] → 导演管线（占位符原位出图）；没有 → 画师管线
+        //   artist      —— 强制画师管线
+        //   director    —— 强制导演管线，并把 [img:] 占位符指令注入卡内请求（预设里没缝小猫指令时用）
+        feBridgeMode: 'auto',
     };
 }
 

@@ -15,7 +15,7 @@ var pushPage = panel.pushPage;
 import * as compact from './compact-bar.js';
 import * as story from '../story.js';
 import { refreshCoopCards } from '../sync-cards.js';
-import { initFrontendBridge, stopFrontendBridge, getFeBridgeStatus, probeFrontendApp, injectTestCard } from '../frontend-bridge.js';
+import { initFrontendBridge, stopFrontendBridge, getFeBridgeStatus, probeFrontendApp, injectTestCard, injectTestDirector } from '../frontend-bridge.js';
 import { getPrompt, isPromptsLoaded } from '../../prompts/loader.js';
 
 // ═══════════ 主视图（Feed） ═══════════
@@ -113,11 +113,17 @@ export function renderSettingsPage() {
     h += '<div style="' + card() + '">' + cardHead('🐾', '配图方式', '选一种配图流程') + '<select id="sl_img_mode" style="' + f + '"><option value="plugin"' + (settings.imgMode === 'plugin' ? ' selected' : '') + '>🎨 画师模式（默认）— 用专属 AI（额外 API）：扫描角色卡留存外貌档案 → 每轮精读原文 → 写提示词。人物最还原、最懂剧情，代价是每轮多一次 AI 调用</option><option value="main"' + (settings.imgMode === 'main' ? ' selected' : '') + '>🎬 导演模式 — 主模型在正文写 [img:] 标记图片位置+画面要点，画师只补提示词。最省 token（不用额外分析角色卡），需在角色卡粘贴指令</option></select><div style="font-size:10.5px;color:' + CAT.mute + ';margin:8px 0 10px;">🎬 导演模式需要：把「小猫指令」贴进角色卡/预设/世界书（👇 一键复制）；画师模式无需任何配置</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
     h += '<div style="' + card() + '">' + cardHead('🖥️', '前端卡配图（酒馆助手 iframe 应用）', 'Narrator / 检查站这类"重前端卡"专用') +
       switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走画师管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
+      '<div style="margin-top:10px;"><span style="' + lbl() + '">走哪条管线</span><select id="sl_fe_mode" style="' + f + '">' +
+      '<option value="auto"' + ((settings.feBridgeMode || 'auto') === 'auto' ? ' selected' : '') + '>自动识别（推荐）— 剧情里有 [img:] 就走导演（占位符原位出图），没有就走画师</option>' +
+      '<option value="artist"' + (settings.feBridgeMode === 'artist' ? ' selected' : '') + '>强制画师 — 插件 AI 读剧情自己写提示词，图卡落在叙事末尾</option>' +
+      '<option value="director"' + (settings.feBridgeMode === 'director' ? ' selected' : '') + '>强制导演 + 注入指令 — 预设里没缝「小猫指令」时用，插件会把 [img:] 协议补进卡内请求</option>' +
+      '</select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">你的预设里已经缝了小猫指令 → 保持「自动识别」即可：主模型写出 [img:…] 时，插件把它原位换成图卡（占位符原文会被吃掉，不会留在正文里）。</div></div>' +
       '<div style="margin-top:10px;">' + switchHTML('sl_fe_inline', settings.feBridgeInline !== false, '图卡插入应用叙事区', '关闭则改为应用右下角浮层（当你觉得图卡插在正文里挡视线时用小浮层）') + '</div>' +
       '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:10px 0 8px;line-height:1.6;">状态：' + esc(getFeBridgeStatus()) + '</div>' +
-      '<button id="sl_fe_test" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试注入（不出图，插一张占位图卡）</button>' +
+      '<button id="sl_fe_testd" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试导演原位替换（不出图，插一段带 [img:] 的假剧情）</button>' +
+      '<button id="sl_fe_test" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试末尾插卡（不出图，插一张占位图卡）</button>' +
       '<button id="sl_fe_probe" style="width:100%;' + btnGhost() + '">🩺 诊断（写进日志）</button>' +
-      '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；配图用的是当前画风模式与画师管线（每轮多一次辅助 AI 调用）。</div></div>';
+      '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；每条剧情都会多一次辅助 AI 调用（画师/导演管线各自的开销）。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('📝', '前置提示词', '拼到每张提示词最前') + '<input id="sl_prompt_prefix" type="text" value="' + escAttr(settings.promptPrefix || '') + '" style="' + f + '" placeholder="留空则不生效"></div>';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_show_prompt', settings.showGenPrompt === true, '图块显示完整提示词', '默认关闭：图块只显示短标题（详细字段只进生成链，用户看不到）；调试时打开可看到每张图的完整生成提示词') + '</div>';
     h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', '仅 Anime / Tag 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
@@ -142,6 +148,17 @@ export function bindSettingsEvents(b) {
     renderSettingsPage();
   });
   b.off('change', '#sl_fe_inline').on('change', '#sl_fe_inline', function () { settings.feBridgeInline = jQuery(this).is(':checked'); saveSettings(); toast('info', settings.feBridgeInline !== false ? '图卡插入应用叙事区' : '图卡改为应用内浮层'); });
+  b.off('change', '#sl_fe_mode').on('change', '#sl_fe_mode', function () {
+    settings.feBridgeMode = jQuery(this).val(); saveSettings();
+    var m = settings.feBridgeMode;
+    toast('success', m === 'auto' ? '前端卡：自动识别（有 [img:] 就导演原位，否则画师）' : (m === 'artist' ? '前端卡：强制画师管线' : '前端卡：强制导演 + 注入指令'));
+    setTimeout(function () { try { renderSettingsPage(); } catch (e) {} }, 400);
+  });
+  b.off('click', '#sl_fe_testd').on('click', '#sl_fe_testd', function () {
+    var ok = injectTestDirector();
+    toast(ok ? 'success' : 'error', ok ? '已插入带 [img:] 的假剧情并原位替换：看图卡有没有落在正文里、[img:] 有没有被吃掉' : '没找到前端应用（当前聊天不是前端卡 / 酒馆助手没启用）');
+    setTimeout(function () { try { renderSettingsPage(); } catch (e) {} }, 400);
+  });
   b.off('click', '#sl_fe_test').on('click', '#sl_fe_test', function () {
     var ok = injectTestCard();
     toast(ok ? 'success' : 'error', ok ? '已插入测试图卡：看前端应用界面里有没有出现🐱图卡' : '没找到前端应用（当前聊天不是前端卡 / 酒馆助手没启用 / 应用还没挂载）');

@@ -15,6 +15,7 @@ var pushPage = panel.pushPage;
 import * as compact from './compact-bar.js';
 import * as story from '../story.js';
 import { refreshCoopCards } from '../sync-cards.js';
+import { initFrontendBridge, stopFrontendBridge, getFeBridgeStatus, probeFrontendApp, injectTestCard } from '../frontend-bridge.js';
 import { getPrompt, isPromptsLoaded } from '../../prompts/loader.js';
 
 // ═══════════ 主视图（Feed） ═══════════
@@ -110,6 +111,13 @@ export function renderSettingsPage() {
     h += '<div style="' + card() + '">' + cardHead('🐟', '配图偏好', '这只猫什么时候画图') + '<select id="sl_image_mode" style="' + f + '"><option value="always"' + (settings.imageMode === 'always' ? ' selected' : '') + '>总是配图（每轮 ≥1 张）</option><option value="encourage"' + (settings.imageMode === 'encourage' ? ' selected' : '') + '>鼓励配图（该插就插）</option><option value="key"' + (settings.imageMode === 'key' ? ' selected' : '') + '>关键场景（宁缺毋滥）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🖼️', '图块尺寸', '图卡里图片的宽度（分辨率低建议调小）') + '<select id="sl_img_width" style="' + f + '"><option value="100%"' + ((settings.imgBlockWidth || '55%') === '100%' ? ' selected' : '') + '>大（100%）</option><option value="75%"' + ((settings.imgBlockWidth || '55%') === '75%' ? ' selected' : '') + '>中（75%）</option><option value="55%"' + ((settings.imgBlockWidth || '55%') === '55%' ? ' selected' : '') + '>小（55% · 默认）</option><option value="40%"' + ((settings.imgBlockWidth || '55%') === '40%' ? ' selected' : '') + '>迷你（40%）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🐾', '配图方式', '选一种配图流程') + '<select id="sl_img_mode" style="' + f + '"><option value="plugin"' + (settings.imgMode === 'plugin' ? ' selected' : '') + '>🎨 画师模式（默认）— 用专属 AI（额外 API）：扫描角色卡留存外貌档案 → 每轮精读原文 → 写提示词。人物最还原、最懂剧情，代价是每轮多一次 AI 调用</option><option value="main"' + (settings.imgMode === 'main' ? ' selected' : '') + '>🎬 导演模式 — 主模型在正文写 [img:] 标记图片位置+画面要点，画师只补提示词。最省 token（不用额外分析角色卡），需在角色卡粘贴指令</option></select><div style="font-size:10.5px;color:' + CAT.mute + ';margin:8px 0 10px;">🎬 导演模式需要：把「小猫指令」贴进角色卡/预设/世界书（👇 一键复制）；画师模式无需任何配置</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
+    h += '<div style="' + card() + '">' + cardHead('🖥️', '前端卡配图（酒馆助手 iframe 应用）', 'Narrator / 检查站这类"重前端卡"专用') +
+      switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走画师管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
+      '<div style="margin-top:10px;">' + switchHTML('sl_fe_inline', settings.feBridgeInline !== false, '图卡插入应用叙事区', '关闭则改为应用右下角浮层（当你觉得图卡插在正文里挡视线时用小浮层）') + '</div>' +
+      '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:10px 0 8px;line-height:1.6;">状态：' + esc(getFeBridgeStatus()) + '</div>' +
+      '<button id="sl_fe_test" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试注入（不出图，插一张占位图卡）</button>' +
+      '<button id="sl_fe_probe" style="width:100%;' + btnGhost() + '">🩺 诊断（写进日志）</button>' +
+      '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；配图用的是当前画风模式与画师管线（每轮多一次辅助 AI 调用）。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('📝', '前置提示词', '拼到每张提示词最前') + '<input id="sl_prompt_prefix" type="text" value="' + escAttr(settings.promptPrefix || '') + '" style="' + f + '" placeholder="留空则不生效"></div>';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_show_prompt', settings.showGenPrompt === true, '图块显示完整提示词', '默认关闭：图块只显示短标题（详细字段只进生成链，用户看不到）；调试时打开可看到每张图的完整生成提示词') + '</div>';
     h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', '仅 Anime / Tag 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
@@ -126,6 +134,24 @@ export function bindSettingsEvents(b) {
   b.off('change', '#sl_img_mode').on('change', '#sl_img_mode', function () { settings.imgMode = jQuery(this).val(); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.imgMode === 'main' ? '已切到：🎬 导演模式' : '已切到：🎨 画师模式'); });
   b.off('change', '#sl_director_cast').on('change', '#sl_director_cast', function () { settings.directorCastImport = jQuery(this).is(':checked'); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.directorCastImport !== false ? '已开启：卡库档案导入人物表' : '已关闭：扫描仅用于立绘/档案，人物表只留占位符收集'); });
   b.off('click', '#sl_copy_instr').on('click', '#sl_copy_instr', function () { var t = isPromptsLoaded() ? (getPrompt('main-llm-instruction.txt') || '') : ''; if (!t) t = '[img:画面描述] 指令未加载，请刷新重试'; if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function () { toast('success', '指令已复制，贴到角色卡/预设/世界书'); }, function () { toast('error', '复制失败'); }); } else { toast('error', '浏览器不支持剪贴板'); } });
+  // ── v1.1.2 前端卡桥 ──
+  b.off('change', '#sl_fe_bridge').on('change', '#sl_fe_bridge', function () {
+    settings.feBridge = jQuery(this).is(':checked'); saveSettings();
+    if (settings.feBridge) { initFrontendBridge(); toast('success', '已开启：前端卡配图'); }
+    else { stopFrontendBridge(); toast('info', '已关闭：前端卡配图'); }
+    renderSettingsPage();
+  });
+  b.off('change', '#sl_fe_inline').on('change', '#sl_fe_inline', function () { settings.feBridgeInline = jQuery(this).is(':checked'); saveSettings(); toast('info', settings.feBridgeInline !== false ? '图卡插入应用叙事区' : '图卡改为应用内浮层'); });
+  b.off('click', '#sl_fe_test').on('click', '#sl_fe_test', function () {
+    var ok = injectTestCard();
+    toast(ok ? 'success' : 'error', ok ? '已插入测试图卡：看前端应用界面里有没有出现🐱图卡' : '没找到前端应用（当前聊天不是前端卡 / 酒馆助手没启用 / 应用还没挂载）');
+    setTimeout(function () { try { renderSettingsPage(); } catch (e) {} }, 400);
+  });
+  b.off('click', '#sl_fe_probe').on('click', '#sl_fe_probe', function () {
+    var r = probeFrontendApp();
+    toast(r.hooked ? 'success' : 'warning', '钩子' + (r.hooked ? '已挂' : '未挂') + ' · ' + (r.appFound ? '找到前端应用' : '未找到前端应用') + ' · 详细写进日志页');
+    setTimeout(function () { try { renderSettingsPage(); } catch (e) {} }, 400);
+  });
   b.off('change input', '#sl_prompt_prefix').on('change input', '#sl_prompt_prefix', function () { settings.promptPrefix = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_show_prompt').on('change', '#sl_show_prompt', function () { settings.showGenPrompt = jQuery(this).is(':checked'); saveSettings(); });
   b.off('change input', '#sl_anime_prefix').on('change input', '#sl_anime_prefix', function () { settings.animeQualityPrefix = jQuery(this).val(); saveSettings(); });

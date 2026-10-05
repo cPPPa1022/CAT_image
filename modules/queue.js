@@ -31,7 +31,11 @@ async function processImageQueue() {
         } else {
             task.btn.text('\u21bb \u91cd\u65b0\u751f\u6210').css({ background: COLORS.card, color: COLORS.text });
             task.btn.siblings('img').remove();
-            var imgEl = jQuery('<img src="' + escapeHtml(result.url) + '" style="max-width:' + (settings.imgBlockWidth || '55%') + ';border-radius:12px;margin-top:6px;display:block;" onload="this.style.display=\'block\'">');
+            // [v1.1.2 前端卡桥] 按钮可能位于酒馆助手的 iframe 文档中：
+            // 图片元素必须用该文档创建（跨文档 append 在部分浏览器不渲染），src 用 attr 赋值避免 data URL 被转义
+            var _od = (task.btn[0] && task.btn[0].ownerDocument) ? task.btn[0].ownerDocument : document;
+            var imgEl = jQuery(_od.createElement('img'));
+            imgEl.attr('src', result.url).attr('style', 'max-width:' + (settings.imgBlockWidth || '55%') + ';border-radius:12px;margin-top:6px;display:block;');
             task.btn.after(imgEl);
             imgEl[0].offsetHeight;
             task.btn.parent()[0].offsetHeight;

@@ -179,15 +179,22 @@ export function renderEnhanced(element, text) {
 }
 
 // ── 绑定生图按钮（事件委托：绑定一次永久有效，不受 DOM 重建影响） ──
-var _imgBtnBound = false;
-function bindImageButtonsGlobal() {
-    if (_imgBtnBound) return;
-    _imgBtnBound = true;
-    jQuery(document).on('click', '.sl_img_btn', async function() {
+// [v1.1.2 前端卡桥] 图卡可能落在酒馆助手的 iframe 文档里（重前端卡），
+// 顶层 document 的委托收不到那里的 click → 按文档分别绑定。
+export function bindImageButtonsIn(doc) {
+    if (!doc || doc.__sl_imgbtn_bound) return;
+    doc.__sl_imgbtn_bound = true;
+    jQuery(doc).on('click', '.sl_img_btn', async function() {
         var btn = jQuery(this), prompt = btn.data('prompt');
         if (btn.text() === '排队中…') return;
         enqueueGen(btn, prompt);
     });
+}
+var _imgBtnBound = false;
+function bindImageButtonsGlobal() {
+    if (_imgBtnBound) return;
+    _imgBtnBound = true;
+    bindImageButtonsIn(document);
 }
 bindImageButtonsGlobal();
 // 排队引用由 queue.js / index.js 提供，这里先声明

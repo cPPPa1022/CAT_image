@@ -151,19 +151,22 @@ function wrapGenerate(win, label) {
 // 这里用 defineProperty 拦住对 window.TavernHelper 的赋值：酒馆助手一赋值，我们立刻挂钩。
 function trapTavernHelper() {
     try {
-        if (window.__sl_th_trapped) return true;
         var desc = Object.getOwnPropertyDescriptor(window, 'TavernHelper');
+        // 已经是我们的拦截器 → 无事可做
+        if (desc && desc.get && desc.get.__sl_trap) {
+            if (window.TavernHelper && typeof window.TavernHelper.generate === 'function') wrapGenerate(window, 'top(拦截器巡查)');
+            return true;
+        }
         if (desc && desc.configurable === false) { slLog('前端桥: TavernHelper 不可拦截（非可配置属性），改用定时补挂'); return false; }
         var cur = window.TavernHelper;
-        Object.defineProperty(window, 'TavernHelper', {
-            configurable: true,
-            get: function () { return cur; },
-            set: function (v) {
-                cur = v;
-                try { if (v && typeof v.generate === 'function') wrapGenerate(window, 'top(赋值拦截)'); } catch (e) {}
-            }
-        });
-        window.__sl_th_trapped = true;
+        var g = function () { return cur; };
+        g.__sl_trap = true;
+        var s = function (v) {
+            cur = v;
+            try { if (v && typeof v.generate === 'function') wrapGenerate(window, 'top(赋值拦截)'); } catch (e) {}
+        };
+        s.__sl_trap = true;
+        Object.defineProperty(window, 'TavernHelper', { configurable: true, get: g, set: s });
         if (cur && typeof cur.generate === 'function') wrapGenerate(window, 'top(拦截器)');
         slLog('前端桥: 已安装 TavernHelper 赋值拦截器（酒馆助手一加载就自动挂钩）');
         return true;
@@ -273,7 +276,19 @@ function onExternalRaw(params, raw, label) {
     if (!raw) return;
     if (!isSceneCall(params)) return;
     var text = extractNarrativeText(raw);
-    if (!text) return;                       // 非叙事调用（JSON 修复、结构化摘要等）→ 忽略
+    if (!text) {
+        // 画面调用却没抽到叙事：把响应"形状"写进日志（限流 5 次），这类问题否则只能靠猜
+        if (_state.noNarrLogged === undefined) _state.noNarrLogged = 0;
+        if (_state.noNarrLogged < 5) {
+            _state.noNarrLogged++;
+            var shape = (typeof raw === 'string') ? ('string len=' + raw.length)
+                : (raw && typeof raw === 'object') ? ('object keys=[' + Object.keys(raw).join(',') + ']') : String(typeof raw);
+            var head = '';
+            try { head = (typeof raw === 'string') ? raw : JSON.stringify(raw); } catch (e2) { head = '<无法序列化>'; }
+            slLog('前端桥: 画面调用未抽到叙事（响应形态: ' + shape + '；前 100 字: ' + String(head || '').slice(0, 100).replace(/\n/g, '⏎') + '）');
+        }
+        return;                       // 非叙事调用（JSON 修复、结构化摘要等）→ 忽略
+    }
     text = stripAiTags(text).trim();
     var minLen = settings.storyMode === 'comic' ? 20 : 80;
     if (text.length < minLen) { slLog('前端桥: 叙事过短(' + text.length + '字)，忽略'); return; }
@@ -284,12 +299,39 @@ function onExternalRaw(params, raw, label) {
 
 var FENCE = '```';
 
-function extractNarrativeText(raw) {
+// 工具调用形态：TavernHelper 带 tools 时返回 { content, tool_calls:[{ function:{ name, arguments } }] }
+// （卡自己就是这么读的：raw.tool_calls[0].function.arguments）——这里必须一并支持，
+// 否则"函数调用模式"下真实叙事全在 arguments 里、content 常常是空的 → 抽不到 → 整轮漏抓。
+function narrativeFromToolCalls(obj, depth) {
+    try {
+        if (!obj || typeof obj !== 'object' || (depth || 0) > 3) return '';
+        var calls = obj.tool_calls || obj.toolCalls;
+        if (!calls || !calls.length) return '';
+        for (var i = 0; i < calls.length; i++) {
+            var call = calls[i] || {};
+            var fn = call.function || call;
+            var args = fn && fn.arguments;
+            if (!args) continue;
+            var got = extractNarrativeText(args, (depth || 0) + 1);
+            if (got) return got;
+        }
+    } catch (e) {}
+    return '';
+}
+
+function extractNarrativeText(raw, depth) {
+    depth = depth || 0;
+    if (depth > 3) return '';
     var s = '';
     if (typeof raw === 'string') s = raw;
     else if (raw && typeof raw === 'object') {
-        if (typeof raw.narrative === 'string') return raw.narrative;
-        s = String(raw.text || raw.content || raw.message || '');
+        // ① 工具调用形态（函数调用模式的主路径）
+        var fromTool = narrativeFromToolCalls(raw, depth);
+        if (fromTool) return fromTool;
+        // ② 直接带 narrative 字段
+        if (typeof raw.narrative === 'string' && raw.narrative.trim()) return raw.narrative;
+        // ③ content/text/message 里再挖一层（可能是 JSON 字符串）
+        s = String(raw.content || raw.text || raw.message || '');
     }
     s = String(s || '').trim();
     if (!s) return '';
@@ -373,7 +415,7 @@ async function runTurn(text) {
     if (!res.enhanced) { slLog('前端桥: 管线本轮无图块（无图轮），跳过'); return; }
     var blocks = extractImgBlocksFromEnhanced(res.enhanced, key);
     if (!blocks.length) { slLog('前端桥: 解析不到图块，跳过'); return; }
-    var record = { turn: turn, key: key, blocks: blocks, node: null, inline: director, placed: 0 };
+    var record = { turn: turn, key: key, blocks: blocks, node: null, inline: director, placed: 0, srcText: text };
     _state.records.push(record);
     if (_state.records.length > 30) _state.records.shift();
     _state.lastPath = director ? '导演（原位）' : '画师（末尾）';
@@ -381,11 +423,11 @@ async function runTurn(text) {
 }
 
 // 导演模式：把应用正文里的 [img:…] 占位符"原位"换成图卡（顺手把占位符原文吃掉）
-function replacePlaceholdersInApp(target, blocks) {
+function replacePlaceholdersInApp(target, blocks, srcText) {
     var doc = target.doc, root = target.area;
     if (!doc || !root || !doc.createTreeWalker || !blocks || !blocks.length) return 0;
     var NF = (target.win && target.win.NodeFilter) ? target.win.NodeFilter : (typeof NodeFilter !== 'undefined' ? NodeFilter : null);
-    var nodes = collectMarkerTextNodes(doc, root, NF);
+    var nodes = collectMarkerTextNodes(doc, root, NF, srcText);
     var bi = 0, replaced = 0;
     for (var i = 0; i < nodes.length && bi < blocks.length; i++) {
         var node = nodes[i];
@@ -413,16 +455,34 @@ function replacePlaceholdersInApp(target, blocks) {
     return replaced;
 }
 
-function collectMarkerTextNodes(doc, root, NF) {
+function collectMarkerTextNodes(doc, root, NF, srcText) {
     var out = [];
+    var normSrc = String(srcText || '').replace(/\s+/g, '');
+    var srcHead = normSrc.slice(0, 20);
     try {
         var walker = doc.createTreeWalker(root, NF ? NF.SHOW_TEXT : 4, null);
         while (walker.nextNode()) {
-            var v = walker.currentNode.nodeValue || '';
-            if (v.indexOf('[img:') >= 0) out.push(walker.currentNode);
+            var n = walker.currentNode;
+            var v = n.nodeValue || '';
+            if (v.indexOf('[img:') < 0) continue;
+            // 这个节点是不是"本轮叙事"？——旧轮次没出图时会在正文里留下裸标记，
+            // 不区分的话新图卡会被旧消息抢走（图卡插到上一轮去）
+            var isCur = false;
+            if (normSrc) {
+                var nv = v.replace(/\s+/g, '');
+                isCur = !!(srcHead && nv.indexOf(srcHead) >= 0) || (nv.length > 20 && normSrc.indexOf(nv.slice(0, 20)) >= 0);
+            }
+            out.push({ node: n, cur: isCur });
         }
     } catch (e) {}
-    return out;
+    // 本轮节点优先，且"越新越先"（流式重绘会留多份副本）；旧轮次节点排后面兜底
+    out.sort(function (a, b) {
+        if (a.cur !== b.cur) return a.cur ? -1 : 1;
+        return 0;   // 稳定排序保持 DOM 顺序
+    });
+    var cur = out.filter(function (x) { return x.cur; }).reverse().map(function (x) { return x.node; });
+    var old = out.filter(function (x) { return !x.cur; }).map(function (x) { return x.node; });
+    return cur.concat(old);
 }
 
 function stripLeftoverMarkers(target, NF) {
@@ -455,7 +515,7 @@ function injectRecord(record) {
     bindFrameClicks(target.doc);
     // 导演模式：先在正文里"原位"替换 [img:] 占位符（图卡就落在剧情那个位置）
     if (record.inline && target.area) {
-        var placed = replacePlaceholdersInApp(target, record.blocks);
+        var placed = replacePlaceholdersInApp(target, record.blocks, record.srcText);
         record.placed = placed;
         if (placed) {
             slLog('前端桥(导演): 正文原位替换 ' + placed + '/' + record.blocks.length + ' 个占位符');
@@ -543,6 +603,7 @@ export function initFrontendBridge() {
     initFrontendBridge._timer = setInterval(function () {
         if (settings.feBridge === false) return;
         try {
+            trapTavernHelper();          // 万一酒馆助手用 defineProperty 覆盖了我们的拦截器，这里补回来
             installFrontendHook();
             var t = findAppTarget();
             if (t && !_state.targetLogged) {

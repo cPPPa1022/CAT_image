@@ -7,7 +7,7 @@
 // 桥接思路（零侵入角色卡）：
 //   1) 包住 window.TavernHelper.generate（以及各 iframe 内的同名副本）；
 //   2) 卡内每次 LLM 调用返回时，从返回值里取出叙事正文（JSON 的 narrative 字段）；
-//   3) 把正文喂给插件现有"画师管线"（runAuxPipeline）→ 出提示词 + [image:] 图块；
+//   3) 把正文喂给导演管线（runRosterPipeline）→ 按 [img:] 占位符出提示词 + [image:] 图块；
 //   4) 把图卡注入前端应用自己的叙事区（#narrativeArea / .narrative-area），
 //      找不到容器 → 退化为应用内浮层；再不行 → 退化为酒馆页浮层。
 //
@@ -15,7 +15,6 @@
 
 import { slLog, slErr } from './log.js';
 import { settings } from './settings.js';
-import { runAuxPipeline } from './pipeline/pipeline.js';
 import { runRosterPipeline } from './pipeline/roster-pipeline.js';
 import { extractImgBlocksFromEnhanced, buildImgCard } from './render.js';
 import { enqueueGen } from './queue.js';
@@ -246,14 +245,12 @@ var DIRECTOR_INSTRUCTION = [
     '- 占位符前后不要解释、不要换行包裹；正文其余部分照常写，不要在正文里提到"占位符/图片"这类元话'
 ].join('\n');
 
-// 桥用哪种管线：
-//   auto（默认）—— 看本轮剧情里有没有 [img:]：有 → 导演（占位符原位出图）；没有 → 画师
-//   artist      —— 强制画师管线（不看占位符）
-//   director    —— 强制导演管线，并把占位符指令注入卡内请求（给"预设里没缝小猫指令"的人兜底）
+// 桥用哪种管线（v1.2 起画师管线已移除，只剩导演）：
+//   auto（默认）—— 看本轮剧情里有没有 [img:]：有 → 导演（占位符原位出图）；没有 → 本轮跳过
+//   director    —— 强制导演，并把占位符指令注入卡内请求（给"预设里没缝小猫指令"的人兜底）
+// 旧存档里的 'artist' 一律按 'auto' 处理
 function bridgeMode() {
-    var m = settings.feBridgeMode || 'auto';
-    if (m === 'director' || m === 'artist') return m;
-    return 'auto';
+    return (settings.feBridgeMode === 'director') ? 'director' : 'auto';
 }
 // 只有"强制导演"才注入指令；预设里缝过小猫指令的人（auto）不需要注入，避免重复
 function shouldInjectDirector(params) {
@@ -391,34 +388,23 @@ async function runTurn(text) {
     var key = 'fe_' + getChatId() + '_' + turn;
     var mode = bridgeMode();
     var hasPh = /\[img:/.test(text);
-    // auto：剧情里已经有 [img:]（预设里缝了小猫指令）→ 导演管线；否则画师管线
-    var director = (mode === 'director') || (mode === 'auto' && hasPh);
-    var res = null;
-    if (director) {
-        slLog('前端桥: 第' + turn + '轮 → 导演管线（剧情含 [img:] 占位符' + (mode === 'director' ? '·已注入指令' : '·自动识别') + '，key=' + key + '）');
-        try { res = await runRosterPipeline(text, key); } catch (e) { slErr('前端桥导演管线异常: ' + (e.message || e)); res = null; }
-        if (!res) {
-            // 导演管线报错（辅助 API 未配/超时）→ 兜底画师管线；正文里的占位符照样会被原位换图
-            slLog('前端桥(导演): 管线失败（辅助 API/解析问题）→ 兜底改用画师管线');
-            try { res = await runAuxPipeline(text, key); } catch (e2) { slErr('前端桥兜底管线异常: ' + (e2.message || e2)); return; }
-        } else if (res.noPlaceholder) {
-            if (mode === 'director') {
-                slLog('前端桥(导演): 模型没写 [img:] 占位符（指令已注入仍无效）→ 兜底改用画师管线');
-                try { res = await runAuxPipeline(text, key); } catch (e3) { slErr('前端桥兜底管线异常: ' + (e3.message || e3)); return; }
-            } else { slLog('前端桥: 本轮剧情没有可用的 [img:] 占位符，跳过'); return; }
-        }
-    } else {
-        slLog('前端桥: 第' + turn + '轮 → 画师管线（key=' + key + '）');
-        try { res = await runAuxPipeline(text, key); } catch (e) { slErr('前端桥管线异常: ' + (e.message || e)); return; }
+    // v1.2：只剩导演管线。剧情里没有 [img:] 占位符 = 本轮不配图（不再有画师管线兜底）
+    if (!hasPh) {
+        slLog('前端桥: 第' + turn + '轮剧情没有 [img:] 占位符' + (mode === 'director' ? '（已注入指令仍无效）' : '') + '，本轮跳过');
+        return;
     }
+    slLog('前端桥: 第' + turn + '轮 → 导演管线（剧情含 [img:] 占位符' + (mode === 'director' ? '·已注入指令' : '·自动识别') + '，key=' + key + '）');
+    var res = null;
+    try { res = await runRosterPipeline(text, key); } catch (e) { slErr('前端桥导演管线异常: ' + (e.message || e)); res = null; }
+    if (!res) { slLog('前端桥(导演): 管线失败（辅助 API 未配/超时/解析问题），本轮跳过'); return; }
     if (!res) { slLog('前端桥: 管线返回空（辅助 API 未配置/报错，或本轮判无图）—— 详见上一行管线日志'); return; }
     if (!res.enhanced) { slLog('前端桥: 管线本轮无图块（无图轮），跳过'); return; }
     var blocks = extractImgBlocksFromEnhanced(res.enhanced, key);
     if (!blocks.length) { slLog('前端桥: 解析不到图块，跳过'); return; }
-    var record = { turn: turn, key: key, blocks: blocks, node: null, inline: director, placed: 0, srcText: text };
+    var record = { turn: turn, key: key, blocks: blocks, node: null, inline: true, placed: 0, srcText: text };
     _state.records.push(record);
     if (_state.records.length > 30) _state.records.shift();
-    _state.lastPath = director ? '导演（原位）' : '画师（末尾）';
+    _state.lastPath = '导演（原位）';
     injectRecord(record);
 }
 
@@ -590,9 +576,8 @@ function autoGenNode(node) {
 
 export function initFrontendBridge() {
     if (settings.feBridge === false) { slLog('前端桥: 设置里已关闭，未启用'); return; }
-    // 自检：管线函数必须真的导入成功，否则导演/画师分支会在运行时才炸（曾踩过：runRosterPipeline is not defined）
-    if (typeof runRosterPipeline !== 'function') slErr('前端桥自检失败: roster 管线未导入 → 导演模式不可用');
-    if (typeof runAuxPipeline !== 'function') slErr('前端桥自检失败: 画师管线未导入 → 配图不可用');
+    // 自检：管线函数必须真的导入成功，否则运行时才炸（曾踩过：runRosterPipeline is not defined）
+    if (typeof runRosterPipeline !== 'function') slErr('前端桥自检失败: roster 管线未导入 → 配图不可用');
     if (typeof extractImgBlocksFromEnhanced !== 'function' || typeof buildImgCard !== 'function') slErr('前端桥自检失败: render 辅助函数未导入');
     trapTavernHelper();
     installFrontendHook();

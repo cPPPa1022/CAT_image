@@ -1,6 +1,6 @@
 // ── SillyImage Lab v2.4 协作管线（酒馆AI模式） ──
 // 主LLM写正文+[img:]占位 → 插件AI按占位符与人物表写提示词 → 填回占位 → 走现有渲染/生成链
-// 与旧管线（runAuxPipeline）完全隔离，零侵入
+// v1.2 起为唯一管线（旧画师管线 runAuxPipeline 已移除）
 
 import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, saveSettings } from '../settings.js';

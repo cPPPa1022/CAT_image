@@ -66,7 +66,7 @@ export function refreshCoopCards() {
     try {
         var ctx = getSTContext();
         if (!ctx || typeof ctx.setExtensionPrompt !== 'function') return;
-        if (settings.imgMode !== 'main' || settings.injectCards === false) {
+        if (settings.injectCards === false) {
             if (ctx.setExtensionPrompt) ctx.setExtensionPrompt(MODULE, '', POSITION, 0);
             return;
         }

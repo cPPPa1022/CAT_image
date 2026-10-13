@@ -39,10 +39,9 @@ export function getDefaults() {
         summaryGap: 15,
         // 配图偏好：always 总是配图（默认，强制+鼓励）/ encourage 鼓励配图（纯信息轮可零图） / key 关键场景
         imageMode: 'always',
-        // ── v2.4 占位符协作 ──
-        // imgMode: 'main' 酒馆AI模式（主LLM写 [img:] 占位，插件AI按指导写提示词+简化人物表，不扫卡库档案）
-        //         'plugin' 插件AI模式（v2.3.0 旧管线：触发句回插+全量档案，原样保留）
-        imgMode: 'plugin',
+        // ── v2.4 占位符协作（v1.2 起画师模式已移除，只剩导演模式）──
+        // 保留该键仅为兼容旧存档的 UI/日志；代码不再按它分支
+        imgMode: 'main',
         // 酒馆AI模式：是否每轮向主LLM注入【生图协作卡+人物档案索引】（setExtensionPrompt）
         injectCards: true,
         // 图块是否显示完整生成提示词（默认隐藏——详细字段只走生成链，不外显；调试时可打开）
@@ -60,10 +59,9 @@ export function getDefaults() {
         feBridge: true,
         // 图卡注入位置：true=优先注入前端应用自己的叙事区（推荐）；false=只放应用内浮层
         feBridgeInline: true,
-        // 前端卡走哪条管线：
-        //   auto（默认）—— 本轮剧情里有 [img:] → 导演管线（占位符原位出图）；没有 → 画师管线
-        //   artist      —— 强制画师管线
-        //   director    —— 强制导演管线，并把 [img:] 占位符指令注入卡内请求（预设里没缝小猫指令时用）
+        // 前端卡走哪条管线（v1.2 起画师管线已移除）：
+        //   auto（默认）—— 本轮剧情里有 [img:] → 导演管线（占位符原位出图）；没有 → 本轮跳过
+        //   director    —— 强制导演，并把 [img:] 占位符指令注入卡内请求（预设里没缝小猫指令时用）
         feBridgeMode: 'auto',
     };
 }

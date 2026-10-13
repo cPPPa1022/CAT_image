@@ -24,8 +24,7 @@ export function renderHomeTab() {
   body.find('.sl-page').remove();
   var cn = getCharacterName() || '未选择角色', hp = chkProf(), ss = getScannerStatus(), ql = getQueueLength(),
     ha = !!(settings.auxUrl && settings.auxModel), hc = !!settings.cUrl, hw = !!(settings.cWf && settings.cWf.length > 50),
-    isMain = settings.imgMode === 'main',
-    allReady = ha && hc && hw && (isMain ? true : hp), h = '';
+    allReady = ha && hc && hw, h = '';
   // 顶部：状态猫大卡
   var catFaceState = ss === 'scanning' ? 'busy' : (ql > 0 ? 'queuing' : (hp ? 'healthy' : 'idle'));
   h += '<div style="' + card() + ';padding:18px;display:flex;flex-direction:column;align-items:center;gap:2px;">';
@@ -37,22 +36,18 @@ export function renderHomeTab() {
   h += '<div class="sl-hover-card" style="' + card() + 'padding:16px;">';
   h += '<div style="display:flex;align-items:center;gap:13px;">';
   h += '<span style="width:48px;height:48px;border-radius:14px;background:' + CAT.bg + ';display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0;color:' + CAT.accent + ';">' + catSVG('healthy', 30) + '</span>';
-  h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:' + CAT.text + ';">' + esc(cn) + '</div><div style="font-size:11px;color:' + CAT.sub + ';margin-top:2px;">' + (isMain ? '🎬 导演模式 · 主模型指挥' : '🎨 画师模式 · 专属AI读文') + ' · ' + (settings.autoGen === 1 ? '自动出图' : '手动出图') + '</div></div>';
+  h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:' + CAT.text + ';">' + esc(cn) + '</div><div style="font-size:11px;color:' + CAT.sub + ';margin-top:2px;">' + '🎬 导演模式 · 主模型指挥' + ' · ' + (settings.autoGen === 1 ? '自动出图' : '手动出图') + '</div></div>';
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ((getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') ? '🎬 Anime' : '🖼️ ZIT') + '</span>';
   h += '<span style="' + chip(hp ? CAT.green + '1F' : CAT.red + '1F', hp ? CAT.green : CAT.red) + '">' + (hp ? '📦 已扫描' : '🔍 未扫描') + '</span>';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">🐟 队列 ' + ql + '</span>';
   h += '</div></div>';
-  // 快捷操作（两大按钮）：画师/导演模式通用——扫描建档 + 一键补排。
+  // 快捷操作（两大按钮）：扫描建档 + 一键补排。
   // [B1] 原 if/else 两分支完全一致（条件无意义），合并为单一分支防止"只改一半"。
   h += '<div style="display:flex;gap:8px;"><button id="sl_btn_scan_cast" style="flex:1;' + btnMain() + '">扫描角色卡</button><button id="sl_btn_gen_all" style="flex:1;' + btnGhost() + '">一键排图</button></div>';
-  // 协作模式快捷切换（高频项浅放：一键切换 插件AI/酒馆AI）
-  h += '<div style="' + card() + ';padding:8px;display:flex;gap:6px;">';
-  h += '<button class="sl_mode_seg' + (isMain ? '' : ' active') + '" data-mode="plugin" style="flex:1;padding:9px 0;border:none;border-radius:12px;cursor:pointer;font-size:11.5px;font-weight:700;' + (isMain ? 'color:' + CAT.sub + ';background:transparent;' : 'color:#fff;background:' + CAT.accent + ';box-shadow:' + CAT.btnShadow + ';') + '">🎨 画师模式</button>';
-  h += '<button class="sl_mode_seg' + (isMain ? ' active' : '') + '" data-mode="main" style="flex:1;padding:9px 0;border:none;border-radius:12px;cursor:pointer;font-size:11.5px;font-weight:700;' + (isMain ? 'color:#fff;background:' + CAT.accent + ';box-shadow:' + CAT.btnShadow + ';' : 'color:' + CAT.sub + ';background:transparent;') + '">🎬 导演模式</button>';
-  h += '</div>';
-  h += '<div style="font-size:10px;color:' + CAT.mute + ';text-align:center;margin:-4px 0 10px;">' + (isMain ? '主模型当导演：正文标记配图位置+画面要点，画师只补提示词；最省 token，需角色卡配置指令' : '专属 AI 画师：扫卡建档 → 每轮精读原文 → 写提示词；人物最还原，每轮多费一点 token') + '</div>';
+  // v1.2：画师模式已移除，只剩导演模式 → 不再需要模式切换
+  h += '<div style="font-size:10px;color:' + CAT.mute + ';text-align:center;margin:2px 0 10px;">🎬 导演模式：主模型在正文标记配图位置+画面要点，画师只补提示词（最省 token，需角色卡配置指令）</div>';
   // 设置与工具（分组列表）
   h += groupTitle('角色与世界');
   h += '<div style="' + card() + ';padding:4px 8px;">';
@@ -90,15 +85,6 @@ export function renderHomeTab() {
     else if (nav === 'log') renderLogPage();
     else if (nav === 'advanced') openSubPanel('advanced');
   });
-  // 协作模式一键切换
-  body.off('click', '.sl_mode_seg').on('click', '.sl_mode_seg', function () {
-    var mode = jQuery(this).data('mode');
-    if (!mode || mode === settings.imgMode) return;
-    settings.imgMode = mode; saveSettings();
-    try { refreshCoopCards(); } catch (e) {}
-    renderHomeTab(); compact.refreshCompactBar();
-    toast('success', mode === 'main' ? '已切换：🎬 导演模式（主模型指挥配图，省 token）' : '已切换：🎨 画师模式（专属AI读文写图，人物最还原）');
-  });
 }
 function storyCountText() {
   try { var ov = settings.storyOverview && settings.storyOverview.count; return ov != null ? ov + ' 条' : ''; } catch (e) { return ''; }
@@ -112,12 +98,11 @@ export function renderSettingsPage() {
     h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '"><option value="zit"' + (settings.modelType === 'zit' ? ' selected' : '') + '>ZIT（中文提示词）</option><option value="anime"' + (settings.modelType === 'anime' ? ' selected' : '') + '>Anime（英文描述）</option><option value="anime_tag"' + (settings.modelType === 'anime_tag' ? ' selected' : '') + '>Anime Tag（英文标签）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🐟', '配图偏好', '这只猫什么时候画图') + '<select id="sl_image_mode" style="' + f + '"><option value="always"' + (settings.imageMode === 'always' ? ' selected' : '') + '>总是配图（每轮 ≥1 张）</option><option value="encourage"' + (settings.imageMode === 'encourage' ? ' selected' : '') + '>鼓励配图（该插就插）</option><option value="key"' + (settings.imageMode === 'key' ? ' selected' : '') + '>关键场景（宁缺毋滥）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🖼️', '图块尺寸', '图卡里图片的宽度（分辨率低建议调小）') + '<select id="sl_img_width" style="' + f + '"><option value="100%"' + ((settings.imgBlockWidth || '55%') === '100%' ? ' selected' : '') + '>大（100%）</option><option value="75%"' + ((settings.imgBlockWidth || '55%') === '75%' ? ' selected' : '') + '>中（75%）</option><option value="55%"' + ((settings.imgBlockWidth || '55%') === '55%' ? ' selected' : '') + '>小（55% · 默认）</option><option value="40%"' + ((settings.imgBlockWidth || '55%') === '40%' ? ' selected' : '') + '>迷你（40%）</option></select></div>';
-    h += '<div style="' + card() + '">' + cardHead('🐾', '配图方式', '选一种配图流程') + '<select id="sl_img_mode" style="' + f + '"><option value="plugin"' + (settings.imgMode === 'plugin' ? ' selected' : '') + '>🎨 画师模式（默认）— 用专属 AI（额外 API）：扫描角色卡留存外貌档案 → 每轮精读原文 → 写提示词。人物最还原、最懂剧情，代价是每轮多一次 AI 调用</option><option value="main"' + (settings.imgMode === 'main' ? ' selected' : '') + '>🎬 导演模式 — 主模型在正文写 [img:] 标记图片位置+画面要点，画师只补提示词。最省 token（不用额外分析角色卡），需在角色卡粘贴指令</option></select><div style="font-size:10.5px;color:' + CAT.mute + ';margin:8px 0 10px;">🎬 导演模式需要：把「小猫指令」贴进角色卡/预设/世界书（👇 一键复制）；画师模式无需任何配置</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
+    h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', 'v1.2 起唯一流程（画师模式已移除）') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签），外貌|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
     h += '<div style="' + card() + '">' + cardHead('🖥️', '前端卡配图（酒馆助手 iframe 应用）', 'Narrator / 检查站这类"重前端卡"专用') +
-      switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走画师管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
+      switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走导演管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
       '<div style="margin-top:10px;"><span style="' + lbl() + '">走哪条管线</span><select id="sl_fe_mode" style="' + f + '">' +
-      '<option value="auto"' + ((settings.feBridgeMode || 'auto') === 'auto' ? ' selected' : '') + '>自动识别（推荐）— 剧情里有 [img:] 就走导演（占位符原位出图），没有就走画师</option>' +
-      '<option value="artist"' + (settings.feBridgeMode === 'artist' ? ' selected' : '') + '>强制画师 — 插件 AI 读剧情自己写提示词，图卡落在叙事末尾</option>' +
+      '<option value="auto"' + ((settings.feBridgeMode || 'auto') === 'auto' ? ' selected' : '') + '>自动识别（推荐）— 剧情里有 [img:] 就走导演（占位符原位出图），没有则本轮跳过</option>' +
       '<option value="director"' + (settings.feBridgeMode === 'director' ? ' selected' : '') + '>强制导演 + 注入指令 — 预设里没缝「小猫指令」时用，插件会把 [img:] 协议补进卡内请求</option>' +
       '</select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">你的预设里已经缝了小猫指令 → 保持「自动识别」即可：主模型写出 [img:…] 时，插件把它原位换成图卡（占位符原文会被吃掉，不会留在正文里）。</div></div>' +
       '<div style="margin-top:10px;">' + switchHTML('sl_fe_inline', settings.feBridgeInline !== false, '图卡插入应用叙事区', '关闭则改为应用右下角浮层（当你觉得图卡插在正文里挡视线时用小浮层）') + '</div>' +
@@ -125,7 +110,7 @@ export function renderSettingsPage() {
       '<button id="sl_fe_testd" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试导演原位替换（不出图，插一段带 [img:] 的假剧情）</button>' +
       '<button id="sl_fe_test" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';margin-bottom:8px;">🧪 测试末尾插卡（不出图，插一张占位图卡）</button>' +
       '<button id="sl_fe_probe" style="width:100%;' + btnGhost() + '">🩺 诊断（写进日志）</button>' +
-      '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；每条剧情都会多一次辅助 AI 调用（画师/导演管线各自的开销）。</div></div>';
+      '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；每条剧情都会多一次辅助 AI 调用（导演管线的开销）。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('📝', '前置提示词', '拼到每张提示词最前') + '<input id="sl_prompt_prefix" type="text" value="' + escAttr(settings.promptPrefix || '') + '" style="' + f + '" placeholder="留空则不生效"></div>';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_show_prompt', settings.showGenPrompt === true, '图块显示完整提示词', '默认关闭：图块只显示短标题（详细字段只进生成链，用户看不到）；调试时打开可看到每张图的完整生成提示词') + '</div>';
     h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', '仅 Anime / Tag 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
@@ -139,7 +124,6 @@ export function bindSettingsEvents(b) {
   b.off('change', '#sl_model_type').on('change', '#sl_model_type', function () { settings.modelType = jQuery(this).val(); jQuery('#sl_anime_opts').toggle(settings.modelType === 'anime' || settings.modelType === 'anime_tag'); saveSettings(); });
   b.off('change', '#sl_image_mode').on('change', '#sl_image_mode', function () { settings.imageMode = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_img_width').on('change', '#sl_img_width', function () { settings.imgBlockWidth = jQuery(this).val(); saveSettings(); });
-  b.off('change', '#sl_img_mode').on('change', '#sl_img_mode', function () { settings.imgMode = jQuery(this).val(); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.imgMode === 'main' ? '已切到：🎬 导演模式' : '已切到：🎨 画师模式'); });
   b.off('change', '#sl_director_cast').on('change', '#sl_director_cast', function () { settings.directorCastImport = jQuery(this).is(':checked'); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.directorCastImport !== false ? '已开启：卡库档案导入人物表' : '已关闭：扫描仅用于立绘/档案，人物表只留占位符收集'); });
   b.off('click', '#sl_copy_instr').on('click', '#sl_copy_instr', function () { var t = isPromptsLoaded() ? (getPrompt('main-llm-instruction.txt') || '') : ''; if (!t) t = '[img:画面描述] 指令未加载，请刷新重试'; if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function () { toast('success', '指令已复制，贴到角色卡/预设/世界书'); }, function () { toast('error', '复制失败'); }); } else { toast('error', '浏览器不支持剪贴板'); } });
   // ── v1.1.2 前端卡桥 ──
@@ -153,7 +137,7 @@ export function bindSettingsEvents(b) {
   b.off('change', '#sl_fe_mode').on('change', '#sl_fe_mode', function () {
     settings.feBridgeMode = jQuery(this).val(); saveSettings();
     var m = settings.feBridgeMode;
-    toast('success', m === 'auto' ? '前端卡：自动识别（有 [img:] 就导演原位，否则画师）' : (m === 'artist' ? '前端卡：强制画师管线' : '前端卡：强制导演 + 注入指令'));
+    toast('success', m === 'director' ? '前端卡：强制导演 + 注入指令' : '前端卡：自动识别（有 [img:] 就导演原位，否则本轮跳过）');
     setTimeout(function () { try { renderSettingsPage(); } catch (e) {} }, 400);
   });
   b.off('click', '#sl_fe_testd').on('click', '#sl_fe_testd', function () {

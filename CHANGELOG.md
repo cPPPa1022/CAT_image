@@ -1,5 +1,32 @@
 # 📜 更新日志（Changelog）
 
+## v1.2.0 — 2026-10-14
+**主题：只保留导演模式 + ComfyUI 工作流下拉选择**
+
+### 🔥 移除：画师模式（`imgMode='plugin'`）
+用户实测确认导演模式已完全覆盖画师模式的使用场景，故整体移除，管线只剩一条。
+
+- **删除文件**：`modules/pipeline/pipeline.js`（画师管线 `runAuxPipeline`）、`prompts/pipeline/system.txt`（画师 system prompt）、`prompts/artist-worldbook.txt`（画师世界书）
+- **`scanner.js`**：删掉 `正文###…结尾###` 标记检测整条分支（`doEndCheck`/`scheduleEndCheck` 一并移除）；触发条件恒为「检测到 `[img:]` 且文本稳定」；`pipeFn` 固定为 `runRosterPipeline`；恢复渲染固定走 `renderEnhancedLite`
+- **`render.js`**：移除 `renderEnhancedBodyHtml` / `renderBodyEnhanced` / `renderEnhanced`（标记式全量重建）及随之无用的 `getThemeCSS` / `scanDom`
+- **`frontend-bridge.js`**：前端卡管线只剩导演；**移除「导演失败 → 兜底画师」降级**——剧情没有 `[img:]` 即本轮跳过（原先的兜底依赖已删除的管线）；`feBridgeMode` 只保留 `auto` / `director`
+- **UI**：`tabs.js` 移除主页「🎨画师/🎬导演」切换段与设置页「配图方式」下拉，改为固定的导演模式说明卡；`compact-bar.js` / `sync-cards.js` / `settings.js` 同步去分支
+- **`settings.js`**：`imgMode` 默认值改 `'main'`（保留该键仅为兼容旧存档，代码不再据此分支）
+- **`prompts/loader.js`**：清单里去掉 `pipeline/system.txt`
+
+### ✨ 新增：ComfyUI 工作流下拉框
+此前每次换工作流都得重新导入 JSON（没有下拉框），现在：
+
+- **`📂 工作流` 下拉框**：选中即切换（立即写入 `settings.cWf` + 更新 JSON 框 + 落盘），不用再导入
+- **`📁 导入JSON` 自动入库**：导入的 JSON 会以文件名存进工作流库并自动选中（同名会问「覆盖？」，取消则自动加 `(2)` 后缀）
+- **`💾 保存` / `➕ 另存为` / `✏️ 重命名` / `🗑 删除`**：一套完整的工作流库管理（库存在 `settings.workflows`）
+- **`🔄 刷新`**：拉取 ComfyUI 服务器端工作流（ST 的 `/api/sd/comfy/workflows`），以 `☁` 前缀列出，选中即拉取并入库（服务器端没有则静默跳过，不影响本地库）
+- 工作流库存放在插件设置里（localStorage + extension_settings 双写），**不依赖 ComfyUI 在线**即可切换
+
+### ⚠️ 注意
+- 旧设置里的 `imgMode='plugin'` 会被忽略（代码不再分支）；`feBridgeMode='artist'` 按 `auto` 处理
+- 「重置插件」按钮的老问题仍在（见 AGENTS.md）：它会清掉 localStorage 哨兵并触发一次性迁移，导致 `profiles`/辅助API/工作流配置被清空。**请勿随手点它。**
+
 ## v1.1.4 — 2026-10-06
 **主题：前端卡"真实 AI 输出没反应"根因修复**
 

@@ -7,7 +7,6 @@ var PROMPTS_LOADED = false;
 export async function loadPrompts(baseUrl) {
     var files = [
         'static-profile/system.txt',
-        'pipeline/system.txt',
         'roster/system.txt',
         'pipeline/zit-overlay.txt',
         'pipeline/anime-overlay.txt',

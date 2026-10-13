@@ -1,0 +1,18 @@
+# ── 本地项目记忆 / Agent 指令（不发布到公开仓库）──
+# 含本机部署路径与协作笔记，只在本机生效
+AGENTS.md
+AGENTS.local.md
+CLAUDE.md
+CLAUDE.local.md
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# ── 依赖 / 构建产物（本插件无构建步骤，保险起见）──
+node_modules/
+dist/

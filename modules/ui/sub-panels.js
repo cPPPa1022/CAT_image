@@ -28,10 +28,11 @@ export function fillSubPanel(type, body) {
   } else if (type === "comfy") {
     var h = '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">🎨 ComfyUI 地址</div><input id="sl_comfy_url" type="text" value="' + escAttr(settings.cUrl || "http://localhost:8181") + '" style="' + f + '"></div>';
     h += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><button id="sl_test_comfy" style="' + sbtn(CAT.accent) + '">🐾 测试连接</button><span id="sl_comfy_status" style="font-size:11px;color:' + CAT.sub + ';"></span></div>';
-    h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><input id="sl_wf_name" type="text" value="' + escAttr(settings.cWfName || "") + '" placeholder="工作流名称（可选）" style="flex:1;padding:6px 8px;border:1px solid ' + CAT.line + ';border-radius:6px;font-size:11px;background:' + CAT.card + ';color:' + CAT.text + ';"></div>';
-    h += '<div style="display:flex;gap:4px;margin-bottom:4px;"><button id="sl_wf_load" style="' + sbtn(CAT.sub) + 'font-size:10px;">📂 加载工作流</button><button id="sl_wf_save_as" style="' + sbtn(CAT.green) + 'font-size:10px;">💾 另存为</button><button id="sl_wf_del" style="' + sbtn(CAT.red) + 'font-size:10px;">🗑 删除</button></div>';
+    h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">📂 工作流（下拉选中即切换，不用重新导入）</div>';
+    h += '<select id="sl_wf_sel" style="' + f + 'margin-bottom:6px;"></select>';
+    h += '<div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;"><button id="sl_wf_save" style="' + sbtn(CAT.green) + 'font-size:10px;">💾 保存</button><button id="sl_wf_save_as" style="' + sbtn(CAT.green) + 'font-size:10px;">➕ 另存为</button><button id="sl_wf_rename" style="' + sbtn(CAT.sub) + 'font-size:10px;">✏️ 重命名</button><button id="sl_wf_del" style="' + sbtn(CAT.red) + 'font-size:10px;">🗑 删除</button><button id="sl_wf_refresh" style="' + sbtn(CAT.sub) + 'font-size:10px;">🔄 刷新</button></div>';
     h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">📄 工作流 JSON</div><textarea id="sl_comfy_wf" rows="5" style="width:100%;padding:8px;border:1px solid ' + CAT.line + ';border-radius:8px;background:' + CAT.card + ';font-family:monospace;font-size:11px;color:' + CAT.text + ';resize:vertical;box-sizing:border-box;">' + esc(settings.cWf || "") + "</textarea>";
-    h += '<div style="display:flex;gap:6px;margin:6px 0;"><button id="sl_wf_import_btn" style="' + sbtn(CAT.sub) + 'font-size:10px;">📁 导入JSON</button><input type="file" id="sl_wf_import" accept=".json" style="display:none;"><button id="sl_analyze_wf" style="' + sbtn(CAT.accent) + '">🔍 解析节点</button><button id="sl_save_wf" style="' + sbtn(CAT.green) + '">💾 保存工作流</button></div>';
+    h += '<div style="display:flex;gap:6px;margin:6px 0;"><button id="sl_wf_import_btn" style="' + sbtn(CAT.sub) + 'font-size:10px;">📁 导入JSON</button><input type="file" id="sl_wf_import" accept=".json" style="display:none;"><button id="sl_analyze_wf" style="' + sbtn(CAT.accent) + '">🔍 解析节点</button></div>';
     h += '<div id="sl_node_list" style="font-size:10px;color:' + CAT.sub + ';max-height:200px;overflow-y:auto;margin-bottom:8px;"></div>';
     h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:4px;">🎨 画风预设</div><select id="sl_style_preset" style="' + f + 'margin-bottom:8px;"><option value="">不使用预设</option>';
     for (var sk in STYLE_PRESETS) if (sk) h += '<option value="' + escAttr(sk) + '"' + (settings.stylePreset === sk ? " selected" : "") + ">" + esc(sk) + "</option>";
@@ -49,13 +50,134 @@ export function fillSubPanel(type, body) {
         jQuery(".sl_wf_param").off("change input").on("change input", function () { try { var raw2 = jQuery("#sl_comfy_wf").val(), wf2 = JSON.parse(raw2), pk2 = jQuery(this).data("pk"), nv = jQuery(this).val(); for (var nid2 in wf2) { var nd2 = wf2[nid2]; if (!nd2 || !nd2.inputs) continue; var cmap = { steps: /KSampler/i, cfg: /KSampler/i, seed: /KSampler/i, denoise: /KSampler/i, width: /EmptyLatent|Latent/i, height: /EmptyLatent|Latent/i, batch: /EmptyLatent|Latent/i }; if (cmap[pk2] && cmap[pk2].test(nd2.class_type) && nd2.inputs[pk2] != null) { nd2.inputs[pk2] = /^\d+$/.test(nv) ? parseInt(nv) : (/^\d+\.\d+$/.test(nv) ? parseFloat(nv) : nv); break; } } jQuery("#sl_comfy_wf").val(JSON.stringify(wf2)); settings.cWf = JSON.stringify(wf2); saveSettings(); } catch (e) { } });
       } catch (e) { jQuery("#sl_node_list").html('<span style="color:' + CAT.red + ';">❌ JSON 格式错误喵~</span>'); }
     });
-    jQuery("#sl_save_wf").on("click", function () { var raw = jQuery("#sl_comfy_wf").val(); if (!raw) return; try { JSON.parse(raw); settings.cWf = raw; saveSettings(); toast("success", "工作流保存好啦喵~ ✨"); } catch (e) { toast("error", "JSON 格式不对喵…"); } });
+    // ── 工作流库：本地存档(settings.workflows) + ComfyUI服务器端(可选) ──
     if (!settings.workflows) settings.workflows = {};
-    jQuery("#sl_wf_save_as").on("click", function () { var n = jQuery("#sl_wf_name").val() || ("wf_" + Date.now()); settings.workflows[n] = jQuery("#sl_comfy_wf").val(); settings.cWfName = n; saveSettings(); toast("success", "已保存: " + n); });
-    jQuery("#sl_wf_load").on("click", function () { var n = jQuery("#sl_wf_name").val(); if (settings.workflows[n]) { jQuery("#sl_comfy_wf").val(settings.workflows[n]); toast("success", "已加载: " + n); } else toast("info", "输入名称后点加载喵~"); });
-    jQuery("#sl_wf_del").on("click", function () { var n = jQuery("#sl_wf_name").val(); if (settings.workflows[n]) { delete settings.workflows[n]; saveSettings(); toast("success", "已删除: " + n); } });
+    var _srvWfs = [];   // 服务器端工作流文件名（best-effort，拉不到就为空）
+    function wfNames() { var ks = Object.keys(settings.workflows || {}); ks.sort(function (a, b) { return String(a).localeCompare(String(b), 'zh'); }); return ks; }
+    function wfRaw() { return jQuery("#sl_comfy_wf").val() || ""; }
+    function wfValid(raw) { try { JSON.parse(raw); return true; } catch (e) { return false; } }
+    function refreshWfSelect() {
+      var sel = jQuery("#sl_wf_sel"); if (!sel.length) return;
+      var cur = settings.cWfName || "", names = wfNames(), html = "";
+      if (!names.length && !_srvWfs.length) html += '<option value="">（还没有工作流：点「📁 导入JSON」或粘贴后点「➕ 另存为」）</option>';
+      for (var i = 0; i < names.length; i++) {
+        var n = names[i];
+        html += '<option value="' + escAttr(n) + '"' + (n === cur ? ' selected' : '') + '>💾 ' + esc(n) + (n === cur ? ' ✓当前' : '') + '</option>';
+      }
+      for (var j = 0; j < _srvWfs.length; j++) {
+        var s = _srvWfs[j];
+        if (names.indexOf(s) >= 0) continue;
+        html += '<option value="srv::' + escAttr(s) + '">☁ ' + esc(s) + '（来自 ComfyUI，选中即导入）</option>';
+      }
+      sel.html(html);
+    }
+    function loadServerWfList(verbose) {
+      return fetch('/api/sd/comfy/workflows', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, getSTHeaders()), body: '{}' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (list) { _srvWfs = Array.isArray(list) ? list : []; refreshWfSelect(); if (verbose) toast(_srvWfs.length ? 'success' : 'info', _srvWfs.length ? ('服务器端 ' + _srvWfs.length + ' 个工作流') : '服务器端没有工作流（不影响本地存档）'); })
+        .catch(function () { if (verbose) toast('info', '拉取服务器工作流失败（不影响本地存档）'); });
+    }
+    refreshWfSelect();
+    loadServerWfList(false);
+
+    // 下拉选中 → 立即切换（服务器端条目先拉取再入库）
+    jQuery("#sl_wf_sel").on("change", function () {
+      var v = jQuery(this).val(); if (!v) return;
+      if (v.indexOf('srv::') === 0) {
+        var sname = v.slice(5);
+        toast('info', '正在从 ComfyUI 拉取: ' + sname);
+        fetch('/api/sd/comfy/workflow', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, getSTHeaders()), body: JSON.stringify({ file_name: sname }) })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (data) {
+            var wf = typeof data === 'string' ? data : JSON.stringify(data);
+            if (!wfValid(wf)) throw new Error('不是合法 JSON');
+            settings.workflows[sname] = wf; settings.cWf = wf; settings.cWfName = sname; saveSettings();
+            jQuery("#sl_comfy_wf").val(wf); jQuery("#sl_node_list").empty(); refreshWfSelect();
+            toast('success', '已导入并切换: ' + sname);
+          })
+          .catch(function (err) { toast('error', '拉取失败: ' + err.message); refreshWfSelect(); });
+        return;
+      }
+      var n = v, wf2 = settings.workflows[n];
+      if (!wf2) { toast('error', '工作流不存在: ' + n); return; }
+      settings.cWf = wf2; settings.cWfName = n; saveSettings();
+      jQuery("#sl_comfy_wf").val(wf2); jQuery("#sl_node_list").empty();
+      refreshWfSelect();
+      toast('success', '已切换工作流: ' + n);
+    });
+
+    // 保存（覆盖当前选中的名字）
+    jQuery("#sl_wf_save").on("click", function () {
+      var raw = wfRaw(); if (!raw) { toast('info', '工作流是空的喵~'); return; }
+      if (!wfValid(raw)) { toast('error', 'JSON 格式不对喵…'); return; }
+      var n = settings.cWfName || jQuery("#sl_wf_sel").val() || "";
+      if (!n || n.indexOf('srv::') === 0) { toast('info', '还没起名字，用「➕ 另存为」'); return; }
+      settings.workflows[n] = raw; settings.cWf = raw; settings.cWfName = n; saveSettings(); refreshWfSelect();
+      toast('success', '已保存: ' + n);
+    });
+
+    // 另存为
+    jQuery("#sl_wf_save_as").on("click", function () {
+      var raw = wfRaw(); if (!raw) { toast('info', '工作流是空的喵~'); return; }
+      if (!wfValid(raw)) { toast('error', 'JSON 格式不对喵…'); return; }
+      var def = settings.cWfName || ("工作流" + (wfNames().length + 1));
+      var n = window.prompt('给这个工作流起个名字：', def);
+      if (n == null) return;
+      n = String(n).trim(); if (!n) return;
+      if (settings.workflows[n] != null && !window.confirm('「' + n + '」已存在，覆盖？')) return;
+      settings.workflows[n] = raw; settings.cWf = raw; settings.cWfName = n; saveSettings(); refreshWfSelect();
+      toast('success', '已另存为: ' + n);
+    });
+
+    // 重命名
+    jQuery("#sl_wf_rename").on("click", function () {
+      var old = settings.cWfName || jQuery("#sl_wf_sel").val() || "";
+      if (!old || settings.workflows[old] == null) { toast('info', '先在下拉里选一个工作流'); return; }
+      var n = window.prompt('新名字：', old);
+      if (n == null) return;
+      n = String(n).trim();
+      if (!n || n === old) return;
+      if (settings.workflows[n] != null && !window.confirm('「' + n + '」已存在，覆盖？')) return;
+      settings.workflows[n] = settings.workflows[old];
+      delete settings.workflows[old];
+      settings.cWfName = n; saveSettings(); refreshWfSelect();
+      toast('success', '已重命名: ' + old + ' → ' + n);
+    });
+
+    // 删除
+    jQuery("#sl_wf_del").on("click", function () {
+      var n = settings.cWfName || jQuery("#sl_wf_sel").val() || "";
+      if (!n || settings.workflows[n] == null) { toast('info', '先在下拉里选一个工作流'); return; }
+      if (!window.confirm('删除工作流「' + n + '」？（只删插件存档，不动 ComfyUI 里的文件）')) return;
+      delete settings.workflows[n];
+      if (settings.cWfName === n) settings.cWfName = '';
+      saveSettings(); refreshWfSelect();
+      toast('success', '已删除: ' + n);
+    });
+
+    jQuery("#sl_wf_refresh").on("click", function () { loadServerWfList(true); });
+
     jQuery("#sl_wf_import_btn").on("click", function () { jQuery("#sl_wf_import").trigger("click"); });
-    jQuery("#sl_wf_import").on("change", function () { var file = this.files[0]; if (!file) return; var reader = new FileReader(); reader.onload = function (e) { jQuery("#sl_comfy_wf").val(e.target.result); toast("success", "导入成功喵~ ✨"); }; reader.readAsText(file); });
+    jQuery("#sl_wf_import").on("change", function () {
+      var file = this.files[0]; if (!file) return;
+      var input = this;
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        var txt = String(ev.target.result || "");
+        if (!wfValid(txt)) { toast('error', '这个 JSON 格式不对喵…'); input.value = ''; return; }
+        var base = String(file.name || '').replace(/\.json$/i, '').trim() || ('导入' + Date.now());
+        var n = base;
+        if (settings.workflows[n] != null) {
+          if (window.confirm('「' + base + '」已存在，覆盖？\n（点取消 = 存成新名字）')) { /* 覆盖 */ }
+          else { var i = 2; while (settings.workflows[base + '(' + i + ')'] != null) i++; n = base + '(' + i + ')'; }
+        }
+        settings.workflows[n] = txt; settings.cWf = txt; settings.cWfName = n; saveSettings();
+        jQuery("#sl_comfy_wf").val(txt); jQuery("#sl_node_list").empty(); refreshWfSelect();
+        toast('success', '已导入并入库: ' + n);
+      };
+      reader.readAsText(file);
+      input.value = '';
+    });
     jQuery("#sl_style_preset").on("change", function () { settings.stylePreset = jQuery(this).val(); saveSettings(); });
     jQuery("#sl_neg").on("change input", function () { settings.neg = jQuery(this).val(); saveSettings(); });
   } else if (type === "advanced") {

@@ -1,12 +1,11 @@
 // ── SillyImage Lab 消息扫描与触发 ──
 import { slLog, slErr } from './log.js';
 import { settings, getSTContext, escapeHtml, saveSettings } from './settings.js';
-import { extractBodyText, extractBodyContent, hasBodyMarker, stripAiTags, imgBlockHead } from './text-utils.js';
+import { extractBodyText, extractBodyContent, imgBlockHead } from './text-utils.js';
 import { getProfiles, getChatId } from './pipeline/profile.js';
-import { runAuxPipeline } from './pipeline/pipeline.js';
 import { runRosterPipeline } from './pipeline/roster-pipeline.js';
 import { refreshCoopCards } from './sync-cards.js';
-import { renderBodyEnhanced, renderEnhanced, renderEnhancedLite, setRestoreDeps, restoreImageBlocks } from './render.js';
+import { renderEnhancedLite, setRestoreDeps, restoreImageBlocks } from './render.js';
 
 // 注入 render 模块需要的依赖
 setRestoreDeps(getChatId, getSTContext);
@@ -16,7 +15,7 @@ var scanSession = null;
 var sessionIdCounter = 0;
 
 function startScanSession(msgElement, mesId, chatId) {
-    // [AI-Fix] 如果当前会话正在 scanning（await runAuxPipeline 期间），新消息的扫描请求不能覆写它。
+    // [AI-Fix] 如果当前会话正在 scanning（await 协作管线期间），新消息的扫描请求不能覆写它。
     // 原因：覆写后旧 await 的 DOM 引用失效，渲染到僵尸 DOM，消息永久无法显示图片（致命缺陷 1）。
     // 修复：scanning 阶段拒绝新会话，等当前会话 completed 后才允许。
     // 同一条消息正在扫描（await 管线进行中）→ 不重复启动
@@ -53,8 +52,8 @@ function doMarkerCheck(sessionId) {
     if (!session || session.id !== sessionId) return;
     session.tries++;
     var text = session.msgEl.text();
-    // ── v2.4 酒馆AI模式：检测 [img:] 占位符，文本稳定后触发（不依赖正文###标记，该标记由酒馆侧决定） ──
-    if (settings.imgMode === 'main') {
+    // ── 导演模式（唯一模式）：检测 [img:] 占位符，文本稳定后触发 ──
+    {
         if (text.indexOf('[img:') < 0) {
             // 流式输出中可能尚未写出占位符：继续等，最多 8 次(40s)
             if (text !== session.lastText) {
@@ -95,81 +94,6 @@ function doMarkerCheck(sessionId) {
         }
         return;
     }
-    var clean = stripAiTags(text);
-    var startIdx = clean.indexOf('正文###');
-    var endIdx = clean.indexOf('结尾###', startIdx + 1);
-    if (startIdx >= 0 && endIdx > startIdx) {
-        session.phase = 'done';
-        slLog('扫描 #' + sessionId + ' 检测到完整标记，提取正文(' + (endIdx - startIdx - 5) + '字)');
-        var rawStart = text.indexOf('正文###');
-        var rawEnd = text.indexOf('结尾###', rawStart + 1);
-        var bodyText = (rawStart >= 0 && rawEnd > rawStart) ? text.slice(rawStart + 5, rawEnd) : text.slice(startIdx + 5, endIdx);
-        var minBody = settings.storyMode === 'comic' ? 20 : 80;
-        if (bodyText.length >= minBody) {
-            slLog('触发管线(标记模式)');
-            runAuxImageScan(session.msgEl);
-        } else { slLog('正文过短(' + bodyText.length + ')，跳过'); }
-        return;
-    }
-    if (startIdx >= 0 && endIdx < 0) {
-        session.phase = 'wait_end';
-        slLog('扫描 #' + sessionId + ' 检测到 正文###，等待 结尾###');
-        scheduleEndCheck(sessionId);
-        return;
-    }
-    if (session.tries < 3) {
-        slLog('扫描 #' + sessionId + ' 第' + session.tries + '次未检测到标记');
-        scheduleMarkerCheck(sessionId);
-    } else {
-        session.phase = 'done';
-        slLog('扫描 #' + sessionId + ' 3次未检测到标记，使用回退 8s');
-        var backupText = extractBodyText(text);
-        if (backupText.length >= (settings.storyMode === 'comic' ? 20 : 80)) {
-            clearTimeout(session.timer);
-            session.timer = setTimeout(function() {
-                slLog('触发管线(回退模式)');
-                runAuxImageScan(session.msgEl);
-            }, 8000);
-        }
-    }
-}
-
-function scheduleEndCheck(sessionId) {
-    var session = scanSession;
-    if (!session || session.id !== sessionId) return;
-    clearTimeout(session.timer);
-    session.timer = setTimeout(function() { doEndCheck(sessionId); }, 2000);
-}
-
-function doEndCheck(sessionId) {
-    var session = scanSession;
-    if (!session || session.id !== sessionId) return;
-    // [Fix] 等待 结尾### 设上限（30 次×2s=60s）：原实现无限轮询，消息若永远没有 结尾###
-    //（停流/手动输入含标记文本/截断）则每 2s 空转一次永不停（C1）。
-    session.tries++;
-    if (session.tries > 30) {
-        session.phase = 'completed';
-        try { session.msgEl.removeData('sl_session_started'); } catch (e) {}
-        slLog('扫描 #' + sessionId + ' 等待结尾###超时(60s)，放弃（消息有变化时会重新扫描）');
-        return;
-    }
-    var text = session.msgEl.text();
-    var clean = stripAiTags(text);
-    var startIdx = clean.indexOf('正文###');
-    var endIdx = clean.indexOf('结尾###', startIdx + 1);
-    if (endIdx >= 0) {
-        session.phase = 'done';
-        var rawStart = text.indexOf('正文###');
-        var rawEnd = text.indexOf('结尾###', rawStart + 1);
-        var bodyText = (rawStart >= 0 && rawEnd > rawStart) ? text.slice(rawStart + 5, rawEnd) : text.slice(startIdx + 5, endIdx);
-        slLog('扫描 #' + sessionId + ' 检测到 结尾###，提取正文(' + bodyText.length + '字)');
-        if (bodyText.length >= (settings.storyMode === 'comic' ? 20 : 80)) {
-            slLog('触发管线(标记模式)');
-            runAuxImageScan(session.msgEl);
-        } else { slLog('正文过短(' + bodyText.length + ')，跳过'); }
-        return;
-    }
-    scheduleEndCheck(sessionId);
 }
 
 // ── 全量消息恢复 ──
@@ -192,21 +116,14 @@ export function scanAllMsgs() {
             var fb = findBestCachedEntry(chatId, mesId, mesEl.text());
             if (fb && /\[image:/.test(fb.value)) {
                 if (/sl_img_btn/.test(mesEl.html()) || /sl_img_block/.test(mesEl.html())) return;
-                if (hasBodyMarker(fb.value)) {
-                    var bodyContent = fb.value.slice(fb.value.indexOf('正文###') + 5, fb.value.indexOf('结尾###', fb.value.indexOf('正文###') + 5));
-                    renderBodyEnhanced(mesEl, bodyContent, undefined, undefined, fb.key);
-                } else if (settings.imgMode === 'main') {
-                    renderEnhancedLite(mesEl, fb.value, fb.key);
-                } else {
-                    renderEnhanced(mesEl, fb.value, fb.key);
-                }
+                renderEnhancedLite(mesEl, fb.value, fb.key);
             }
         });
     } catch (e) {}
 }
 
 // [AI-Fix] 保存 mesId/chatId 在 await 之前，await 后用它重新查找 DOM。
-// 原因：await runAuxPipeline 可能持续 30+ 秒，期间 ST 可能重渲染消息元素，
+// 原因：await 协作管线可能持续 30+ 秒，期间 ST 可能重渲染消息元素，
 // 导致 await 前捕获的 lastMsg 成为脱离 DOM 的僵尸引用（致命缺陷 1 的子问题）。
 // 修复：await 后通过 mesId 重新查找 DOM，并校验消息文本未被其他会话覆盖。
 export async function runAuxImageScan(messageElement) {
@@ -233,8 +150,8 @@ export async function runAuxImageScan(messageElement) {
         var mesId = mesContainer.length ? mesContainer.attr('mesid') : (Date.now() + '');
         var chatId = getChatId();
         var pipeTimeout = (settings.cTimeout || 180) * 1000 + 30000;
-        // ── v2.4 模式分发：main=酒馆AI模式（占位符协作管线），plugin=旧管线 ──
-        var pipeFn = settings.imgMode === 'main' ? runRosterPipeline : runAuxPipeline;
+        // ── 导演模式（唯一管线）：主模型写 [img:] 占位符 → 协作管线出图 ──
+        var pipeFn = runRosterPipeline;
         // [Fix] 超时改为 resolve({timedOut:true}) 而不是 reject（C8）：
         // (1) 底层管线拿不到 signal，reject 后仍在后台跑完（档案/剧情库写入照常落地），
         //     此时清 sl_aux_scanned 放行重试会跑出第二条管线——双倍 API 调用 + 档案被两次结果互相覆盖；
@@ -284,28 +201,11 @@ export async function runAuxImageScan(messageElement) {
             return;
         }
         var key = getMsgKey(chatId, mesId, freshMsg.text());
-        var rawBody = freshMsg.text();
-        var startIdx = rawBody.indexOf('正文###');
-        var endIdx = rawBody.indexOf('结尾###', startIdx + 1);
-        if (startIdx >= 0 && endIdx > startIdx) {
-            var reconstructed = rawBody.slice(0, startIdx) + '正文###' + enhanced + '结尾###' + rawBody.slice(endIdx + 5);
-            settings.msgMap[key] = reconstructed;
-            if (!settings.msgMapTs) settings.msgMapTs = {};
-            settings.msgMapTs[key] = Date.now();
-            renderBodyEnhanced(freshMsg, enhanced, startIdx, endIdx, key);
-            slLog('标记模式: 增强文本已回填到 正文###...结尾### 区间');
-        } else if (settings.imgMode === 'main') {
-            // v2.4 酒馆AI模式：只替换占位符为图卡，正文/状态栏原文保留（不重建）
-            settings.msgMap[key] = enhanced;
-            if (!settings.msgMapTs) settings.msgMapTs = {};
-            settings.msgMapTs[key] = Date.now();
-            renderEnhancedLite(freshMsg, enhanced, key);
-        } else {
-            settings.msgMap[key] = enhanced;
-            if (!settings.msgMapTs) settings.msgMapTs = {};
-            settings.msgMapTs[key] = Date.now();
-            renderEnhanced(freshMsg, enhanced, key);
-        }
+        // 导演模式：只替换 [img:] 占位符为图卡，正文/状态栏原文保留（不重建）
+        settings.msgMap[key] = enhanced;
+        if (!settings.msgMapTs) settings.msgMapTs = {};
+        settings.msgMapTs[key] = Date.now();
+        renderEnhancedLite(freshMsg, enhanced, key);
         var keys = Object.keys(settings.msgMap);
         if (keys.length > 50) {
             var tsMap = settings.msgMapTs || {};
@@ -401,13 +301,8 @@ function checkLastMessage() {
         var last = all.last();
         if (!last || !last.length) return;
         var rawText = last.text() || '';
-        // v2.4：main 模式只要求 [img: （正文###标记由酒馆侧决定，插件不管）；plugin 模式维持原逻辑
-        if (settings.imgMode === 'main') {
-            if (rawText.indexOf('[img:') < 0) return;
-        } else {
-            // 只检测正文###，不要求结尾###同时存在（startScanSession 会等结尾###）
-            if (rawText.indexOf('正文###') < 0) return;
-        }
+        // 导演模式：只要求 [img:] 占位符（不依赖任何正文标记）
+        if (rawText.indexOf('[img:') < 0) return;
         // 从 DOM 中获取 mesid：优先 closest->parents 兜底
         var mesContainer = last.closest('.mes');
         if (!mesContainer || !mesContainer.length) mesContainer = last.parents('.mes').first();
@@ -451,8 +346,7 @@ function handleMessageChanged(messageId) {
         slLog('消息变更(编辑/swipe) mesid=' + messageId + ', 清除旧渲染');
         resetMessageMarkers(msgText);
         var text = msgText.text() || '';
-        if (settings.imgMode === 'main') { if (text.indexOf('[img:') < 0) return; }
-        else { if (text.indexOf('正文###') < 0) return; }
+        if (text.indexOf('[img:') < 0) return;
         var bodyText = extractBodyText(text);
         if (bodyText.length < (settings.storyMode === 'comic' ? 20 : 80)) { slLog('变更: 正文过短, 跳过'); return; }
         var cachedContent = findBestCached(getChatId(), messageId, text);

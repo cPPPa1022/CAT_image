@@ -1,4 +1,4 @@
-﻿---
+---
 
 【模式：英文自然语言 · Anime 适配】
 
@@ -25,6 +25,29 @@
 - `发型:黑色低发髻，斜刘海` → `black hair in a low bun with side bangs`
 - `衣着:深灰V领紧身短袖` → `a gray v-neck tight short-sleeve shirt`
 - `状态:耳根泛红` → `slight blush on her ears`
+
+## 面部种族显式化（v1.3 新增）
+动漫模型同样会漂向欧美脸。除非角色卡/正文明确写了西方特征（金发碧眼、高鼻深目），
+否则提示词必须包含 `asian` / `east asian` 一类的种族词。
+
+## 静态锚点 → 英文原子（v1.3 新增）
+档案里的量化比例**禁止进提示词**，按 `ratio-to-atom.txt` 换算成英文档位词：
+
+    眼裂≈2.8:1      → almond eyes
+    眼尾下垂5°       → downturned eyes（动漫专有词：tareme）
+    眼尾上挑        → upturned eyes（tsurime）
+    半睁            → jitome / half-closed eyes
+    眼距≈一眼宽      → （不写，默认）
+    眉峰不显        → straight eyebrows
+    肩宽≈2.2头宽     → straight shoulders
+    腰宽≈0.72胸宽    → narrow waist
+    胯宽≈1.15肩宽    → wide hips
+    C罩杯           → medium breasts
+    168cm / 7头身    → tall, long legs
+
+**L2 形体锚每张必写全**（身高感/肩/腰/胸/臀/整体体型）—— 只写 `slender build` 等于没写身材。
+**永久标记每张必写**（`beauty mark under left eye` 之类），用词逐字一致。
+原子总数 15-20 个；超过 25 个会互相冲淡。
 
 ## 场景约束
 每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。

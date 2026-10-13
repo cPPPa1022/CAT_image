@@ -1,0 +1,154 @@
+# 比例 → 档位词 决策表（Ratio to Atom）
+#
+# 用途：静态档案里存的是**量化比例**（内部基准），提示词里必须是**档位词**。
+# 本表给出确定性的换算规则，保证同一个比例永远翻译成同一个词 →
+# 跨轮次、跨图片的长相一致。
+#
+# 铁律：比例本身**禁止**出现在提示词里。它只是"选择器"。
+# 换算完就把比例丢掉，只带走档位词。
+
+---
+# 一、面部
+
+【眼裂长宽比（宽:高）】
+  ≤1.8:1          → 🟡 round eyes
+  1.8 – 2.6 : 1   → 🟡 almond eyes
+  2.6 – 3.4 : 1   → 🟡 almond eyes, narrow eyes
+  >3.4:1          → 🟡 narrow eyes
+
+【眼距（相对一眼宽）】
+  <0.9            → 🟡 close-set eyes
+  0.9 – 1.1       → 【不写】（默认就是一眼宽）
+  >1.1            → 🟡 wide-set eyes
+
+【眼尾倾角】
+  上挑 ≥5°        → 🟢 tsurime · 🟡 upturned eyes
+  −5° ~ +5°       → 【不写】（默认平缓）
+  下垂 ≥5°        → 🟢 tareme · 🟡 downturned eyes
+
+【睁眼程度（眼裂高 / 眼宽）】
+  ≥0.5            → 🟡 large eyes
+  0.3 – 0.5       → 【不写】
+  <0.3            → 🟢 jitome · 🟡 half-closed eyes
+
+【双眼皮】
+  窄双            → 🟡 double eyelids
+  宽双            → 🟡 clear double eyelids
+  单眼皮          → 🟢 monolid
+  内双/肿眼泡      → 🟡 hooded eyes
+
+【眉毛】
+  厚度 >1/2眼高    → 🟢 thick eyebrows
+  厚度 <1/3眼高    → 🟢 thin eyebrows
+  眉峰明显(眉长2/3) → 🟡 arched eyebrows · 🟢 v-shaped eyebrows
+  眉峰不显/平直     → 🟡 straight eyebrows
+  眉尾散           → 🟡 soft natural brows
+
+【鼻子（相对一眼宽）】
+  <0.85           → 🟡 small nose, narrow nose bridge
+  0.85 – 1.05     → 🟡 small nose（默认）
+  >1.05           → 🟡 wide nose
+  鼻尖圆           → 🟡 round nose tip
+  鼻尖尖           → 🟡 pointy nose tip
+
+【嘴唇（厚度 / 唇宽）】
+  <0.25           → 🟡 thin lips
+  0.25 – 0.4      → 【不写】
+  >0.4            → 🟢 thick lips
+
+【上下唇比】
+  1 : 1 – 1 : 1.2 → 🟡 thin lips（整体偏薄感）
+  1 : 1.3 – 1 : 1.5 → 🟡 fuller lower lip
+  >1 : 1.5        → 🟢 thick lips, pouty lips
+
+【唇色】
+  浅粉/淡          → 🟡 pale pink lips
+  自然红/殷红      → 🟡 natural reddish lips · 🟢 red lips
+  无血色           → 🟡 pale lips
+
+【肤色】
+  冷白            → 🟢 pale skin · 🟡 fair cool skin
+  暖白            → 🟡 fair warm skin
+  蜜色/小麦        → 🟡 tan skin
+  深              → 🟢 dark skin
+
+【脸型轮廓（脸宽:脸长）】
+  >0.85           → 🟡 round face
+  0.7 – 0.85      → 🟡 oval face
+  <0.7            → 🟡 heart-shaped face（下颌收窄）/ angular face
+  下颌线分明       → 🟡 sharp jawline
+  下颌线柔和       → 🟡 soft jawline
+
+---
+# 二、身体
+
+【身高】
+  <150            → 🟢 petite
+  150 – 162       → 🟡 average height
+  >162            → 🟢 tall
+
+【头身比】
+  <6 头身          → 🟡 少女人形（petite proportions）
+  6 – 7 头身       → 【不写】
+  >7 头身          → 🟢 long legs · 🟡 tall with long legs
+
+【肩宽（相对头宽）】
+  <2.0            → 🟡 narrow shoulders
+  2.0 – 2.4       → 🟡 straight shoulders
+  >2.4            → 🟢 broad shoulders
+
+【腰胸宽比】
+  <0.75           → 🟢 narrow waist
+  0.75 – 0.90     → 🟡 slim waist
+  >0.90           → 【不写】
+
+【胯肩宽比】
+  <0.95           → 🟡 narrow hips
+  0.95 – 1.10     → 【不写】
+  >1.10           → 🟢 wide hips
+
+【胸部】
+  平              → 🟢 flat chest
+  小巧(A)         → 🟢 small breasts
+  适中(B–C)       → 🟢 medium breasts
+  丰满(D+)        → 🟢 large breasts, cleavage
+
+【大腿（相对腰宽）】
+  明显粗于腰       → 🟢 thick thighs
+
+【整体体型（腰胯比 + 体脂感）】
+  极瘦            → 🟢 slender, skinny
+  纤细            → 🟢 slender
+  匀称            → 【不写】
+  有曲线          → 🟢 curvy · 🟡 hourglass figure
+  丰腴            → 🟢 chubby, curvy · 🟡 plump
+  健壮            → 🟢 muscular · 🟡 athletic build
+
+---
+# 三、年龄（主模型硬需求，不是比例）
+
+  少女（13-17）    → 🟡 teenage girl
+  青年（18-24）    → 🟡 young woman
+  成年（25-34）    → 🟡 young woman（可附具体数字，ZIT 有效）
+  成熟（35-45）    → 🟡 mature female
+  中年（45+）      → 🟡 middle-aged woman
+
+  备注：Z-Image 认年龄数字（视觉锚点），anima 不认 → 数字可保留但**必须配身份词**。
+
+---
+# 四、换算示例
+
+  档案：眼裂≈2.8:1，眼尾下垂5°，眼距≈一眼宽，上下唇≈1:1.2
+  → 取词：almond eyes, narrow eyes, downturned eyes, thin lips
+  → 丢弃：2.8:1 / 5° / 一眼宽 / 1:1.2
+
+  档案：肩宽≈2.2头宽，腰宽≈0.72胸宽，胯宽≈1.15肩宽，C罩杯，168cm，7头身
+  → 取词：straight shoulders, narrow waist, wide hips, medium breasts, tall, long legs
+  → 丢弃：2.2 / 0.72 / 1.15 / C / 168cm / 7
+
+---
+# 五、自检
+
+1. 换算后的词，全部能在 atomic-vocab.txt 里找到吗？
+2. 有没有把比例/数值/角度原样带进提示词？→ 有就是错
+3. 同一个人的同一维度，这轮和上轮取的词一致吗？→ 不一致就是漂移，回查比例

@@ -81,6 +81,12 @@ export function upsertPerson(name, identity, appearance, source) {
         if (!key) return null;
         var existing = r.list[key];
         var isCast = source === 'cast';
+        // v1.3：主模型在占位符里写的「静态锚点」也进 base（来源 'anchor'）
+        // 优先级（高者永不被低者覆盖）：expanded(辅助AI具象化) > cast(角色卡扫描) > anchor(主模型原文)
+        var isAnchor = source === 'anchor';
+        var writesBase = isCast || isAnchor;
+        var newSrc = isCast ? 'cast' : (isAnchor ? 'anchor' : '');
+        var BASE_RANK = { expanded: 3, cast: 2, anchor: 1, '': 0 };
         // [Fix] 同人识别：精确 key 不存在时按名字找同名条目（同一人不同 key 形式：
         // "温若兰" vs "温若兰（邻家人妻）"）——单条→合并；多条→按新来标签精确匹配；仍无→才新建
         if (!existing) {
@@ -110,32 +116,36 @@ export function upsertPerson(name, identity, appearance, source) {
                 key: key, name: name, identity: identity || '',
                 appearance: appearance || '',
                 source: source || 'roster',
-                fromCard: isCast,
-                base: isCast ? (appearance || '') : '',
-                live: isCast ? '' : (appearance || ''),
-                _updated: !isCast
+                fromCard: writesBase,
+                baseSrc: writesBase ? newSrc : '',
+                base: writesBase ? (appearance || '') : '',
+                live: writesBase ? '' : (appearance || ''),
+                _updated: !writesBase
             };
-            slLog('人物表建档: ' + key + (isCast ? '（角色卡档案）' : '（酒馆AI收集）') + (appearance ? '，' + appearance.slice(0, 20) + '…' : ''));
+            slLog('人物表建档: ' + key + (isCast ? '（角色卡扫描）' : isAnchor ? '（主模型锚点）' : '（酒馆AI收集）') + (appearance ? '，' + appearance.slice(0, 20) + '…' : ''));
         } else {
             var newApp = String(appearance || '');
             var changed = false;
-            if (isCast) {
-                // 插件扫描档案 → 权威 base（扫描锚点优先，更详者胜），已有 live 不动
-                if (existing.fromCard && existing.base) {
-                    if (newApp && newApp.length > String(existing.base).length) {
-                        existing.base = newApp;
-                        changed = true;
-                    }
-                } else {
-                    existing.base = newApp || existing.appearance || '';
-                    // 旧条目迁移：此前"酒馆AI收集"的外观降级为 live（动态层），不当权威 base
-                    if (existing.appearance && existing.appearance !== existing.base && existing.live == null) {
-                        existing.live = existing.appearance;
-                    }
+            if (writesBase) {
+                // 静态锚点 → 权威 base。来源优先级：expanded > cast > anchor，同级才比长度（防写短退化）
+                var curSrc = existing.baseSrc || (existing.fromCard ? 'cast' : '');
+                var curRank = BASE_RANK[curSrc] || 0, newRank = BASE_RANK[newSrc] || 0;
+                var took = false;
+                if (newRank > curRank) {
+                    // 更高优先级来源：接管 base（原有 appearance 若有内容降级为 live）
+                    if (existing.live == null && existing.appearance && !existing.base) existing.live = existing.appearance;
+                    existing.base = newApp || existing.base || '';
+                    existing.baseSrc = newSrc;
+                    took = true;
+                } else if (newRank === curRank) {
+                    if (newApp && newApp.length > String(existing.base || '').length) { existing.base = newApp; took = true; }
+                }
+                if (took) {
+                    if (existing.appearance && existing.appearance !== existing.base && existing.live == null) existing.live = existing.appearance;
                     changed = true;
+                    existing.source = newSrc;
                 }
                 existing.fromCard = true;
-                existing.source = 'cast';
             } else {
                 // 酒馆 AI 发来的 → live 逐轮覆盖（不碰 base）
                 if (newApp) {
@@ -157,13 +167,15 @@ export function upsertPerson(name, identity, appearance, source) {
 }
 
 // ── 批量应用占位符人物段 ──
-export function applyPersonSegments(segments) {
+// v1.3：占位符人物段里的 appearance = 静态锚点（照抄角色卡）→ 默认写入 base（source='anchor'）
+export function applyPersonSegments(segments, source) {
     var n = 0;
     if (!segments || !segments.length) return n;
+    var src = source || 'anchor';
     for (var i = 0; i < segments.length; i++) {
         var s = segments[i];
         if (!s || !s.name) continue;
-        upsertPerson(s.name, s.identity, s.appearance, 'placeholder');
+        upsertPerson(s.name, s.identity, s.appearance, src);
         n++;
     }
     return n;

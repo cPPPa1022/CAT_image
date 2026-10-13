@@ -1,0 +1,128 @@
+# 生图原子词表（Atomic Vocab）
+#
+# 用途：把「静态档案」里的量化比例翻译成**生图模型真正认得的词**。
+# 核心原则：拆分粒度 = 模型词表的粒度。拆得比模型词表更细 = 噪音。
+#
+# 标记说明：
+#   🟢 = 模型有标准标签（Danbooru / 训练集里的固有词）→ 直接用
+#   🟡 = 无标准标签，但 caption 里常见自然语言 → 用短语，禁止写数值
+#   🔴 = 模型没有任何对应表示 → **禁止写进提示词**，只留在档案里当内部基准
+#
+# 铁律：
+#   1. 提示词里禁止出现任何数值/比例/角度/长度单位（2.8:1、≈一眼宽、5°、168cm、C罩杯…）
+#   2. 比例的唯一作用是"决定选哪个档位词"，选完即丢
+#   3. 每张图按 L1→L2→L3 顺序取词，总预算 15-20 个原子；超过 25 个会互相冲淡
+
+---
+# 一、分层与预算
+
+L1 身份锚（每张必写，5-7 个）—— 决定"是不是同一个人"
+   脸型轮廓 + 眼型 + 瞳色 + 永久标记 + 发型
+L2 形体锚（每张必写，4-6 个）—— 决定"身材"
+   身高感 + 肩 + 腰 + 胸 + 臀胯 + 整体体型
+L3 细节层（构图允许时写，5-8 个）—— 提高还原度
+   眉毛 + 鼻子 + 嘴唇 + 睫毛 + 肤质
+   （特写必写；中远景可省）
+
+词序（越靠前权重越高）：
+  人种 → 年龄 → 脸型 → 眼睛 → 标记 → 发型 → 体型 → 衣着 → 动作 → 场景 → 光影
+
+---
+# 二、面部原子（13 组）
+
+【种族基底】
+  🟡 asian / east asian / japanese
+  （ZIT 模式必须写；anima 模式建议写，防止欧美脸）
+
+【年龄感】—— 主模型硬需求，禁止留空
+  🟡 teenage girl / young woman / mature female / middle-aged woman
+
+【脸型】
+  轮廓   🟡 round face / oval face / heart-shaped face / angular face / square face
+  下颌线 🟡 soft jawline / smooth jawline / sharp jawline / wide jaw
+  下巴   🟢 pointy chin · 🟡 round chin / small chin / cleft chin
+
+【眼睛】
+  眼型   🟢 tareme（下垂眼）/ tsurime（上挑眼）/ jitome（半睁眼）
+         · 🟡 almond eyes / round eyes / narrow eyes / large eyes
+  眼睑   🟢 monolid（单眼皮）· 🟡 double eyelids / hooded eyes
+  瞳色   🟢 brown eyes / amber eyes / blue eyes / green eyes / red eyes
+         · 🟡 gradient eyes / heterochromia
+  瞳孔   🟢 slit pupils / constricted pupils · 🟡 dilated pupils
+  睫毛   🟢 long eyelashes / thick eyelashes
+  眼周   🟢 eyebags / tears · 🟡 aegyo-sal（卧蚕）/ dark circles
+
+【眉毛】
+  粗细   🟢 thick eyebrows / thin eyebrows
+  形状   🟢 v-shaped eyebrows / furrowed brow · 🟡 straight eyebrows / softly arched eyebrows
+  眉色   🟡 dark brown eyebrows / brows match hair color
+
+【鼻子】—— anime 模型鼻子标签极少，只用 🟡
+  🟡 small nose / straight nose bridge / round nose tip / narrow nostrils / button nose
+
+【嘴唇】
+  厚度   🟢 thick lips · 🟡 thin lips
+  唇形   🟡 defined cupid's bow / round lips / upturned lip corners
+  唇色   🟢 red lips / lipstick · 🟡 pale pink lips / natural lip color
+
+【肤色肤质】
+  色调   🟢 pale skin / dark skin · 🟡 fair warm skin / fair cool skin / tan skin
+  肤质   🟡 smooth skin / glossy skin / matte skin / visible pores
+
+【发型发色】
+  长度   🟢 long hair / short hair / medium hair / very long hair
+  形态   🟢 low bun / ponytail / high ponytail / twintails / braid / hime cut
+  刘海   🟢 bangs / blunt bangs / swept bangs / hair between eyes · 🟡 no bangs
+  发色   🟢 black hair / brown hair / blonde hair / silver hair
+         · 🟡 gradient hair / two-tone hair
+
+【永久标记】—— 唯一辨识度核心，每张必写
+  🟢 mole / beauty mark / freckles / scar / birthmark / tattoo
+  + 🟡 位置：under left eye / beside mouth / on her cheek / below collarbone
+  例：beauty mark under left eye（左眼角外侧痣）
+
+---
+# 三、身体原子（7 组）—— 最容易被漏，必须每张写 L2
+
+【身高感】
+  🟢 petite（娇小）/ tall（高挑）· 🟡 average height
+
+【肩】
+  🟢 broad shoulders · 🟡 narrow shoulders / straight shoulders
+
+【腰】
+  🟢 narrow waist · 🟡 slim waist / straight waistline / soft belly
+
+【胸】
+  🟢 flat chest / small breasts / medium breasts / large breasts / cleavage
+
+【臀胯】
+  🟢 wide hips / thick thighs · 🟡 narrow hips / round hips
+
+【腿】
+  🟢 long legs / thick thighs · 🟡 slender legs
+
+【整体体型】
+  🟢 slender / curvy / chubby / muscular
+  · 🟡 hourglass figure / pear-shaped / athletic build
+
+---
+# 四、禁止写进提示词的内容（🔴 只留档案）
+
+眼裂长宽比（2.8:1）        眼距（≈一眼宽）           三庭比例（1:1:1）
+眼尾角度（5°）              眉峰位置（眉长2/3处）      鼻宽比（0.9眼宽）
+鼻长占比（中庭1/2）         唇宽比（1.1眼距）          上下唇比（1:1.2）
+肩宽头宽比（2.2头宽）       腰胸宽比（0.72）           胯肩宽比（1.15）
+头身比（7头身）             身高数值（168cm）          罩杯字母（C杯）
+绝对长度单位（cm/mm）
+
+→ 这些**必须翻译成上面的档位词**后再写。比例是选择器，不是描述。
+
+---
+# 五、自检
+
+1. 提示词里还有任何数字/比例/角度吗？→ 有就删，换成档位词
+2. L1 身份锚（脸型/眼型/瞳色/标记/发型）写全了吗？
+3. L2 形体锚（身高感/肩/腰/胸/臀/体型）写全了吗？—— 只写 slender 等于没写
+4. 有没有用角色名代替外貌？（硬禁止）
+5. 原子总数在 15-20 之间吗？超过 25 个就删 L3

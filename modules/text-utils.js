@@ -81,6 +81,29 @@ export function cleanAnimePrompt(prompt) {
 // 分段规则（| 分隔）：
 //   第1段=场景描述（必填）；其余段："人物:" 前缀=建档段（分号可多条），无前缀=提示词要点
 
+// ── 人物段解析（v1.3 新增冒号式）──
+// ① 冒号式（主推）：名字（可选标签）：静态锚点
+//      [img:…|人物:温若兰（邻家人妻）：鹅蛋脸，杏眼，168cm，胸臀丰满|要点]
+//      冒号是「硬边界」，不受标签/逗号影响，解析零歧义
+// ② 括号式（旧）：名字（标签），外貌
+// ③ 逗号式（旧）：名字，外貌
+// ④ 裸名：名字（只有名字，无外貌）
+export function parsePersonString(pStr) {
+    var s = String(pStr || '').trim().replace(/^人物[：:]\s*/, '');
+    if (!s) return null;
+    // ① 冒号式（最优先）
+    var cm = s.match(/^([^：:（(]{1,20})(?:[（(]([^）)]{1,30})[）)])?\s*[：:]\s*([\s\S]+)$/);
+    if (cm) return { name: (cm[1] || '').trim(), identity: (cm[2] || '').trim(), appearance: (cm[3] || '').trim() };
+    // ② 括号式
+    var bm = s.match(/^([^（(]{1,20})[（(]([^）)]{1,30})[）)]\s*[，,]?\s*([\s\S]*)$/);
+    if (bm) return { name: (bm[1] || '').trim(), identity: (bm[2] || '').trim(), appearance: (bm[3] || '').trim() };
+    // ③ 逗号式（[Fix] 原实现读 nameM[3] 恒为 undefined → 外貌被误存进 identity、appearance 为空）
+    var km = s.match(/^([^，,]{1,20})\s*[，,]\s*([\s\S]*)$/);
+    if (km) return { name: (km[1] || '').trim(), identity: '', appearance: (km[2] || '').trim() };
+    // ④ 裸名
+    return { name: s, identity: '', appearance: '' };
+}
+
 // 从文本中提取所有 [img:…] 占位符 → [{ scene, personSegments:[{name,identity,appearance}], topic, raw }]
 export function findImagePlaceholders(text) {
     var result = [];
@@ -107,16 +130,8 @@ export function findImagePlaceholders(text) {
                 for (var pIdx = 0; pIdx < persons.length; pIdx++) {
                     var pStr = persons[pIdx].trim().replace(/^人物[：:]\s*/, '');
                     if (!pStr) continue;
-                    var nameM = pStr.match(/^([^（(]{1,20})[（(]([^）)]{1,30})[）)]\s*[，,]?\s*([\s\S]*)$/) || pStr.match(/^([^，,]{1,20})\s*[，,]\s*([\s\S]*)$/);
-                    if (nameM) {
-                        personSegments.push({
-                            name: nameM[1].trim(),
-                            identity: (nameM[2] !== undefined ? nameM[2].trim() : ''),
-                            appearance: (nameM[3] !== undefined ? nameM[3].trim() : '')
-                        });
-                    } else {
-                        personSegments.push({ name: pStr, identity: '', appearance: '' });
-                    }
+                    var _ps = parsePersonString(pStr);
+                    if (_ps) personSegments.push(_ps);
                 }
             } else {
                 topicParts.push(seg);

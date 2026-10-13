@@ -8,6 +8,8 @@ export async function loadPrompts(baseUrl) {
     var files = [
         'static-profile/system.txt',
         'roster/system.txt',
+        'atomic-vocab.txt',
+        'ratio-to-atom.txt',
         'pipeline/zit-overlay.txt',
         'pipeline/anime-overlay.txt',
         'pipeline/anime-tag-overlay.txt',

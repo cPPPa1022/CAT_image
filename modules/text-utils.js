@@ -81,6 +81,28 @@ export function cleanAnimePrompt(prompt) {
 // 分段规则（| 分隔）：
 //   第1段=场景描述（必填）；其余段："人物:" 前缀=建档段（分号可多条），无前缀=提示词要点
 
+// ── 多人切分（v1.4.1）──
+// 【为什么不能直接 split('；')】占位符里 '；' 有两种含义：
+//   ① 分隔多个人物：人物:甲（标签）：外貌；人物:乙（标签）：外貌
+//   ② 人物段内部的字段分层：人物:甲（标签）：脸；身高；痣   ← 会被误拆成 3 个假人物（"身高168cm" / "左眼角有美人痣"）
+// 规则：以「人物:」开头的片段 = 下一个人；否则，若当前已解析出带外貌的人物（含「：」）→ 视为外貌续行合并回去；
+//       若当前只是裸名（无「：」）→ 视为下一个人（兼容「人物:甲；乙」）。
+export function splitPersonList(raw) {
+    var parts = String(raw || '').split('；');
+    var out = [], cur = '';
+    for (var i = 0; i < parts.length; i++) {
+        var frag = parts[i];
+        var isNew;
+        if (i === 0) isNew = true;
+        else if (/^\s*人物[：:]/.test(frag)) isNew = true;
+        else isNew = !/[：:]/.test(cur);          // 当前还是裸名 → 新人；已有外貌 → 续行
+        if (isNew) { if (cur.trim()) out.push(cur.trim()); cur = frag; }
+        else { cur += '；' + frag; }
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+}
+
 // ── 人物段解析（v1.3 新增冒号式）──
 // ① 冒号式（主推）：名字（可选标签）：静态锚点
 //      [img:…|人物:温若兰（邻家人妻）：鹅蛋脸，杏眼，168cm，胸臀丰满|要点]
@@ -126,11 +148,9 @@ export function findImagePlaceholders(text) {
             }
             var pm = seg.match(/^人物[：:]\s*([\s\S]*)$/);
             if (pm) {
-                var persons = pm[1].split('；');
+                var persons = splitPersonList(pm[1]);
                 for (var pIdx = 0; pIdx < persons.length; pIdx++) {
-                    var pStr = persons[pIdx].trim().replace(/^人物[：:]\s*/, '');
-                    if (!pStr) continue;
-                    var _ps = parsePersonString(pStr);
+                    var _ps = parsePersonString(persons[pIdx]);
                     if (_ps) personSegments.push(_ps);
                 }
             } else {

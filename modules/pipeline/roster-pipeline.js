@@ -25,7 +25,7 @@ function buildRosterSystemPrompt() {
     var vocab = isPromptsLoaded() ? (getPrompt('atomic-vocab.txt') || '') : '';
     if (vocab) parts.push(vocab);
     var pipeMode = getActiveMode();
-    var overlayFile = 'pipeline/' + (pipeMode === 'anime_tag' ? 'anime-tag-overlay' : pipeMode === 'anime' ? 'anime-overlay' : 'zit-overlay') + '.txt';
+    var overlayFile = 'pipeline/' + (pipeMode === 'anima' ? 'anima-overlay' : pipeMode === 'anime_tag' ? 'anime-tag-overlay' : pipeMode === 'anime' ? 'anime-overlay' : 'zit-overlay') + '.txt';
     var overlay = isPromptsLoaded() ? (getPrompt(overlayFile) || '') : '';
     if (overlay) parts.push(overlay);
     if (settings.nsfwEnhance) {

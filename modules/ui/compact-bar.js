@@ -3,7 +3,7 @@ import { CAT, getCatStatusFace } from './theme.js';
 import { catSVG, catStatusText } from './cat.js';
 import { setHeadStatus } from './panel.js';
 import { toast, chkProf } from './utils.js';
-import { settings, saveSettings, getActiveMode } from '../settings.js';
+import { settings, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
 import { getCharacterName, scanCharacterProfile } from '../pipeline/profile.js';
 import { getScannerStatus } from '../scanner.js';
 import { getQueueLength } from '../queue.js';
@@ -70,10 +70,10 @@ export function refreshCompactBar() {
   if (!_compactEl || !_compactEl.is(':visible')) return;
   var cn = getCharacterName() || '', hasChat = !!cn;
   jQuery('#sl_comp_char').text(hasChat ? cn : '还没有选角色喵~');
-  jQuery('#sl_comp_model').text(hasChat ? ((getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') ? '🎬 ANIME' : '🖼️ ZIT') : '');
+  jQuery('#sl_comp_model').text(hasChat ? (isEnglishMode() ? (getActiveMode() === 'anima' ? '🎬 ANIMA' : '🎬 ANIME') : '🖼️ ZIT') : '');
   var hp = chkProf();
   if (!hasChat) { jQuery('#sl_comp_profile').text('').hide(); jQuery('#sl_comp_scan').hide(); }
-  else if (hp) { jQuery('#sl_comp_profile').text('📦 已扫描' + (function(){try{var p=JSON.parse(localStorage.sillab_settings);var cn=Object.keys(p.profiles||{})[0];var m=p.profiles[cn]&&p.profiles[cn].meta&&p.profiles[cn].meta.modelMode;return m?(' 🔒'+({zit:'ZIT',anime:'Anime',anime_tag:'Tag'}[m]||m)):'';}catch(e){return'';}})()).css({ background: CAT.green + '1F', color: CAT.green }).show(); jQuery('#sl_comp_scan').hide(); }
+  else if (hp) { jQuery('#sl_comp_profile').text('📦 已扫描' + (function(){try{var p=JSON.parse(localStorage.sillab_settings);var cn=Object.keys(p.profiles||{})[0];var m=p.profiles[cn]&&p.profiles[cn].meta&&p.profiles[cn].meta.modelMode;return m?(' 🔒'+({zit:'ZIT',anime:'Anime',anime_tag:'Tag',anima:'Anima'}[m]||m)):'';}catch(e){return'';}})()).css({ background: CAT.green + '1F', color: CAT.green }).show(); jQuery('#sl_comp_scan').hide(); }
   else { jQuery('#sl_comp_profile').text('🔍 未扫描').css({ background: CAT.red + '1F', color: CAT.red }).show(); jQuery('#sl_comp_scan').show(); }
   var ss = getScannerStatus(), sm = { off: '猫尾收起', idle: '打盹中 zZ', waiting_body: '等故事来…', waiting_end: '猫爪码字中…', scanning: '思考小鱼干中…' };
   jQuery('#sl_comp_status').text(sm[ss] || ss);

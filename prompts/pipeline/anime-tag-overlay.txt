@@ -21,7 +21,8 @@
 6. 视角写进标签：`from below, from above, close-up, cowboy shot, full body`
 7. 权重语法：`(tag:1.2)` 常规加重，不超过 1.5
 8. 禁止任何中文、分类前缀
-9. 年龄/体型关键词必须显式写标签（`young girl, petite, flat chest`）
+9. **年龄/体型必须显式写标签**（`mature female, tall, large breasts, narrow waist, wide hips`）
+   ⚠️ 缺体型标签时动漫模型**默认偏幼态（萝莉化）**；禁止只写 `slender` 了事
 10. 所有持久性规则跟 ZIT 一样
 
 ## 动态字段转标签

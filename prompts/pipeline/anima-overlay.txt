@@ -1,0 +1,77 @@
+---
+
+【模式：Anima 混合式 · Danbooru 标签 + 自然语言】
+
+Anima 系模型由两类语料共同训练：
+- **Danbooru 标签** → 擅长「结构 / 精度 / 构图」（人物长相、体型、衣着、镜头）
+- **自然语言 caption** → 擅长「氛围 / 光影 / 情绪」（画面质感、光线、气氛）
+
+**纯标签会丢氛围，纯描述会丢结构与精度。** 本模式采用三段式混合写法。
+
+## 提示词结构（三段式，顺序固定）
+
+    ① 结构段（Danbooru 标签） —— 人种/年龄/脸/体型/衣着/姿势，逗号+空格分隔，全小写
+    ② 氛围段（自然语言一句）   —— 光影 / 氛围 / 情绪，一句英文，≤40 词
+    ③ 构图段（标签）          —— 景别 / 机位 / 景深，3-5 个标签
+
+示例：
+    asian, mature female, tall, large breasts, narrow waist, wide hips, long legs, oval face,
+    almond eyes, brown eyes, black hair, low bun, beauty mark under left eye, light gray cardigan,
+    champagne silk camisole, sheer black stockings. A warm floor lamp spills amber light across
+    her skin while cold window light rims her bare shoulder, the room quiet and close. side view,
+    close-up, shallow depth of field
+
+## 分工表（关键，别用错）
+
+| 内容 | 用什么写 | 理由 |
+|---|---|---|
+| 人种 / 年龄 / 性别 | **标签** | `asian` `mature female` 绑定强 |
+| 脸型 / 眼睛 / 眉毛 / 头发 | **标签** | 结构化、可复现 |
+| 永久标记（痣/疤） | **标签** | `mole` `beauty mark` 绑定明确 |
+| **体型（胸/腰/臀/腿/身高）** | **标签** | `large breasts` `narrow waist` 是最有效的体型控制手段 |
+| 衣着 / 材质 / 状态 | **标签** | `silk` `lace` `sheer` `strap slipping` 视觉绑定明确 |
+| 姿势 / 动作 | **标签 + 短语** | `lying on sofa` `hand covering mouth` |
+| **光影 / 氛围 / 情绪** | **自然语言** | 标签覆盖不全，只有自然语言带得出质感 |
+| 景别 / 机位 / 景深 | **标签** | `close-up` `from below` `shallow depth of field` 精度更高 |
+
+## 书写规则
+1. 结构段：全小写，空格代替下划线，逗号+空格分隔（仅 `score_*` 保留下划线）
+2. 氛围段：**只写一句**，只写光影/氛围/情绪，**禁止复述结构信息**（不要在里面再写脸和衣服）
+3. 构图段：3-5 个标签
+4. **禁止出现中文**、禁止分类前缀（`脸型:` `衣着:`）
+5. 权重语法：`(tag:1.2)`，不超过 1.5
+6. 结构段标签 **15-20 个**；超过 25 个会互相冲淡
+7. 标签必须真实存在于 Danbooru 标签库；不确定的用自然语言代替，**不要生造下划线标签**
+
+## ⚠️ 年龄 / 体型必须用标签显式写全（防幼态化）
+Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成年角色必须写全：
+
+    mature female, tall, large breasts, narrow waist, wide hips, long legs
+
+- 胸：`flat chest` / `small breasts` / `medium breasts` / `large breasts` / `huge breasts`
+- 腰：`narrow waist` / `slim waist`
+- 臀：`wide hips` / `thick thighs`
+- 腿：`long legs` / `thick thighs`
+- 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged`
+
+**禁止只写 `slender` / `slim` 这类体脂词了事** —— 那等于没写身材，模型会退回默认幼态。
+
+## 静态锚点 → 标签 / 自然语言（v1.3）
+档案里的量化比例**禁止进提示词**，按 `ratio-to-atom.txt` 换算：
+
+    眼裂≈2.8:1    → almond eyes        腰宽≈0.72胸宽 → narrow waist
+    眼尾下垂5°     → tareme             胯宽≈1.15肩宽 → wide hips
+    C罩杯          → medium breasts     168cm/7头身   → tall, long legs
+    眼距≈一眼宽    → （不写，默认）
+
+永久标记每张必写：标签用 `mole` / `beauty mark`，位置用短语补（`mole, under left eye`）。
+
+## 场景约束
+每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。
+
+## 自检
+1. 结构段是纯标签吗？氛围段是自然语言吗？两者有没有混在一起？
+2. 体型标签（胸/腰/臀/腿）写全了吗？只写 slender 不算
+3. 氛围段有没有复述结构信息？→ 有就删
+4. 出现中文了吗？→ 有就删
+5. 永久标记写了吗？用词和上一轮一致吗？

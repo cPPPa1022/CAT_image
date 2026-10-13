@@ -19,7 +19,9 @@
 3. 权重语法：`(keyword:1.5)` 常规加重，最高不超过 2.0
 4. 禁止出现中文、禁止分类前缀（脸型:、衣着: 等）
 5. 所有持久性规则（衣着原文复制、发型合并、配饰/印记必写）跟 ZIT 一样
-6. 年龄/体型关键词必须显式写出来（示例：`young girl, petite body, flat chest`）
+6. **年龄/体型关键词必须显式写全**（示例：`mature female, tall, large breasts, narrow waist, wide hips`）
+   ⚠️ 年龄/体型缺失时动漫模型**默认偏幼态（萝莉化）**。成年角色必须把**胸部与腰臀**写出来，
+   禁止只写 `slender` / `slim` 这类体脂词了事
 
 ## 动态字段转英文
 - `发型:黑色低发髻，斜刘海` → `black hair in a low bun with side bangs`

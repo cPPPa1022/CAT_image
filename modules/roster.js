@@ -225,7 +225,9 @@ export function importFromCast(cast) {
         if (!c) continue;
         var label = (c.label || '').trim();
         var appearance = '';
-        if (mode === 'anime' && c.enPrompt) appearance = c.enPrompt;      // 英文锚点为整体描述，暂不拆维度
+        // anima 混合模式：结构用标签，所以优先 enTags；没有则退回 enPrompt
+        if (mode === 'anima' && (c.enTags || c.enPrompt)) appearance = c.enTags || c.enPrompt;
+        else if (mode === 'anime' && c.enPrompt) appearance = c.enPrompt;   // 英文锚点为整体描述，暂不拆维度
         else if (mode === 'anime_tag' && c.enTags) appearance = c.enTags;
         else appearance = identityAnchorOnly(c.static || '');             // 中文：只保留脸/身形/永久标记
         if (c.body && appearance && !/身形/.test(appearance)) appearance += '；身形：' + c.body;

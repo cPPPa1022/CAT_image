@@ -1,7 +1,7 @@
 // ── SillyImage Lab 角色档案管理 ──
 // 职责：角色卡扫描、档案增删查、NPC 生命周期、[FACE] 占位符解析
 import { slLog, slErr } from '../log.js';
-import { settings, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings, getActiveMode } from '../settings.js';
+import { settings, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
 import { imgCacheSet } from '../cache.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
@@ -532,12 +532,16 @@ export function resolveFacePrompt(rawPrompt) {
             // 1. cast 主角团 → 按模型选语言（Anime:enTags, ZIT:static）
             if (cast[charName]) {
                 // [Fix] 统一走 getActiveMode()（锁定>设置>zit）：原实现无 settings.modelType 回退，未锁定时永远按 zit 选锚点语言（C6）。
-                var boundMode = getActiveMode(); var castAnchor = cast[charName].static; if (boundMode === 'anime' && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt; else if (boundMode === 'anime_tag' && cast[charName].enTags) castAnchor = cast[charName].enTags;
-                if (castAnchor) anchor = (boundMode === 'anime' || boundMode === 'anime_tag') ? castAnchor : stripAnchors(castAnchor);
+                var boundMode = getActiveMode(); var castAnchor = cast[charName].static;
+                if (boundMode === 'anima' && (cast[charName].enTags || cast[charName].enPrompt)) castAnchor = cast[charName].enTags || cast[charName].enPrompt;
+                else if (boundMode === 'anime' && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt;
+                else if (boundMode === 'anime_tag' && cast[charName].enTags) castAnchor = cast[charName].enTags;
+                if (castAnchor) anchor = isEnglishMode(boundMode) ? castAnchor : stripAnchors(castAnchor);
             // 2. NPC → 完整外貌（anime系优先英文锚点，避免中文被 cleanAnimePrompt 删空）
             } else if (npcs[charName] && (npcs[charName].static || npcs[charName].enPrompt || npcs[charName].enTags)) {
                 var npcMode = getActiveMode();
-                if (npcMode === 'anime' && npcs[charName].enPrompt) anchor = npcs[charName].enPrompt;
+                if (npcMode === 'anima' && (npcs[charName].enTags || npcs[charName].enPrompt)) anchor = npcs[charName].enTags || npcs[charName].enPrompt;
+                else if (npcMode === 'anime' && npcs[charName].enPrompt) anchor = npcs[charName].enPrompt;
                 else if (npcMode === 'anime_tag' && npcs[charName].enTags) anchor = npcs[charName].enTags;
                 else anchor = stripAnchors(npcs[charName].static);
             // 3. User → userProfile 档案

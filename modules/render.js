@@ -1,6 +1,6 @@
 // ── SillyImage Lab 渲染 ──
 import { slLog, slErr } from './log.js';
-import { settings, COLORS, escapeHtml, getActiveMode } from './settings.js';
+import { settings, COLORS, escapeHtml, getActiveMode, isEnglishMode } from './settings.js';
 
 import { imgCacheGet, imgCacheGetById } from './cache.js';
 import { extractImagePrompt, cleanAnimePrompt, imgBlockHead } from './text-utils.js';
@@ -129,7 +129,7 @@ export function extractImgBlocksFromEnhanced(enhancedText, blockKey) {
         // [Fix] 提示词只用【提示词】块内容（无则回退场景）：导演模式场景是主 LLM 写的长叙事
         // （人物动作/表情/衣着），拼进提示词会把剧情文字+角色名喂给生图模型
         var fullPrompt = resolveFacePrompt(promptContent || scene);
-        if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
+        if (isEnglishMode()) { var _c = cleanAnimePrompt(fullPrompt); if (_c) fullPrompt = _c; }
         // [Fix] 旧缓存 key 兼容（644d40c 前缓存 key=scene+', '+prompt），否则刷新后需重新生成
         var bid = blockKey ? blockKey + '#' + blockIdx : '';
         blockIdx++;

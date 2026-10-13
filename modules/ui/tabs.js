@@ -39,7 +39,7 @@ export function renderHomeTab() {
   h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:' + CAT.text + ';">' + esc(cn) + '</div><div style="font-size:11px;color:' + CAT.sub + ';margin-top:2px;">' + '🎬 导演模式 · 主模型指挥' + ' · ' + (settings.autoGen === 1 ? '自动出图' : '手动出图') + '</div></div>';
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
-  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ((getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') ? '🎬 Anime' : '🖼️ ZIT') + '</span>';
+  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ({ zit: '🖼️ ZIT', anime: '🎬 Anime', anime_tag: '🎬 Tag', anima: '🎬 Anima' }[getActiveMode()] || '🖼️ ZIT') + '</span>';
   h += '<span style="' + chip(hp ? CAT.green + '1F' : CAT.red + '1F', hp ? CAT.green : CAT.red) + '">' + (hp ? '📦 已扫描' : '🔍 未扫描') + '</span>';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">🐟 队列 ' + ql + '</span>';
   h += '</div></div>';
@@ -95,10 +95,10 @@ export function renderSettingsPage() {
   pushPage(function (body) {
     var f = fi(), h = '';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_plugin_on', settings.pluginOn !== false, '插件开启', '关掉就停止扫描与出图') + '</div>';
-    h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '"><option value="zit"' + (settings.modelType === 'zit' ? ' selected' : '') + '>ZIT（中文提示词）</option><option value="anime"' + (settings.modelType === 'anime' ? ' selected' : '') + '>Anime（英文描述）</option><option value="anime_tag"' + (settings.modelType === 'anime_tag' ? ' selected' : '') + '>Anime Tag（英文标签）</option></select></div>';
+    h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '"><option value="zit"' + (settings.modelType === 'zit' ? ' selected' : '') + '>ZIT（中文提示词）</option><option value="anima"' + (settings.modelType === 'anima' ? ' selected' : '') + '>🎬 Anima 混合（标签定结构 + 自然语言写氛围）★ Anima 系模型推荐</option><option value="anime"' + (settings.modelType === 'anime' ? ' selected' : '') + '>Anime（纯英文描述）</option><option value="anime_tag"' + (settings.modelType === 'anime_tag' ? ' selected' : '') + '>Anime Tag（纯英文标签）</option></select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">Anima 系模型由 Danbooru 标签 + 自然语言 caption 混合训练：<b>纯标签丢氛围，纯描述丢结构</b> → 用混合模式效果最好。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('🐟', '配图偏好', '这只猫什么时候画图') + '<select id="sl_image_mode" style="' + f + '"><option value="always"' + (settings.imageMode === 'always' ? ' selected' : '') + '>总是配图（每轮 ≥1 张）</option><option value="encourage"' + (settings.imageMode === 'encourage' ? ' selected' : '') + '>鼓励配图（该插就插）</option><option value="key"' + (settings.imageMode === 'key' ? ' selected' : '') + '>关键场景（宁缺毋滥）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🖼️', '图块尺寸', '图卡里图片的宽度（分辨率低建议调小）') + '<select id="sl_img_width" style="' + f + '"><option value="100%"' + ((settings.imgBlockWidth || '55%') === '100%' ? ' selected' : '') + '>大（100%）</option><option value="75%"' + ((settings.imgBlockWidth || '55%') === '75%' ? ' selected' : '') + '>中（75%）</option><option value="55%"' + ((settings.imgBlockWidth || '55%') === '55%' ? ' selected' : '') + '>小（55% · 默认）</option><option value="40%"' + ((settings.imgBlockWidth || '55%') === '40%' ? ' selected' : '') + '>迷你（40%）</option></select></div>';
-    h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', 'v1.2 起唯一流程（画师模式已移除）') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签），外貌|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
+    h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', 'v1.2 起唯一流程（画师模式已移除）') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签）：静态外貌特征|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
     h += '<div style="' + card() + '">' + cardHead('🖥️', '前端卡配图（酒馆助手 iframe 应用）', 'Narrator / 检查站这类"重前端卡"专用') +
       switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走导演管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
       '<div style="margin-top:10px;"><span style="' + lbl() + '">走哪条管线</span><select id="sl_fe_mode" style="' + f + '">' +
@@ -113,7 +113,7 @@ export function renderSettingsPage() {
       '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；每条剧情都会多一次辅助 AI 调用（导演管线的开销）。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('📝', '前置提示词', '拼到每张提示词最前') + '<input id="sl_prompt_prefix" type="text" value="' + escAttr(settings.promptPrefix || '') + '" style="' + f + '" placeholder="留空则不生效"></div>';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_show_prompt', settings.showGenPrompt === true, '图块显示完整提示词', '默认关闭：图块只显示短标题（详细字段只进生成链，用户看不到）；调试时打开可看到每张图的完整生成提示词') + '</div>';
-    h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', '仅 Anime / Tag 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
+    h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' || settings.modelType === 'anima' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', 'Anime / Tag / Anima 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
     h += '<div style="text-align:center;font-size:10px;color:' + CAT.mute + ';padding:6px 0 2px;">所有改动即时保存 · 无需手动保存</div>';
     body.html(h);
     bindSettingsEvents(body);
@@ -121,7 +121,7 @@ export function renderSettingsPage() {
 }
 export function bindSettingsEvents(b) {
   b.off('change', '#sl_plugin_on').on('change', '#sl_plugin_on', function () { settings.pluginOn = jQuery(this).is(':checked'); saveSettings(); if (settings.pluginOn) { startPolling(); compact.setPluginEnabled(true); } else { stopPolling(); compact.setPluginEnabled(false); } });
-  b.off('change', '#sl_model_type').on('change', '#sl_model_type', function () { settings.modelType = jQuery(this).val(); jQuery('#sl_anime_opts').toggle(settings.modelType === 'anime' || settings.modelType === 'anime_tag'); saveSettings(); });
+  b.off('change', '#sl_model_type').on('change', '#sl_model_type', function () { settings.modelType = jQuery(this).val(); jQuery('#sl_anime_opts').toggle(settings.modelType === 'anime' || settings.modelType === 'anime_tag' || settings.modelType === 'anima'); saveSettings(); });
   b.off('change', '#sl_image_mode').on('change', '#sl_image_mode', function () { settings.imageMode = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_img_width').on('change', '#sl_img_width', function () { settings.imgBlockWidth = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_director_cast').on('change', '#sl_director_cast', function () { settings.directorCastImport = jQuery(this).is(':checked'); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.directorCastImport !== false ? '已开启：卡库档案导入人物表' : '已关闭：扫描仅用于立绘/档案，人物表只留占位符收集'); });
@@ -299,7 +299,7 @@ function cardTypeSelectHTML(selected) {
   return h + '</select>';
 }
 function scanModeSelectHTML(selected) {
-  var opts = [['zit', 'ZIT（中文提示词）'], ['anime', 'Anime（英文描述）'], ['anime_tag', 'Anime Tag（英文标签）']];
+  var opts = [['zit', 'ZIT（中文提示词）'], ['anima', 'Anima 混合（标签+自然语言）'], ['anime', 'Anime（纯英文描述）'], ['anime_tag', 'Anime Tag（纯英文标签）']];
   var h = '<select id="sl_scan_mode" style="' + fi() + '">';
   for (var i = 0; i < opts.length; i++) h += '<option value="' + opts[i][0] + '"' + (opts[i][0] === selected ? ' selected' : '') + '>' + opts[i][1] + '</option>';
   return h + '</select>';

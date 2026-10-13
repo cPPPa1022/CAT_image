@@ -1,5 +1,51 @@
 # 📜 更新日志（Changelog）
 
+## v1.4.0 — 2026-10-14
+**主题：新增 Anima 混合模式 + 修「身材被画成萝莉」**
+
+### 🐛 修复：成年角色被画成幼态（萝莉）
+
+反馈：温若兰（角色卡封面是细腰大胸）被生成成萝莉。查出两个原因：
+
+1. **两个 overlay 的示例本身在教它画萝莉** —— `anime-overlay.txt` 与 `anime-tag-overlay.txt` 的
+   「年龄/体型必须显式写」示例用的是 `young girl, petite body, flat chest`，
+   辅助 AI 照着示例学 → 默认幼态。**已改为成年示例并加显式警告。**
+2. **硬需求缺「胸部」** —— 原来只有「体型方向（纤细/匀称/丰腴）」这一个**体脂词**，
+   表达不了「细腰大胸」这种**轮廓**。动漫模型缺体型标签时默认幼态化。
+
+**修法**：硬需求 5 项 → **6 项**，并区分「体脂词」与「轮廓词」：
+
+    ① 人种　② 年龄　③ 性别
+    ④ 身材轮廓（细腰大胸 / 纤细平胸 / 丰满圆润 / 高挑长腿 …）← 用轮廓词，不是体脂词
+    ⑤ 胸部（平 / 小巧 / 适中 / 丰满 / 巨乳）← 新增·必写
+    ⑥ 永久标记
+
+### ✨ 新增：Anima 混合模式（`modelType = 'anima'`）
+
+**理由**：Anima 系模型由 Danbooru 标签 + 自然语言 caption 混合训练 ——
+纯标签丢氛围，纯描述丢结构精度。混合写法效果最好。
+
+三段式结构：`结构段(标签) + 氛围段(自然语言一句) + 构图段(标签)`
+
+    asian, mature female, tall, large breasts, narrow waist, wide hips, oval face, almond eyes,
+    brown eyes, black hair, low bun, beauty mark under left eye, light gray cardigan, silk camisole.
+    A warm floor lamp spills amber light across her skin while cold window light rims her shoulder.
+    side view, close-up, shallow depth of field
+
+分工：结构/体型/衣着/构图用**标签**，光影/氛围/情绪用**自然语言**。
+
+- 新增 `prompts/pipeline/anima-overlay.txt`
+- 新增 `settings.isEnglishMode()` 统一入口（anime / anime_tag / anima 都输出英文），
+  替换掉散落各处的 `mode === 'anime' || mode === 'anime_tag'` 判断（queue / render / compact-bar / tabs）
+- 设置页「模型类型」下拉新增 Anima 选项；`scanModeSelectHTML` 同步
+- 扫描档案的英文锚点：anima 优先用 `enTags`（结构段要标签）
+- `prompts/loader.js` 加载新 overlay
+
+### 📄 其他
+- `main-llm-instruction.txt`：硬需求改 6 项 + 补完整占位符示例（含胸部）
+- `sync-cards.js`：同步 6 项 + 幼态化警告
+- `atomic-vocab.txt`：胸部标注「必写」
+
 ## v1.3.0 — 2026-10-14
 **主题：静态锚点闭环 —— 主模型供硬需求，插件AI 具象化，比例换档位词**
 

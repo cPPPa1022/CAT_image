@@ -1,6 +1,6 @@
 // ── SillyImage Lab 生图排队 ──
 import { slLog } from './log.js';
-import { settings, COLORS, getSTContext, getActiveMode, escapeHtml } from './settings.js';
+import { settings, COLORS, getSTContext, getActiveMode, isEnglishMode, escapeHtml } from './settings.js';
 import { imgCacheSet, imgCacheSetById } from './cache.js';
 import { generateImage } from './comfyui.js';
 import { cleanAnimePrompt } from './text-utils.js';
@@ -18,7 +18,7 @@ async function processImageQueue() {
         var workflow = JSON.parse(settings.cWf);
         var prompt = task.prompt;
         // Anime 模式强制清理中文（删空则保留原文，防空提示词）
-        if (getActiveMode() === 'anime' || getActiveMode() === 'anime_tag') { var _clean = cleanAnimePrompt(prompt); if (_clean) prompt = _clean; }
+        if (isEnglishMode()) { var _clean = cleanAnimePrompt(prompt); if (_clean) prompt = _clean; }
         var result = await generateImage(workflow, prompt);
         imgCacheSet(task.prompt, result.url);
         // [Fix] 图块精确缓存：按块标识（消息key#序号）记录，同一提示词内容不再互相覆盖

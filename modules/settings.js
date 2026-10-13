@@ -132,3 +132,10 @@ export function getActiveMode() {
     } catch (e) {}
     return settings.modelType || 'zit';
 }
+
+// ── 是否「英文提示词」模式（anime / anime_tag / anima 三种都输出英文）──
+// 统一入口：以后新增英文模式只改这里，不用再去各处撒 if
+export function isEnglishMode(mode) {
+    var m = mode || getActiveMode();
+    return m === 'anime' || m === 'anime_tag' || m === 'anima';
+}

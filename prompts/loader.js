@@ -11,6 +11,7 @@ export async function loadPrompts(baseUrl) {
         'atomic-vocab.txt',
         'ratio-to-atom.txt',
         'pipeline/zit-overlay.txt',
+        'pipeline/anima-overlay.txt',
         'pipeline/anime-overlay.txt',
         'pipeline/anime-tag-overlay.txt',
         'pipeline/nsfw-overlay.txt',

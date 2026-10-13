@@ -93,8 +93,8 @@ L3 细节层（构图允许时写，5-8 个）—— 提高还原度
 【腰】
   🟢 narrow waist · 🟡 slim waist / straight waistline / soft belly
 
-【胸】
-  🟢 flat chest / small breasts / medium breasts / large breasts / cleavage
+【胸】—— ⚠️ **必写**：缺这一项，动漫模型会默认画成幼态（萝莉）
+  🟢 flat chest / small breasts / medium breasts / large breasts / huge breasts / cleavage
 
 【臀胯】
   🟢 wide hips / thick thighs · 🟡 narrow hips / round hips
@@ -123,6 +123,8 @@ L3 细节层（构图允许时写，5-8 个）—— 提高还原度
 
 1. 提示词里还有任何数字/比例/角度吗？→ 有就删，换成档位词
 2. L1 身份锚（脸型/眼型/瞳色/标记/发型）写全了吗？
-3. L2 形体锚（身高感/肩/腰/胸/臀/体型）写全了吗？—— 只写 slender 等于没写
+3. L2 形体锚（身高感/肩/腰/胸/臀/体型）写全了吗？—— 只写 slender/slim 等于没写
+   ⚠️ 动漫模型缺体型标签时**默认幼态化（萝莉）**：成年角色必须写全 胸 + 腰 + 臀
+   （如 `mature female, large breasts, narrow waist, wide hips`）
 4. 有没有用角色名代替外貌？（硬禁止）
 5. 原子总数在 15-20 之间吗？超过 25 个就删 L3

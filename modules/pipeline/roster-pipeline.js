@@ -9,6 +9,7 @@ import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments } from '../roster.js';
 import { getProfiles } from './profile.js';
+import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
@@ -36,15 +37,15 @@ function buildRosterSystemPrompt() {
 }
 
 // ── 用户消息：人物表 + 占位符（不发送正文——导演模式插件AI 只做"档案+酒馆AI要点 → 提示词"的编辑） ──
-function buildRosterUserContent(placeholders) {
+function buildRosterUserContent(placeholders, wardrobeInfo) {
     var avatar = '';
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
     lines.push('【任务】为每个 [img:] 占位符输出 1 条提示词，按【占位符】编号一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
     // [Fix] 格式硬约束（格式缺失=整轮作废，是此前 0 条提示词/串味的主因）
-    lines.push('【输出格式·必须严格遵守·漏一段整轮作废】');
-    lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
-    lines.push('只输出以上两段，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
+    lines.push('【输出格式·必须严格遵守·PROFILE 与 IMAGES 漏一段整轮作废】');
+    lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n[---WARDROBE---\n{造型具象化 JSON}---END---  ← **仅当【造型库】有「待具象化」条目时才输出这一段；没有就整段省略**]\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
+    lines.push('只输出以上段落，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
     lines.push('');
     lines.push('【人物档案】（按本轮占位符注明的人物名字过滤，插件自动匹配——同名不同身份全部给出，由你按场景选用；写提示词必须引用外貌锚点，禁止只写名字）');
     var _phNames = [];
@@ -52,6 +53,16 @@ function buildRosterUserContent(placeholders) {
     var rosterTxt = rosterDataTextFor(_phNames);
     lines.push(rosterTxt || '（占位符未注明人物名或人物未建档；画师直接按【占位符】场景/要点描述画面，并可用 PROFILE 为新人物建档）');
     lines.push('');
+    // v1.5.0：【造型库】—— 服装/发型/鞋袜/配饰/妆容。已解析的原样复用（零漂移），未命中的具象化后回传
+    if (wardrobeInfo && wardrobeInfo.text) {
+        lines.push('【造型库】（主模型写了造型 key；你负责「原样复用」或「具象化」，规则见 wardrobe-vocab.txt / wardrobe-expand.txt）');
+        lines.push(wardrobeInfo.text);
+        lines.push('· ✅ 已解析：**逐字写进提示词，禁止改写、禁止同义替换** —— 它就是生图语言，改了就会和上一张不一致');
+        lines.push('· ⚠️ 待具象化：按 wardrobe-vocab.txt 的维度逐项取词，写进提示词，并通过 ---WARDROBE--- 回传');
+        lines.push('· 造型详情属于**结构**（服装/发型是什么），放在提示词的标签区；**「怎么穿」**（滑落/卷袖/湿透）仍写要点');
+        lines.push('· 禁止把造型详情写进氛围段；禁止把「怎么穿」写进 ---WARDROBE--- 回传');
+        lines.push('');
+    }
     lines.push('【占位符】（输出顺序必须与本列表一致）');
     if (placeholders.length) {
         for (var i = 0; i < placeholders.length; i++) {
@@ -88,6 +99,18 @@ export function parseRosterProfile(output) {
             return data;
         }
     } catch (e) { slLog('协作PROFILE JSON解析失败: ' + e.message); }
+    return null;
+}
+
+// v1.5.0：解析可选的 ---WARDROBE--- 段（key → detail）
+export function parseRosterWardrobe(output) {
+    var m = output.match(/---\s*WARDROBE\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
+    if (!m) return null;
+    try {
+        var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
+        var outerI = fixed.indexOf('{'), outerEnd = fixed.lastIndexOf('}');
+        if (outerI >= 0 && outerEnd > outerI) return JSON.parse(fixed.substring(outerI, outerEnd + 1));
+    } catch (e) { slLog('造型 WARDROBE JSON解析失败: ' + e.message); }
     return null;
 }
 
@@ -181,6 +204,21 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             for (var _ci2 = 0; _ci2 + 4 <= _topic4.length && !_cov; _ci2++) { if (normForMatch(prompt).indexOf(normForMatch(_topic4.slice(_ci2, _ci2 + 4))) >= 0) _cov = true; }
             if (!_cov) prompt = prompt + '，' + (ph.scene || '') + (ph.topic ? '，' + ph.topic : '');
         }
+        // v1.5.0：造型兜底 —— 已解析的造型详情必须出现在提示词里，缺了就补（防漂移的最后一道闸）
+        // 存档的 detail 本身就是生图语言，所以原样拼接即可，不需要再经 LLM 措辞
+        if (ph._wardrobe && ph._wardrobe.length) {
+            for (var _wk2 = 0; _wk2 < ph._wardrobe.length; _wk2++) {
+                var _wd = ph._wardrobe[_wk2];
+                var _det = String(_wd.detail || '');
+                if (!_det) continue;
+                var _dn = normForMatch(_stripNames(_det));
+                var _probe = _dn.slice(0, Math.min(24, _dn.length));
+                if (_probe && normForMatch(_stripNames(prompt)).indexOf(_probe) < 0) {
+                    prompt = prompt ? (prompt + '，' + _det) : _det;
+                    slLog('造型兜底补入[' + _wd.slot + ']: ' + _wd.key);
+                }
+            }
+        }
         return buildImageBlock(ph.scene, prompt);
     });
     // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见
@@ -229,9 +267,34 @@ export async function runRosterPipeline(bodyText, mesId) {
         var nApplied = applyPersonSegments(placeholders.map(function(p) { return p.personSegments; }).reduce(function(a, b) { return a.concat(b); }, []));
         if (nApplied) slLog('占位符建档: ' + nApplied + ' 人');
 
+        // 1.5 造型库：解析造型段 → 查库
+        // 已解析的（库里已有 detail）→ 交给插件AI 逐字复用；未命中的 → 交给它具象化并回传
+        var _allStyleGroups = [];
+        for (var _pi = 0; _pi < placeholders.length; _pi++) {
+            var _sg = placeholders[_pi].styleGroups || [];
+            for (var _sj = 0; _sj < _sg.length; _sj++) _allStyleGroups.push(_sg[_sj]);
+        }
+        var wardrobeInfo = { text: '', resolved: [], pending: [] };
+        if (_allStyleGroups.length) {
+            wardrobeInfo = wardrobeDataTextFor(_allStyleGroups);
+            slLog('造型库: 已解析 ' + wardrobeInfo.resolved.length + ' 条 / 待具象化 ' + wardrobeInfo.pending.length + ' 条');
+            // 把「已解析」按占位符挂上去，供 fillPlaceholders 兜底
+            for (var _pi2 = 0; _pi2 < placeholders.length; _pi2++) {
+                var _p = placeholders[_pi2];
+                _p._wardrobe = [];
+                var _g2 = _p.styleGroups || [];
+                for (var _gj = 0; _gj < _g2.length; _gj++) {
+                    for (var _rk = 0; _rk < wardrobeInfo.resolved.length; _rk++) {
+                        var _res = wardrobeInfo.resolved[_rk];
+                        if (_res.slot === _g2[_gj].slot && _g2[_gj].keys.indexOf(_res.query) >= 0) _p._wardrobe.push(_res);
+                    }
+                }
+            }
+        }
+
         // 2. 调用插件AI
         var systemPrompt = buildRosterSystemPrompt();
-        var userContent = buildRosterUserContent(placeholders);
+        var userContent = buildRosterUserContent(placeholders, wardrobeInfo);
         var output = await auxApiCall(systemPrompt, userContent, 16384, 0.25);
         if (!output || !output.trim()) throw new Error('插件AI返回空');
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
@@ -249,6 +312,27 @@ export async function runRosterPipeline(bodyText, mesId) {
                 if (pe && pe.appearance) { upsertPerson(upName, upIdm, pe.appearance, 'profile'); ups++; }
             }
             if (ups) slLog('协作PROFILE档案更新: ' + ups + ' 人');
+        }
+
+        // 3.5 解析 ---WARDROBE--- → 回写造型库（下次即可原样复用，零漂移）
+        var wdData = parseRosterWardrobe(output);
+        if (wdData && wardrobeInfo.pending.length) {
+            var _slotByKey = {};
+            for (var _pk = 0; _pk < wardrobeInfo.pending.length; _pk++) _slotByKey[wardrobeInfo.pending[_pk].key] = wardrobeInfo.pending[_pk].slot;
+            var wUps = 0;
+            for (var _wk in wdData) {
+                var _det = wdData[_wk];
+                if (typeof _det !== 'string' || !_det.trim()) continue;
+                var _slot = _slotByKey[_wk];
+                if (!_slot) {   // 容错：AI 改了大小写/标点时按归一化匹配
+                    var _nw = normKey(_wk);
+                    for (var _pk2 in _slotByKey) { if (normKey(_pk2) === _nw) { _slot = _slotByKey[_pk2]; break; } }
+                }
+                if (!_slot) { slLog('造型回写跳过（槽位未知）: ' + _wk); continue; }
+                upsertEntry(_slot, _wk, _det.trim(), 'expanded');
+                wUps++;
+            }
+            if (wUps) slLog('造型库回写: ' + wUps + ' 条');
         }
         saveSettings();
 

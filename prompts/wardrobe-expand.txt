@@ -1,0 +1,83 @@
+# 造型具象化规则（Wardrobe Expand）
+#
+# 触发时机：主模型在占位符的【造型】段写了一个**库里没有的 key**
+# 你要做的：把这个 key 具象化成一条可直接进提示词的详情（detail），并通过 ---WARDROBE--- 回传
+#
+# 为什么要存档：服装/发型是"千人千面、每轮重写就漂"的东西。
+#   具象化一次 → 存档 → 之后每轮**原样复用** → 同一件衣服永远长一个样。
+
+---
+# 一、输入长什么样
+
+【造型库】区块会给你两类条目：
+
+    ✅ 已解析（库里已有，直接用，**禁止改写**）
+       XX中学·校服（夏季） → white short-sleeve sailor blouse, navy collar with double white
+                             stripes, red neckerchief, navy pleated skirt, cotton blend, crisp matte
+
+    ⚠️ 待具象化（库里没有，**你负责补全并回传**）
+       林晓·短发
+       温若兰·黑色连裤袜
+
+---
+# 二、具象化步骤
+
+1. **判断槽位** —— key 属于 服装 / 发型 / 鞋袜 / 配饰 / 妆容 中哪一个
+2. **参考人物** —— 从【占位符】的人物段拿 性别 / 年龄 / 身份（学生的校服 ≠ 老师的制服）
+3. **逐项取词** —— 按 `wardrobe-vocab.txt` 的维度表，一个维度一个原子词
+4. **按时长要求** —— 目标语言由当前模式决定（见下）
+5. **输出到 ---WARDROBE---**
+
+---
+# 三、目标语言
+
+| 模式 | detail 语言 | 风格 |
+|---|---|---|
+| `zit` | 中文 | 自然短语，逗号分隔 |
+| `anima` | 英文 | Danbooru 标签链 + 少量自然短语 |
+| `anime` | 英文 | 自然语言短语 |
+| `anime_tag` | 英文 | 纯 Danbooru 标签 |
+
+**不要输出中文到英文模式**（会被 cleanAnimePrompt 删空）。
+**不要输出分类前缀**（`材质:` `款式:`），只要词。
+
+---
+# 四、铁律
+
+1. **只写"是什么"，不写"怎么穿"**
+   ✅ `white cotton t-shirt, round neck, short sleeves`
+   ❌ `white cotton t-shirt, sleeves rolled up, unbuttoned` ← 「卷袖/敞扣」属于本轮要点
+
+2. **原子化** —— 每个词独立可命中
+   ✅ `white cotton t-shirt, short sleeves, round neck, slim fit`
+   ❌ `casual white top` / `school look`
+
+3. **详细度按槽位标准**（见 wardrobe-vocab.txt 第七节）
+   服装 = 品类 + 款式 + 材质 + 颜色
+   发型 = 长度 + 扎法 + 刘海 + 发色 + 质感
+
+4. **同一个 key 永远输出同一份 detail**
+   这是存档能消除漂移的前提。不要这轮写 `black bob`、下轮写 `short black hair`。
+
+5. **禁止**：角色名、数值记法（`20cm`）、场景、光线、剧情状态（受伤/汗/红晕）
+
+6. **拿不准就不写** —— 宁少勿编。缺的维度可以由要点补，编错的信息会被永久冻结。
+
+---
+# 五、输出格式（追加在 ---PROFILE--- 之后、---IMAGES--- 之前）
+
+    ---WARDROBE---
+    {"林晓·短发": "black chin-length bob, straight, blunt ends, no bangs, tucked behind ears, soft sheen", "温若兰·黑色连裤袜": "sheer black pantyhose, 20 denier, matte finish"}
+    ---END---
+
+- **这一整段是可选的**：没有「待具象化」条目时**不要输出**
+- JSON：key = 主模型写的原样 key（**一个字都不要改**），value = detail 字符串
+- 不要包 Markdown 代码块，不要加解释文字
+
+---
+# 六、自检
+1. 回传的 key 和输入的 key **完全一致**吗？（改一个字就命中不了）
+2. detail 里有没有"怎么穿"的词？→ 有就删
+3. 有没有复合词？→ 有就拆
+4. 语言对上模式了吗？英文模式里有没有残留中文？
+5. 服装四项（品类/款式/材质/颜色）齐了吗？发型五项齐了吗？

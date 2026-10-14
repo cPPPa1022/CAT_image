@@ -29,6 +29,11 @@
 - `发型:黑色低发髻，斜刘海` → `black hair, low bun, side bangs`
 - `衣着:深灰V领紧身短袖` → `dark gray v-neck shirt, tight, short sleeves`
 
+## 造型库 detail 的处理（v1.5.0）
+【造型库】里的 **✅ 已解析** 条目，**逐字写进标签链**（人物外貌标签之后、动态衣着之前），
+禁止改写、禁止同义替换。**⚠️ 待具象化**：按 wardrobe-vocab.txt 取标签后写进去，
+并通过 ---WARDROBE--- 回传。造型只写"是什么"；「滑落/卷袖/湿透」写成动态标签。
+
 ## 静态锚点 → Danbooru 标签（v1.3 新增）
 档案里的量化比例**禁止进提示词**，按 `ratio-to-atom.txt` 换算成标签：
 

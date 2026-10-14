@@ -32,6 +32,7 @@ Anima 系模型由两类语料共同训练：
 | 衣着 / 材质 / 状态 | **标签** | `silk` `lace` `sheer` `strap slipping` 视觉绑定明确 |
 | 姿势 / 动作 | **标签 + 短语** | `lying on sofa` `hand covering mouth` |
 | **光影 / 氛围 / 情绪** | **自然语言** | 标签覆盖不全，只有自然语言带得出质感 |
+| **造型（服装/发型/鞋袜/配饰/妆容）** | **标签** | 来自【造型库】的 detail —— **已解析的逐字照抄进结构段，禁止改写** |
 | 景别 / 机位 / 景深 | **标签** | `close-up` `from below` `shallow depth of field` 精度更高 |
 
 ## 书写规则

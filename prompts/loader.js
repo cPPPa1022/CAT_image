@@ -10,6 +10,8 @@ export async function loadPrompts(baseUrl) {
         'roster/system.txt',
         'atomic-vocab.txt',
         'ratio-to-atom.txt',
+        'wardrobe-vocab.txt',
+        'wardrobe-expand.txt',
         'pipeline/zit-overlay.txt',
         'pipeline/anima-overlay.txt',
         'pipeline/anime-overlay.txt',

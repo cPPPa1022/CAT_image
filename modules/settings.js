@@ -39,6 +39,8 @@ export function getDefaults() {
         summaryGap: 15,
         // 配图偏好：always 总是配图（默认，强制+鼓励）/ encourage 鼓励配图（纯信息轮可零图） / key 关键场景
         imageMode: 'always',
+        // v1.5.0 造型库：服装/发型/鞋袜/配饰/妆容 —— 按 [角色卡][聊天ID] 存
+        wardrobe: {},
         // ── v2.4 占位符协作（v1.2 起画师模式已移除，只剩导演模式）──
         // 保留该键仅为兼容旧存档的 UI/日志；代码不再按它分支
         imgMode: 'main',

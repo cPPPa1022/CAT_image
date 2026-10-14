@@ -126,7 +126,46 @@ export function parsePersonString(pStr) {
     return { name: s, identity: '', appearance: '' };
 }
 
-// 从文本中提取所有 [img:…] 占位符 → [{ scene, personSegments:[{name,identity,appearance}], topic, raw }]
+// ══════════════════════════════
+// ── v1.5.0 造型段解析（衣柜/造型库）──
+// 语法：造型:服装=XX中学·校服（夏季）；发型=温若兰·短发扎尾；配饰=A、B
+// 槽之间用「；」，槽名与 key 用「=」，一个槽多个 key 用「、」
+// key 由主模型写全（含作用域前缀），插件原样使用，不做作用域判断
+export var WARDROBE_SLOTS = ['服装', '发型', '鞋袜', '配饰', '妆容'];
+
+export var WARDROBE_SLOT_ALIAS = {
+    '服装': '服装', '衣服': '服装', '衣着': '服装', '穿搭': '服装', '套装': '服装', '服饰': '服装',
+    '发型': '发型', '头发': '发型', '发型发色': '发型',
+    '鞋袜': '鞋袜', '鞋': '鞋袜', '袜子': '鞋袜', '鞋子': '鞋袜',
+    '配饰': '配饰', '饰品': '配饰', '首饰': '配饰', '配件': '配饰',
+    '妆容': '妆容', '妆': '妆容', '化妆': '妆容', '妆造': '妆容'
+};
+
+export function normalizeSlot(name) {
+    var s = String(name || '').trim();
+    return WARDROBE_SLOT_ALIAS[s] || '';
+}
+
+// 造型段整段 → [{ slot, keys:[...] }]
+export function parseStyleSegment(text) {
+    var out = [];
+    var body = String(text || '').replace(/^(造型|穿搭|衣柜)[：:]\s*/, '');
+    if (!body.trim()) return out;
+    var groups = body.split(/[；;]/);
+    for (var i = 0; i < groups.length; i++) {
+        var g = (groups[i] || '').trim();
+        if (!g) continue;
+        var m = g.match(/^([^=＝]{1,8})\s*[=＝]\s*([\s\S]+)$/);
+        if (!m) continue;
+        var slot = normalizeSlot(m[1]);
+        if (!slot) continue;
+        var keys = m[2].split(/[、,，]/).map(function(k) { return k.trim(); }).filter(Boolean);
+        if (keys.length) out.push({ slot: slot, keys: keys });
+    }
+    return out;
+}
+
+// 从文本中提取所有 [img:…] 占位符 → [{ scene, personSegments:[{name,identity,appearance}], styleGroups, topic, raw }]
 export function findImagePlaceholders(text) {
     var result = [];
     if (!text) return result;
@@ -139,11 +178,18 @@ export function findImagePlaceholders(text) {
         var scene = '';
         var topicParts = [];
         var personSegments = [];
+        var styleGroups = [];
         for (var i = 0; i < segs.length; i++) {
             var seg = segs[i].trim();
             if (!seg) continue;
             if (i === 0) {
                 scene = seg;
+                continue;
+            }
+            // v1.5.0：造型段（可选，以「造型:/穿搭:/衣柜:」开头）
+            if (/^(?:造型|穿搭|衣柜)[：:]/.test(seg)) {
+                var _sg = parseStyleSegment(seg);
+                for (var _gi = 0; _gi < _sg.length; _gi++) styleGroups.push(_sg[_gi]);
                 continue;
             }
             var pm = seg.match(/^人物[：:]\s*([\s\S]*)$/);
@@ -160,6 +206,7 @@ export function findImagePlaceholders(text) {
         result.push({
             scene: scene,
             personSegments: personSegments,
+            styleGroups: styleGroups,
             topic: topicParts.join('\n'),
             raw: content
         });

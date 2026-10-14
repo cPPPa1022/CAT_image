@@ -1,6 +1,6 @@
 // ── SillyImage Lab 🎨 ComfyUI连接 通信 ──
 import { slLog } from './log.js';
-import { settings, getSTHeaders, saveSettings, escapeHtml, getActiveMode } from './settings.js';
+import { settings, getSTHeaders, saveSettings, escapeHtml, getActiveMode, isEnglishMode } from './settings.js';
 import { uploadImageToST } from './cache.js';
 import { getProfiles } from './pipeline/profile.js';
 
@@ -146,6 +146,52 @@ export async function fetchComfyModels() {
     return settings.models;
 }
 
+// ── v1.4.2 条件节点定位：跟着采样器连线找「正向 / 负向」文本节点 ──
+// 为什么不能靠遍历顺序：ComfyUI 的正向与负向文本节点 class_type 都是 CLIPTextEncode、
+// 输入名都是 text ——「判断输入名是否含 negative」永远为真，这层保护形同虚设。
+// 当负向节点的 id 比正向小时（很多分享的工作流如此），正向提示词会被写进负向节点，图直接废掉。
+// KSampler.inputs.positive / .negative = ["节点id", 槽位] 才是权威答案。
+function _isTextEncodeNode(node) {
+    return !!(node && /CLIPTextEncode|TextEncode/i.test(String(node.class_type || '')));
+}
+
+function _collectUpstream(workflow, startId) {
+    var seen = {}, out = [], stack = [String(startId)], guard = 0;
+    while (stack.length && guard++ < 500) {
+        var id = stack.pop();
+        if (!id || id === 'undefined' || seen[id]) continue;
+        seen[id] = true;
+        var node = workflow[id];
+        if (!node) continue;
+        out.push(id);
+        var inputs = node.inputs || {};
+        for (var k in inputs) {
+            var v = inputs[k];
+            if (Array.isArray(v) && v.length === 2 && (typeof v[0] === 'string' || typeof v[0] === 'number')) stack.push(String(v[0]));
+        }
+    }
+    return out;
+}
+
+// 返回 { pos:{id:true}, neg:{id:true}, wired:bool }
+// wired=false = 工作流里没有同时带 positive/negative 输入的采样器 → 调用方退回启发式定位
+export function resolveConditioningNodes(workflow) {
+    var pos = {}, neg = {}, wired = false;
+    for (var id in workflow) {
+        var n = workflow[id];
+        if (!n || !n.inputs) continue;
+        if (!Array.isArray(n.inputs.positive) || !Array.isArray(n.inputs.negative)) continue;
+        wired = true;
+        var up = _collectUpstream(workflow, n.inputs.positive[0]);
+        for (var i = 0; i < up.length; i++) if (_isTextEncodeNode(workflow[up[i]])) pos[up[i]] = true;
+        var un = _collectUpstream(workflow, n.inputs.negative[0]);
+        for (var j = 0; j < un.length; j++) if (_isTextEncodeNode(workflow[un[j]])) neg[un[j]] = true;
+    }
+    // 同一节点被正负同时引用（罕见）→ 优先当正向，避免漏写提示词
+    for (var k in pos) if (neg[k]) delete neg[k];
+    return { pos: pos, neg: neg, wired: wired };
+}
+
 export async function generateImage(workflow, prompt) {
     // [Fix] 最后防线：剥掉图块/提示词包装残留（插件AI偶发输出 [image:…]【提示词】…格式，原样会进生图模型）
     prompt = String(prompt || '')
@@ -184,11 +230,11 @@ export async function generateImage(workflow, prompt) {
 
     // [Fix] Anime 质量前缀/艺术家标签接线：原实现仅在设置页保存，generateImage 从未读取（死配置）
     var curMode = getActiveMode();
-    if ((curMode === 'anime' || curMode === 'anime_tag') && settings.animeQualityPrefix) {
+    if (isEnglishMode(curMode) && settings.animeQualityPrefix) {
         prompt = settings.animeQualityPrefix + ', ' + prompt;
         slLog('Anime质量前缀: ' + settings.animeQualityPrefix);
     }
-    if ((curMode === 'anime' || curMode === 'anime_tag') && settings.animeArtist) {
+    if (isEnglishMode(curMode) && settings.animeArtist) {
         prompt = prompt + ', ' + settings.animeArtist;
         slLog('Anime艺术家标签: ' + settings.animeArtist);
     }
@@ -198,6 +244,18 @@ export async function generateImage(workflow, prompt) {
         prompt = settings.promptPrefix + ', ' + prompt;
         slLog('前置提示词: ' + settings.promptPrefix);
     }
+
+    // ── v1.4.2：按连线定位正向/负向文本节点（旧实现靠遍历顺序 + 输入名判断，保护形同虚设）──
+    var cond = resolveConditioningNodes(workflow);
+    var useGraph = cond.wired && Object.keys(cond.pos).length > 0;
+    var negCount = Object.keys(cond.neg).length;
+    if (useGraph) {
+        slLog('genWf: 按连线定位 → 正向节点[' + Object.keys(cond.pos).join(',') + '] 负向节点[' + Object.keys(cond.neg).join(',') + ']');
+    } else {
+        slLog('genWf: 取不到 positive/negative 连线，退回启发式定位');
+    }
+    function _allowPos(nid) { return !useGraph || !!cond.pos[nid]; }
+    function _allowNeg(nid) { return !useGraph || negCount === 0 || !!cond.neg[nid]; }
 
     var matchCount = 0;
     // 遍历节点注入 prompt
@@ -213,20 +271,22 @@ export async function generateImage(workflow, prompt) {
                     if (typeof text !== 'string') text = '';
                     // [Fix] 负面占位符节点（key 不含 negative 但文本是 %negative_prompt% 的双CLIP结构）
                     if (text.indexOf('%negative_prompt%') >= 0) {
-                        if (settings.neg) {
+                        if (settings.neg && _allowNeg(nodeId)) {
                             text = text.replace(/%negative_prompt%/g, settings.neg);
                             node.inputs[key] = Array.isArray(original) && original.length === 2 ? [text, original[1]] : text;
                             slLog('genWf: 负面占位符已替换 → ' + settings.neg.slice(0, 60));
                         }
                         continue;
                     }
+                    // v1.4.2：正向提示词只写进「正向条件节点」，绝不写进负向节点
+                    if (!_allowPos(nodeId)) { slLog('genWf: 跳过非正向节点 ' + nodeId + '（避免写进负面）'); continue; }
                     if (text.indexOf('%prompt%') >= 0) {
                         text = text.replace(/%prompt%/g, prompt);
                         node.inputs[key] = Array.isArray(original) && original.length === 2 ? [text, original[1]] : text;
                         matchCount++;
                         slLog('genWf: 注入prompt %prompt% → ' + prompt.slice(0, 60));
                     }
-                } else if (/negative/i.test(key) && settings.neg) {
+                } else if (/negative/i.test(key) && settings.neg && _allowNeg(nodeId)) {
                     // [Fix] 负面提示词接线：key 明确带 negative 的输入（negative_prompt/negative_text 等）
                     var negOriginal = node.inputs[key];
                     var negText = Array.isArray(negOriginal) ? negOriginal[0] : negOriginal;
@@ -243,35 +303,36 @@ export async function generateImage(workflow, prompt) {
         }
         // 随机 seed
         if (/ksampler|sampler\b/i.test(classType) && !/scheduler|schedule|upscale/i.test(classType)) {
-            for (var key in node.inputs) {
-                if (/seed|noise_seed/i.test(key)) {
-                    var original = node.inputs[key];
+            for (var seedKey in node.inputs) {
+                if (/seed|noise_seed/i.test(seedKey)) {
+                    var seedOriginal = node.inputs[seedKey];
                     var randomSeed = Math.floor(Math.random() * 1000000000000000);
-                    node.inputs[key] = Array.isArray(original) && original.length === 2 ? [randomSeed, original[1]] : randomSeed;
+                    node.inputs[seedKey] = Array.isArray(seedOriginal) && seedOriginal.length === 2 ? [randomSeed, seedOriginal[1]] : randomSeed;
                 }
             }
         }
     }
-    // 保底覆盖
+    // 保底覆盖（v1.4.2：同样只允许正向条件节点）
     if (matchCount === 0) {
-        for (var nodeId in workflow) {
-            var node = workflow[nodeId];
-            if (!node || !node.inputs) continue;
-            if (/CLIPTextEncode|TextEncode/i.test(node.class_type || '')) {
-                for (var key in node.inputs) {
-                    if (/(text|prompt|positive|clip_l|t5xxl|clip_g|bert|mt5xl)/i.test(key) && !/negative/i.test(key)) {
-                        var original = node.inputs[key];
-                        // [Fix] 保底覆盖跳过负面占位符节点，避免把正向 prompt 写进负面输入
-                        var fallbackText = Array.isArray(original) ? original[0] : original;
-                        if (typeof fallbackText === 'string' && fallbackText.indexOf('%negative_prompt%') >= 0) continue;
-                        node.inputs[key] = Array.isArray(original) && original.length === 2 ? [prompt, original[1]] : prompt;
-                        matchCount++;
-                        slLog('genWf: 没找到%prompt%, 直接覆盖节点 ' + nodeId + ' → ' + prompt.slice(0, 60));
-                        break;
-                    }
+        for (var fbId in workflow) {
+            var fbNode = workflow[fbId];
+            if (!fbNode || !fbNode.inputs) continue;
+            if (!/CLIPTextEncode|TextEncode/i.test(fbNode.class_type || '')) continue;
+            if (!_allowPos(fbId)) continue;
+            var _fbDone = false;
+            for (var fbKey in fbNode.inputs) {
+                if (/(text|prompt|positive|clip_l|t5xxl|clip_g|bert|mt5xl)/i.test(fbKey) && !/negative/i.test(fbKey)) {
+                    var fbOriginal = fbNode.inputs[fbKey];
+                    var fallbackText = Array.isArray(fbOriginal) ? fbOriginal[0] : fbOriginal;
+                    if (typeof fallbackText === 'string' && fallbackText.indexOf('%negative_prompt%') >= 0) continue;
+                    fbNode.inputs[fbKey] = Array.isArray(fbOriginal) && fbOriginal.length === 2 ? [prompt, fbOriginal[1]] : prompt;
+                    matchCount++;
+                    slLog('genWf: 没找到%prompt%, 覆盖正向节点 ' + fbId + ' → ' + prompt.slice(0, 60));
+                    _fbDone = true;
+                    break;
                 }
-                if (matchCount > 0) break;
             }
+            if (_fbDone) break;
         }
     }
     var clientId = 'sl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);

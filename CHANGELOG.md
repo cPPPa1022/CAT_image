@@ -1,5 +1,46 @@
 # 📜 更新日志（Changelog）
 
+## v1.4.2 — 2026-10-14
+**主题：ComfyUI 正向提示词节点定位改为「按连线走」**
+
+### 🐛 修复：正向提示词可能被写进负面节点
+
+`comfyui.js` 的「保底覆盖」（工作流里没有 `%prompt%` 时把整个节点文本替换成提示词）
+原来按**遍历顺序 + 输入名**挑节点：
+
+    for (var nodeId in workflow)                    // JS 整数键按升序迭代
+        if (/CLIPTextEncode/.test(class_type))
+            if (/text|prompt|…/.test(key) && !/negative/.test(key))   // key 永远是 "text"
+
+ComfyUI 的**正向与负向文本节点 class_type 都是 `CLIPTextEncode`、输入名都是 `text`** ——
+所以 `!/negative/.test(key)` 永远为真，这层保护**形同虚设**。
+
+**后果**：当负向节点的 id 比正向小时（很多分享的工作流如此），
+正向提示词会被写进负向节点，图直接废掉。
+（ComfyUI 官方默认工作流碰巧是正向 6 / 负向 7，侥幸没事。）
+
+### 修法
+`KSampler.inputs.positive / .negative = ["节点id", 槽位]` 才是权威答案。新增：
+
+- `_collectUpstream()` —— 从指定节点向上游遍历（能穿过 `ConditioningCombine` /
+  `ConditioningSetArea` / ControlNet 等中间节点）
+- `resolveConditioningNodes()` —— 解析出正向/负向各自对应的**文本编码节点集合**
+- 注入与保底覆盖**都只写进正向节点集合**；负面注入也只写进负向集合
+- 取不到 `positive`/`negative` 连线时**退回原启发式**（行为与旧版一致，不会更差）
+
+### ✅ 验证（3 组）
+- 合成用例：负向 id 更小 → 正确识别 `pos=[6] neg=[3]`（旧实现会选错节点）
+- 合成用例：经过 `ConditioningCombine` 的间接连线 → `pos=[5,11] neg=[12]`
+- 你的 5 个真实工作流 → `pos=[7]` 或 `pos=[5]`，`neg=[]`
+  （负面是 `ConditioningZeroOut`，无文本节点）→ **行为与修复前一致，只是更稳**
+
+### 🛠 顺带修复
+`comfyui.js` 的「Anime 质量前缀」「艺术家标签」判断只认 `anime`/`anime_tag`，
+**漏了 `anima`** → anima 模式下这两个设置不生效。改用 `isEnglishMode()` 统一判断。
+
+> 💡 注：你的工作流 **cfg=1**（turbo），负面提示词本身无效 ——
+> 所以"负面节点被误写"在你当前配置下不会显形，但**换工作流就会踩**。
+
 ## v1.4.1 — 2026-10-14
 **主题：多人图解析修复 + 特征原子化**
 

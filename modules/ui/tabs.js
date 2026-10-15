@@ -290,7 +290,8 @@ export function bindArchiveEvents(b) {
     try { var re2 = rosterEntries(); for (var i2 = 0; i2 < re2.length; i2++) { if (re2[i2] && re2[i2].key === cn) { ent = re2[i2]; break; } } } catch (e9) {}
     if (!ent) { toast('error', '找不到该人物档案'); return; }
     var bm = getActiveMode() || 'zit';
-    var anchor = ent.base || ent.appearance || '';
+    var _atom = (ent.atoms && ent.atoms[bm]) || '';   // 已解析的模型语言锚点 → 直接用，零漂移
+    var anchor = _atom || ent.base || ent.appearance || '';
     if (!anchor) { toast('error', '没有可用的外貌锚点'); return; }
     var wf2 = JSON.parse(settings.cWf || '{}');
     if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
@@ -311,7 +312,7 @@ export function bindArchiveEvents(b) {
       }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
     };
     // 档案里存的是【主模型写的中文锚点】→ 英文系模式先用辅助 AI 转写成该模式的生图语言，再出图
-    if (bm !== 'zit' && /[\u4e00-\u9fff]/.test(anchor)) {
+    if (!_atom && bm !== 'zit' && /[\u4e00-\u9fff]/.test(anchor)) {
       btn.prop('disabled', true).text('转写中…');
       var _sysP = (bm === 'anime_tag')
         ? '把下面的人物外貌锚点写成纯 Danbooru 英文标签链：逗号+空格分隔、全小写、单一特征一个词、禁止中文、禁止自然语言句子。只输出标签链本身，不要任何解释。'

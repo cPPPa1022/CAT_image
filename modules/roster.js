@@ -4,7 +4,7 @@
 // key = 名字（身份标签）→ 重名天然区分（同名不同人）。
 
 import { slLog } from './log.js';
-import { settings, saveSettings, getSTContext } from './settings.js';
+import { settings, saveSettings, getSTContext, getActiveMode } from './settings.js';
 import { getCharacterName, getChatId } from './pipeline/profile.js';
 import { refreshCoopCards } from './sync-cards.js';  // [Fix] 人物表变化时刷新导演模式协作卡索引
 
@@ -240,6 +240,48 @@ export function importFromCast(cast) {
     return n;
 }
 
+// ══════════════════════════════
+// ── 已解析锚点（v1.6.2 · 和造型库同构）──
+// 问题：档案 base 里是【主模型写的中文锚点】，英文三模式每轮都要重新翻译 → 每轮措辞可能不同 → 长相漂移。
+// 做法：辅助 AI 第一次具象化产出的「模型语言锚点」按【模式】存进这个人，
+//       之后每轮以「✅ 已解析锚点（逐字复用）」下发，不再重译。
+// 写入规则：首次写入即冻结；之后只接受「包含旧文且更长」的版本（= 追加缺失维度，而不是重写措辞）。
+export function getAtomAnchor(entry, mode) {
+    try {
+        if (!entry || !entry.atoms) return '';
+        var m = mode || getActiveMode();
+        return entry.atoms[m] || '';
+    } catch (e) { return ''; }
+}
+
+export function setAtomAnchor(name, identity, mode, text) {
+    try {
+        var t = String(text || '').trim();
+        if (!t) return null;
+        var r = ensureRoster();
+        if (!r) return null;
+        var key = personKey(name, identity);
+        var e = r.list[key];
+        if (!e) {   // 容错：按名字找同名条目（裸名 ↔ 带标签）
+            for (var sk in r.list) { if (sk === name || sk.indexOf(name + '（') === 0) { e = r.list[sk]; break; } }
+        }
+        if (!e) return null;
+        var m = mode || getActiveMode();
+        if (!e.atoms) e.atoms = {};
+        var old = e.atoms[m] || '';
+        if (!old) {
+            e.atoms[m] = t;
+            slLog('锚点建档[' + m + ']: ' + e.key + '，' + t.slice(0, 40) + '…');
+        } else if (t.length > old.length && t.indexOf(old) >= 0) {
+            e.atoms[m] = t;   // 只在"旧文是新文的一部分"时才更新（追加维度，不是换措辞）
+            slLog('锚点追加[' + m + ']: ' + e.key);
+        } else {
+            slLog('锚点回传被忽略（旧文已冻结，防重写）: ' + e.key);
+        }
+        return e.atoms[m];
+    } catch (e2) { return null; }
+}
+
 // ── 人物表正文（按名字过滤，不再全量发送） ──
 // 酒馆AI 只在占位符人物段注明"图里出现了谁"（名字即可）；插件按名字匹配：
 // 档案里有几个同名（不同身份标签）就发几个，由画师按场景自选。
@@ -261,7 +303,15 @@ export function rosterDataTextFor(nameList) {
                 if (seen[k]) continue;
                 if (k === nm || k.indexOf(nm + '（') === 0) {
                     var e = r.list[k];
-                    nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
+                    var _atom = getAtomAnchor(e);
+                    if (_atom) {
+                        // 已有模型语言锚点 → 逐字复用（零漂移）；同时给出主模型原文供"补全缺失维度"对照
+                        nmLines.push('■ ' + e.key);
+                        nmLines.push('   ✅ 已解析锚点【' + getActiveMode() + '】（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
+                        nmLines.push('   ⚠️ 原始锚点（主模型原文，**只用于对照是否缺维度，不要照抄**）：' + (e.base || e.appearance || '').slice(0, 200));
+                    } else {
+                        nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
+                    }
                     nmCount++;
                     if (e.identity) nmLabels.push(e.identity);
                     seen[k] = true;

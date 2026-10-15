@@ -7,7 +7,7 @@ import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
-import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments } from '../roster.js';
+import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setAtomAnchor } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
 
@@ -307,14 +307,17 @@ export async function runRosterPipeline(bodyText, mesId) {
         // 3. 解析 PROFILE（人物表更新）
         var profileData = parseRosterProfile(output);
         if (profileData && profileData.persons) {
-            var ups = 0;
+            var ups = 0, nAnchors = 0;
             for (var k in profileData.persons) {
                 var pe = profileData.persons[k];
                 var upName = (pe && pe.name) || k.replace(/（[^）]*）$/, '');
                 var upIdm = (pe && pe.identity) || (k.indexOf('（') >= 0 ? k.slice(k.indexOf('（') + 1, k.lastIndexOf('）')) : '');
                 if (pe && pe.appearance) { upsertPerson(upName, upIdm, pe.appearance, 'profile'); ups++; }
+                // v1.6.2：模型语言锚点（首次具象化产出 → 存起来逐字复用，消除英文模式每轮重译的漂移）
+                if (pe && pe.anchor) { if (setAtomAnchor(upName, upIdm, getActiveMode(), pe.anchor)) nAnchors++; }
             }
             if (ups) slLog('协作PROFILE档案更新: ' + ups + ' 人');
+            if (nAnchors) slLog('锚点库更新: ' + nAnchors + ' 条（' + getActiveMode() + '）');
         }
 
         // 3.5 解析 ---WARDROBE--- → 回写造型库（下次即可原样复用，零漂移）

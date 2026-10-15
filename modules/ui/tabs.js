@@ -10,7 +10,6 @@ import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { rosterEntries } from '../roster.js';
-import { auxApiCall } from '../pipeline/api.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -292,9 +291,14 @@ export function bindArchiveEvents(b) {
     try { var re2 = rosterEntries(); for (var i2 = 0; i2 < re2.length; i2++) { if (re2[i2] && re2[i2].key === cn) { ent = re2[i2]; break; } } } catch (e9) {}
     if (!ent) { toast('error', '找不到该人物档案'); return; }
     var bm = getActiveMode() || 'zit';
-    var _atom = (ent.atoms && ent.atoms[bm]) || '';   // 已解析的模型语言锚点 → 直接用，零漂移
-    var anchor = _atom || ent.base || ent.appearance || '';
-    if (!anchor) { toast('error', '没有可用的外貌锚点'); return; }
+    // [v1.7.6 · 方案A] 立绘**只用补全后的原子锚点**(atoms)，**不退到 base** ——
+    // base 是主模型原文，可能夹带衣着/缺维度，会让"对照图"不干净、比对失效
+    var _atom = (ent.atoms && ent.atoms[bm]) || '';
+    var anchor = _atom;
+    if (!anchor) {
+      toast('warning', '还没有【已解析锚点】—— 先正常聊一轮（出一次图）让插件按 38 维建档，之后立绘才是干净的对照图');
+      return;
+    }
     var wf2 = JSON.parse(settings.cWf || '{}');
     if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
     var _runPortrait = function (anchorText) {
@@ -313,21 +317,7 @@ export function bindArchiveEvents(b) {
         btn.prop('disabled', false).text('生成立绘');
       }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
     };
-    // 档案里存的是【主模型写的中文锚点】→ 英文系模式先用辅助 AI 转写成该模式的生图语言，再出图
-    if (!_atom && bm !== 'zit' && /[\u4e00-\u9fff]/.test(anchor)) {
-      btn.prop('disabled', true).text('转写中…');
-      var _sysP = (bm === 'anime_tag')
-        ? '把下面的人物外貌锚点写成纯 Danbooru 英文标签链：逗号+空格分隔、全小写、单一特征一个词、禁止中文、禁止自然语言句子。只输出标签链本身，不要任何解释。'
-        : (bm === 'anima')
-        ? '把下面的人物外貌锚点写成 Danbooru 英文标签：逗号+空格分隔、全小写、单一特征一个词。只输出标签本身，不要任何解释。'
-        : '把下面的人物外貌锚点写成英文生图语言（短语或短句，逗号分隔）。只输出结果本身，不要任何解释。';
-      auxApiCall(_sysP, anchor, 700, 0.2).then(function (t) {
-        var _t = String(t || '').trim();
-        _runPortrait(_t || anchor);
-      }, function () { _runPortrait(anchor); });
-    } else {
-      _runPortrait(anchor);
-    }
+    _runPortrait(anchor);
   });
   b.off('click', '.sl_edit_btn').on('click', '.sl_edit_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });

@@ -56,12 +56,14 @@
     C罩杯           → medium breasts
     168cm / 7头身    → tall, long legs
 
-**L2 形体锚每张必写全**（身高感/肩/腰/胸/臀/腿/整体体型）—— 只写 `slender build` 等于没写身材。
-**L1 身份锚 + L2 形体锚每张必写，不受景别影响**（中景/远景也要写全，砍了就每张换脸）。
-**L3 身材细节只在看得见时写**（胸型/乳晕/乳头/臀型/胸肌/体毛/生殖器）—— 被衣服挡住就别写，否则模型会脑补凸点。
-**远景/非特写** 才可省 L4 细节（睫毛/肤质/唇珠）；⛔ 提示词里禁止出现角色名。
+**L1 身份锚 + L2 形体锚每张必写，不受景别影响**（砍了就每张换脸）。
+**按【景别】裁剪**（表见核心规则）：中景 = A+B+D+E，**不写腿/臀/脚**；特写/近景加 C 组；全景加 G 组。
+**按【主体】分配详略**：主体（1-2 个）→ 每个维度展开成英文短语/短句；次要入镜者 → 维度不省但写短；不入镜者不写。
+**本模式用长句润色，不是堆词**：
+    ❌ `almond eyes, double eyelids, brown eyes, long eyelashes`
+    ✅ `her eyes are long almond-shaped with softly downturned outer corners; the upper lids are a narrow double fold that creases lightly when open; the irises are dark brown with a warm amber layer that catches a ring of gold at the edge; lashes are long and curve naturally`
 **永久标记每张必写**（`beauty mark under left eye` 之类），用词逐字一致。
-原子总数 **15-25** 个；超过 25 个会互相冲淡，优先删特写细节。
+**单张 ≤1000 字**（2 主体 800-1000 到顶），预计超了就拆单人图；⛔ 禁止角色名。
 
 ## 场景约束
 每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。

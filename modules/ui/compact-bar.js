@@ -1,5 +1,6 @@
 // ── SillyImage Lab 紧凑状态条 v2.6（胶囊猫条） ──
 import { CAT, getCatStatusFace } from './theme.js';
+import { rosterEntries } from '../roster.js';
 import { catSVG, catStatusText } from './cat.js';
 import { setHeadStatus } from './panel.js';
 import { toast, chkProf } from './utils.js';
@@ -50,7 +51,7 @@ export function createCompactBar() {
   bar += '<span id="sl_comp_char" style="font-size:13px;color:' + CAT.text + ';font-weight:700;">--</span>';
   bar += '<span id="sl_comp_model" style="' + 'font-size:9.5px;line-height:1;padding:3.5px 9px;border-radius:999px;background:' + CAT.accent + '1F;color:' + CAT.accent + ';"></span>';
   bar += '<span id="sl_comp_profile" style="font-size:9.5px;line-height:1;padding:3.5px 9px;border-radius:999px;"></span>';
-  bar += '<button id="sl_comp_scan" style="display:none;font-size:9.5px;padding:3.5px 10px;border:none;border-radius:999px;background:' + CAT.accent + ';color:#fff;cursor:pointer;font-weight:700;">🐾 扫描</button></div>';
+  bar += '</div>';
   // 状态行：状态点+状态+队列+模式
   bar += '<div style="padding:4px 12px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;height:26%;">';
   bar += '<div style="display:flex;align-items:center;gap:7px;font-size:11.5px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + CAT.green + ';box-shadow:0 0 0 3px ' + CAT.green + '22;"></span><span id="sl_comp_status" style="font-weight:700;color:' + CAT.text + ';">打盹中 zZ</span><span style="color:' + CAT.mute + ';">·</span><span id="sl_comp_queue_txt" style="color:' + CAT.sub + ';">🐟 排队 0</span><span style="color:' + CAT.mute + ';">·</span><span id="sl_comp_mode" style="color:' + CAT.sub + ';">⚡ 自动</span></div>';
@@ -63,7 +64,6 @@ export function createCompactBar() {
   jQuery('#sl_comp_panel_btn').on('click', function (e) { e.stopPropagation(); panel.togglePanel(); });
   jQuery('#sl_comp_gen').on('click', function (e) { e.stopPropagation(); triggerGenAll(); });
   jQuery('#sl_comp_auto').on('click', function (e) { e.stopPropagation(); settings.autoGen = settings.autoGen === 1 ? 0 : 1; saveSettings(); refreshCompactBar(); });
-  jQuery('#sl_comp_scan').on('click', async function (e) { e.stopPropagation(); var b = jQuery(this); b.prop('disabled', true).text('扫描中...'); try { await scanCharacterProfile(); toast('success', '扫描完成喵~ ✨'); } catch (e2) { toast('error', '扫描失败喵…'); } b.prop('disabled', false).text('🐾 扫描'); refreshCompactBar(); });
   _compactTimer = setInterval(refreshCompactBar, 3000); refreshCompactBar();
 }
 export function refreshCompactBar() {
@@ -72,9 +72,12 @@ export function refreshCompactBar() {
   jQuery('#sl_comp_char').text(hasChat ? cn : '还没有选角色喵~');
   jQuery('#sl_comp_model').text(hasChat ? (isEnglishMode() ? (getActiveMode() === 'anima' ? '🎬 ANIMA' : '🎬 ANIME') : '🖼️ ZIT') : '');
   var hp = chkProf();
-  if (!hasChat) { jQuery('#sl_comp_profile').text('').hide(); jQuery('#sl_comp_scan').hide(); }
-  else if (hp) { jQuery('#sl_comp_profile').text('📦 已扫描' + (function(){try{var p=JSON.parse(localStorage.sillab_settings);var cn=Object.keys(p.profiles||{})[0];var m=p.profiles[cn]&&p.profiles[cn].meta&&p.profiles[cn].meta.modelMode;return m?(' 🔒'+({zit:'ZIT',anime:'Anime',anime_tag:'Tag',anima:'Anima'}[m]||m)):'';}catch(e){return'';}})()).css({ background: CAT.green + '1F', color: CAT.green }).show(); jQuery('#sl_comp_scan').hide(); }
-  else { jQuery('#sl_comp_profile').text('🔍 未扫描').css({ background: CAT.red + '1F', color: CAT.red }).show(); jQuery('#sl_comp_scan').show(); }
+  if (!hasChat) { jQuery('#sl_comp_profile').text('').hide(); }
+  else {
+    var _pn2 = 0; try { _pn2 = rosterEntries().length; } catch (e1) {}
+    if (_pn2) jQuery('#sl_comp_profile').text('🐾 已建档 ' + _pn2 + ' 人').css({ background: CAT.green + '1F', color: CAT.green }).show();
+    else jQuery('#sl_comp_profile').text('🐾 暂无档案').css({ background: CAT.bg, color: CAT.sub }).show();
+  }
   var ss = getScannerStatus(), sm = { off: '猫尾收起', idle: '打盹中 zZ', waiting_body: '等故事来…', waiting_end: '猫爪码字中…', scanning: '思考小鱼干中…' };
   jQuery('#sl_comp_status').text(sm[ss] || ss);
   var dotColor = ss === 'scanning' ? CAT.yellow : (getQueueLength() > 0 ? CAT.accent : CAT.green);

@@ -5,10 +5,11 @@ import { catSVG, catStatusText } from './cat.js';
 import { toast, esc, escAttr, fi, chkProf } from './utils.js';
 import { settings, saveSettings, getActiveMode } from '../settings.js';
 import { slLogDump, getLogCount, slClearLogs, slLog } from '../log.js';
-import { getProfiles, scanCharacterProfile, getCharacterName, deleteCharacterProfile, setCardType } from '../pipeline/profile.js';
+import { getProfiles, getCharacterName } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
+import { rosterEntries } from '../roster.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -40,18 +41,18 @@ export function renderHomeTab() {
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ({ zit: '🖼️ ZIT', anime: '🎬 Anime', anime_tag: '🎬 Tag', anima: '🎬 Anima' }[getActiveMode()] || '🖼️ ZIT') + '</span>';
-  h += '<span style="' + chip(hp ? CAT.green + '1F' : CAT.red + '1F', hp ? CAT.green : CAT.red) + '">' + (hp ? '📦 已扫描' : '🔍 未扫描') + '</span>';
+  var _pn = 0; try { _pn = rosterEntries().length; } catch (e0) {}
+  h += '<span style="' + chip(_pn ? CAT.green + '1F' : CAT.bg, _pn ? CAT.green : CAT.sub) + '">' + (_pn ? '🐾 已建档 ' + _pn + ' 人' : '🐾 暂无档案') + '</span>';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">🐟 队列 ' + ql + '</span>';
   h += '</div></div>';
-  // 快捷操作（两大按钮）：扫描建档 + 一键补排。
-  // [B1] 原 if/else 两分支完全一致（条件无意义），合并为单一分支防止"只改一半"。
-  h += '<div style="display:flex;gap:8px;"><button id="sl_btn_scan_cast" style="flex:1;' + btnMain() + '">扫描角色卡</button><button id="sl_btn_gen_all" style="flex:1;' + btnGhost() + '">一键排图</button></div>';
+  // 快捷操作：一键补排（建档已改为聊天中自动完成，不再需要手动扫描）
+  h += '<div style="display:flex;gap:8px;"><button id="sl_btn_gen_all" style="flex:1;' + btnMain() + '">一键排图</button></div>';
   // v1.2：画师模式已移除，只剩导演模式 → 不再需要模式切换
-  h += '<div style="font-size:10px;color:' + CAT.mute + ';text-align:center;margin:2px 0 10px;">🎬 导演模式：主模型在正文标记配图位置+画面要点，画师只补提示词（最省 token，需角色卡配置指令）</div>';
+  h += '<div style="font-size:10px;color:' + CAT.mute + ';text-align:center;margin:2px 0 10px;">🎬 导演模式：主模型在正文写 [img:] 占位符（位置+画面要点），插件 AI 只负责把要点写成生图提示词（最省 token，需角色卡配置指令）</div>';
   // 设置与工具（分组列表）
   h += groupTitle('角色与世界');
   h += '<div style="' + card() + ';padding:4px 8px;">';
-  h += cell('🐾', '角色档案', hp ? '外观锚点已就绪' : '扫描角色卡建立外貌锚点', (hp ? '已扫描' : '未扫描'), 'data-nav="archive"');
+  h += cell('🐾', '角色档案', '人物外貌锚点 · 生成立绘', (_pn ? '已建档 ' + _pn + ' 人' : '暂无档案'), 'data-nav="archive"');
   h += cell('🧶', '剧情库', '每轮正文自动存档 · 标签 · 总结', storyCountText(), 'data-nav="story"');
   h += '</div>';
   h += groupTitle('生图与设置');
@@ -72,7 +73,6 @@ export function renderHomeTab() {
   h += '<div style="text-align:center;padding:14px 0 6px;color:' + CAT.mute + ';font-size:10px;letter-spacing:1px;">小猫的生图插件 ' + esc(_ver) + '</div>';
   body.html(h);
   // 交互绑定
-  body.off('click', '#sl_btn_scan_cast').on('click', '#sl_btn_scan_cast', async function () { var b = jQuery(this); b.prop('disabled', true).text('扫描中…'); try { var sr = await scanCharacterProfile(); if (sr) { toast('success', '扫描完成'); } else { toast('error', '扫描没成功'); } renderHomeTab(); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } b.prop('disabled', false).text('扫描角色卡'); });
   body.off('click', '#sl_btn_gen_all').on('click', '#sl_btn_gen_all', compact.triggerGenAll);
   body.off('click', '.sl-cell[data-nav]').on('click', '.sl-cell[data-nav]', function () {
     var nav = jQuery(this).data('nav');
@@ -98,7 +98,7 @@ export function renderSettingsPage() {
     h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '"><option value="zit"' + (settings.modelType === 'zit' ? ' selected' : '') + '>ZIT（中文提示词）</option><option value="anima"' + (settings.modelType === 'anima' ? ' selected' : '') + '>🎬 Anima 混合（标签定结构 + 自然语言写氛围）★ Anima 系模型推荐</option><option value="anime"' + (settings.modelType === 'anime' ? ' selected' : '') + '>Anime（纯英文描述）</option><option value="anime_tag"' + (settings.modelType === 'anime_tag' ? ' selected' : '') + '>Anime Tag（纯英文标签）</option></select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">Anima 系模型由 Danbooru 标签 + 自然语言 caption 混合训练：<b>纯标签丢氛围，纯描述丢结构</b> → 用混合模式效果最好。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('🐟', '配图偏好', '这只猫什么时候画图') + '<select id="sl_image_mode" style="' + f + '"><option value="always"' + (settings.imageMode === 'always' ? ' selected' : '') + '>总是配图（每轮 ≥1 张）</option><option value="encourage"' + (settings.imageMode === 'encourage' ? ' selected' : '') + '>鼓励配图（该插就插）</option><option value="key"' + (settings.imageMode === 'key' ? ' selected' : '') + '>关键场景（宁缺毋滥）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🖼️', '图块尺寸', '图卡里图片的宽度（分辨率低建议调小）') + '<select id="sl_img_width" style="' + f + '"><option value="100%"' + ((settings.imgBlockWidth || '55%') === '100%' ? ' selected' : '') + '>大（100%）</option><option value="75%"' + ((settings.imgBlockWidth || '55%') === '75%' ? ' selected' : '') + '>中（75%）</option><option value="55%"' + ((settings.imgBlockWidth || '55%') === '55%' ? ' selected' : '') + '>小（55% · 默认）</option><option value="40%"' + ((settings.imgBlockWidth || '55%') === '40%' ? ' selected' : '') + '>迷你（40%）</option></select></div>';
-    h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', 'v1.2 起唯一流程（画师模式已移除）') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签）：静态外貌特征|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport !== false, '导演模式：扫描档案作为人物基础档案', '默认开启（人物档案规则：扫描过→用插件档案做权威外貌 base，酒馆AI发来的只做衣着/状态等动态 live；没扫→全部用酒馆AI发来的）；关闭则扫描仅用于立绘/档案查看，人物表全是酒馆AI收集，更省 token') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
+    h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', '主模型写 [img:] 占位符 → 插件 AI 写提示词') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签）：静态外貌特征|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport === true, '把卡级旧扫描档案带进每个聊天', '默认关闭 —— 人物档案跟着聊天走：每个聊天各存一套，同卡不同聊天【不继承】。开启后，新聊天第一次出图时会把卡级的旧扫描档案导入本聊天（一般不需要）') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
     h += '<div style="' + card() + '">' + cardHead('🖥️', '前端卡配图（酒馆助手 iframe 应用）', 'Narrator / 检查站这类"重前端卡"专用') +
       switchHTML('sl_fe_bridge', settings.feBridge !== false, '接管前端应用（推荐）', '前端卡的剧情由卡自己调 AI 画在自己界面里，从不写进聊天消息，插件按消息扫描永远扫不到。打开后：从卡内 AI 调用结果截获剧情 → 走导演管线出图 → 图卡注入应用自己的叙事区（找不到叙事区就放应用内浮层）') +
       '<div style="margin-top:10px;"><span style="' + lbl() + '">走哪条管线</span><select id="sl_fe_mode" style="' + f + '">' +
@@ -188,6 +188,25 @@ export function renderThemePage() {
 export function renderArchivePage() {
   pushPage(function (body) { renderArchiveInto(body); }, '角色档案', { key: '角色档案' });
 }
+// ── 立绘地址：直接存在人物表条目上（档案跟着聊天走 → 删聊天立绘一起走）──
+function getPortraitUrl(ent) { try { return (ent && ent.portrait) || ''; } catch (e) { return ''; } }
+function setPortraitUrl(ent, url) { try { if (ent) ent.portrait = url; } catch (e) {} }
+
+// ── 人物列表 = 本聊天的人物表（档案跟着聊天走）──
+// 主模型每轮 [img:] 里写到的人物：有则沿用、无则建档，全都记在这次聊天的人物表里
+function collectArchivePeople() {
+  var out = [];
+  try {
+    var re = rosterEntries();
+    for (var i = 0; i < re.length; i++) {
+      var e = re[i];
+      if (!e || !e.key) continue;
+      out.push({ key: e.key, name: e.name || e.key, identity: e.identity || '', src: e.fromCard ? '角色卡' : '占位符', anchor: e.base || e.appearance || '', live: e.live || '', ent: e });
+    }
+  } catch (e2) {}
+  return out;
+}
+
 function renderArchiveInto(body) {
   var pf = getProfiles();
   if (!pf || !pf.charName) { body.html(empty('还没进入聊天，去左边找你的猫猫角色', '🐱')); return; }
@@ -197,50 +216,32 @@ function renderArchiveInto(body) {
   var npcs = pf.chat.npcs || {};
   var hasCast = Object.keys(cast).length > 0;
   var isWorld = meta.cardType === '世界观卡' || meta.cardType === '混合型卡';
+  var people = collectArchivePeople();
   var h = '';
-  if (!hasCast && !isWorld) {
-    h = '<div style="' + card() + '">' + cardHead('🐾', '扫描角色卡', '建立外貌锚点，画出不变的猫猫') + '<div style="margin-bottom:10px;"><span style="' + lbl() + '">画风模式</span>' + scanModeSelectHTML(settings.modelType || 'zit') + '</div>';
-    h += '<div style="margin-bottom:12px;"><span style="' + lbl() + '">卡类型</span>' + cardTypeSelectHTML(meta.cardType || '具体角色卡') + '</div>';
-    h += '<button id="sl_btn_scan_cast3" style="width:100%;' + btnMain() + '">扫描角色卡</button></div>';
-    h += userCardInto();
-    h += storyCardInto();
-    body.html(h); bindArchiveEvents(body); body.find('#sl_btn_scan_cast3').on('click', function(){ scanFromArchive(body); }); bindStoryEvents(body);
-    return;
-  }
-  if (isWorld && !hasCast) {
-    h = '<div style="' + card() + ';margin-bottom:10px;">' + cardHead('🌐', '世界设定卡', '角色由聊天动态生成');
-    if (meta.coreChar) h += '<div style="font-size:10.5px;color:' + CAT.accent + ';margin-bottom:8px;">核心角色: ' + esc(meta.coreChar) + '</div>';
-    h += '<div style="margin-bottom:10px;"><span style="' + lbl() + '">画风模式</span>' + scanModeSelectHTML(meta.modelMode || settings.modelType || 'zit') + '</div>';
-    h += '<div style="margin-bottom:10px;"><span style="' + lbl() + '">卡类型</span>' + cardTypeSelectHTML(meta.cardType || '具体角色卡') + '</div>';
-    h += '<div style="margin-bottom:12px;"><span style="' + lbl() + '">角色特化</span><input id="sl_specialization" type="text" value="' + escAttr(meta.specialization || '') + '" placeholder="如：雌小鬼、御姐…" style="' + fi() + '"></div>';
-    h += '<button id="sl_btn_scan_cast3" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">重新扫描</button></div>';
-    h += groupTitle('聊天里的猫猫们');
-    if (Object.keys(npcs).length) {
-      for (var n in npcs) { var npc = npcs[n]; h += '<div style="' + card() + 'padding:12px 14px;"><div style="font-weight:700;font-size:12px;color:' + CAT.text + ';">' + esc(n) + ' <span style="font-weight:400;font-size:10px;color:' + CAT.mute + ';">出现 ' + (npc.appearances || 1) + ' 次</span></div>'; if (npc.static) h += '<div style="font-size:10.5px;color:' + CAT.sub + ';white-space:pre-wrap;margin-top:4px;line-height:1.6;">' + esc(npc.static).substring(0, 150) + '</div>'; h += '</div>'; }
-    } else { h += empty('聊天中出现的角色会自动出现在这里', '🐾'); }
-    h += '<div style="margin-top:8px;"><button id="sl_btn_clear_cast" style="width:100%;' + btnDanger() + '">清除本卡档案</button></div>';
+  // 当前角色卡（只显示卡名）
+  h += '<div style="' + card() + ';padding:11px 14px;margin-bottom:10px;"><span style="font-weight:700;font-size:13.5px;color:' + CAT.text + ';">🐾 ' + esc(pf.charName) + '</span></div>';
+  if (!people.length) {
+    h += '<div style="' + card() + '">' + cardHead('🐾', '还没有人物档案', '聊着聊着就有了');
+    h += '<div style="font-size:10.5px;color:' + CAT.sub + ';line-height:1.7;">正常聊天即可 —— 主模型在正文里写 <b>[img:…|人物:名字（标签）：外貌]</b> 占位符时，插件会为该人物自动建档，之后每轮沿用同一套外貌锚点。</div></div>';
     h += userCardInto(); h += storyCardInto();
     body.html(h); bindArchiveEvents(body); bindStoryEvents(body);
     return;
   }
-  // 具体角色卡
-  h += '<div style="' + card() + ';padding:12px 14px;">';
-  h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="' + lbl() + 'margin:0;">画风（锁定）</span><div style="flex:1;">' + scanModeSelectHTML(meta.modelMode || settings.modelType || 'zit') + '</div><button id="sl_btn_scan_cast3" style="' + btnSm() + 'font-size:10px;">重扫</button></div>';
-  h += '<div style="display:flex;align-items:center;gap:8px;"><span style="' + lbl() + 'margin:0;">特化</span><input id="sl_specialization" type="text" value="' + escAttr(meta.specialization || '') + '" placeholder="如：雌小鬼、御姐…" style="flex:1;min-width:140px;' + fi() + '"></div></div>';
+  // 静态档案（本聊天已建档的人物）
   h += '<div style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid ' + CAT.line + ';">';
   h += '<button class="sl_arch_st active" data-ast="0" style="padding:9px 18px;border:none;border-radius:12px 12px 0 0;cursor:pointer;font-size:11.5px;font-weight:700;background:' + CAT.accent + ';color:#fff;">静态档案</button>';
   h += '<button class="sl_arch_st" data-ast="1" style="padding:9px 18px;border:none;border-radius:12px 12px 0 0;cursor:pointer;font-size:11.5px;font-weight:600;background:transparent;color:' + CAT.sub + ';">动态档案</button></div>';
   h += '<div id="sl_arch_static">';
-  for (var ck in cast) {
-    if (ck === 'User') continue;
-    var cv = cast[ck], anchor = cv.static || '', bodyT = cv.body || '', purl = cv.portrait || '';
+  for (var pi = 0; pi < people.length; pi++) {
+    var ppl = people[pi];
+    var ck = ppl.key, anchor = ppl.anchor || '', bodyT = '', purl = getPortraitUrl(ppl.ent);
     h += '<div style="' + card() + 'padding:12px 14px;">';
     h += '<div style="display:flex;gap:12px;align-items:flex-start;">';
     h += '<div id="sl_port_' + escAttr(ck).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_') + '" style="width:72px;height:96px;border-radius:12px;background:' + CAT.bg + ';display:flex;align-items:center;justify-content:center;border:1.5px dashed ' + CAT.line + ';font-size:9px;color:' + CAT.sub + ';text-align:center;flex-shrink:0;' + (purl ? 'background-image:url(' + purl + ');background-size:cover;background-position:top center;border:1.5px solid ' + CAT.accent + ';color:transparent;' : '') + '">' + (purl ? '' : '🐱\n立绘') + '</div>';
-    h += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:12.5px;color:' + CAT.text + ';margin-bottom:4px;">' + esc(ck) + '</div>';
+    h += '<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="font-weight:700;font-size:12.5px;color:' + CAT.text + ';">' + esc(ck) + '</span><span style="font-size:9px;padding:1px 6px;border-radius:6px;background:' + CAT.mute + '1F;color:' + CAT.mute + ';">' + esc(ppl.src || '') + '</span></div>';
     if (anchor) h += '<div style="font-size:10px;color:' + CAT.sub + ';margin-bottom:4px;line-height:1.6;">' + esc(anchor).substring(0, 120) + (anchor.length > 120 ? '…' : '') + '</div>';
     if (bodyT) h += '<div style="font-size:9.5px;color:' + CAT.mute + ';">身形: ' + esc(bodyT).substring(0, 60) + '</div>';
-    h += '<div style="display:flex;gap:5px;margin-top:7px;"><button class="sl_port_btn" data-char="' + escAttr(ck) + '" style="' + btnSm() + 'font-size:10px;padding:6px 12px;">生成立绘</button></div>';
+    h += '<div style="display:flex;gap:5px;margin-top:7px;"><button class="sl_port_btn" data-char="' + escAttr(ck) + '" style="' + btnSm() + 'font-size:10px;padding:6px 12px;">生成立绘</button><button class="sl_edit_btn" data-char="' + escAttr(ck) + '" style="' + btnGhost() + 'font-size:10px;padding:6px 12px;">编辑锚点</button></div>';
     h += '<div class="sl_edit_box" data-char="' + escAttr(ck) + '" style="display:none;margin-top:8px;"><textarea class="sl_edit_ta" data-char="' + escAttr(ck) + '" style="width:100%;min-height:60px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(anchor) + '</textarea><div style="display:flex;gap:5px;margin-top:6px;"><button class="sl_save_btn" data-char="' + escAttr(ck) + '" style="' + btnSm() + 'font-size:10px;background:' + CAT.green + ';box-shadow:none;">保存</button><button class="sl_cancel_btn" data-char="' + escAttr(ck) + '" style="' + btnGhost() + 'font-size:10px;padding:6px 12px;">取消</button></div></div></div></div></div>';
   }
   h += '</div>';
@@ -254,19 +255,8 @@ function renderArchiveInto(body) {
     }
   } else { h += empty('还没聊过天，动态档案会逐步积累', '💬'); }
   h += '</div>';
-  h += '<div style="margin-top:8px;"><button id="sl_btn_clear_cast" style="width:100%;' + btnDanger() + '">清除本卡档案</button></div>';
   h += userCardInto(); h += storyCardInto();
   body.html(h); bindArchiveEvents(body); bindStoryEvents(body);
-}
-function scanFromArchive(body) {
-  var btn = body.find('#sl_btn_scan_cast3'); btn.prop('disabled', true).text('扫描中…');
-  (async function(){ try { var scanMode = body.find('#sl_scan_mode').val() || 'zit';
-    // [Fix] 卡类型选择器只存在于扫描页/世界观卡页；具体角色卡页（含混合型卡+有档案）没有该元素，
-    // 原实现取到 undefined 一律按'具体角色卡' setCardType，会把混合型卡/世界观卡静默降级（重扫即丢失）。
-    // 改为：有选择器读选择器，没有则沿用当前 meta.cardType。
-    var cardTypeEl = body.find('#sl_card_type');
-    var cardType = cardTypeEl.length ? cardTypeEl.val() : (function(){ try { var pf = getProfiles(); return (pf && pf.root[pf.charName] && pf.root[pf.charName].meta && pf.root[pf.charName].meta.cardType) || '具体角色卡'; } catch (e5) { return '具体角色卡'; } })();
-    try { setCardType(getCharacterName(), cardType); } catch (e2) {} await scanCharacterProfile(scanMode); toast('success', '扫描完成，已锁定'); renderArchiveInto(body); compact.refreshCompactBar(); } catch (e) { toast('error', '扫描失败'); } })();
 }
 function userCardInto() {
   var pf = getProfiles();
@@ -278,14 +268,47 @@ function userCardInto() {
   return h;
 }
 export function bindArchiveEvents(b) {
-  b.off('click', '#sl_btn_clear_cast').on('click', '#sl_btn_clear_cast', function(){if(!confirm('确定清除当前角色卡档案？聊天记录不受影响'))return;deleteCharacterProfile(false);toast('warning','档案已清除，需要重新扫描');renderArchiveInto(b);compact.refreshCompactBar();});
-  b.off('click', '#sl_btn_scan_cast3').on('click', '#sl_btn_scan_cast3', function () { scanFromArchive(b); });
   b.off('change input', '#sl_user_name,#sl_user_desc').on('change input', '#sl_user_name,#sl_user_desc', function () { settings.userName = b.find('#sl_user_name').val(); settings.userDesc = b.find('#sl_user_desc').val(); saveSettings(); });
   b.off('change input', '#sl_specialization').on('change input', '#sl_specialization', function () { var pf = getProfiles(); if (pf && pf.root[pf.charName] && pf.root[pf.charName].meta) { pf.root[pf.charName].meta.specialization = jQuery(this).val(); saveSettings(); } });
   b.off('click', '.sl_arch_st').on('click', '.sl_arch_st', function () { var st = parseInt(jQuery(this).data('ast')); b.find('.sl_arch_st').css({ background: 'transparent', color: CAT.sub, fontWeight: '600' }); jQuery(this).css({ background: CAT.accent, color: '#fff', fontWeight: '700' }); b.find('#sl_arch_static').toggle(st === 0); b.find('#sl_arch_dynamic').toggle(st === 1); });
   b.off('click', '.sl_cancel_btn').on('click', '.sl_cancel_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').hide(); });
-  b.off('click', '.sl_save_btn').on('click', '.sl_save_btn', function () { var cn = jQuery(this).data('char'), nt = b.find('.sl_edit_ta[data-char="' + cn + '"]').val(), pf = getProfiles(); if (pf && pf.root[pf.charName] && pf.root[pf.charName].cast && pf.root[pf.charName].cast[cn]) { pf.root[pf.charName].cast[cn].static = nt; pf.root[pf.charName].cast[cn].anchor = nt.slice(0, 80); saveSettings(); toast('success', cn + ' 已保存'); renderArchiveInto(b); } });
+  b.off('click', '.sl_save_btn').on('click', '.sl_save_btn', function () {
+    var cn = jQuery(this).data('char'), nt = b.find('.sl_edit_ta[data-char="' + cn + '"]').val(), pf = getProfiles();
+    if (!pf || !pf.charName) return;
+    var castS = pf.root[pf.charName] && pf.root[pf.charName].cast;
+    var hit = false;
+    if (castS && castS[cn]) { castS[cn].static = nt; castS[cn].anchor = nt.slice(0, 80); hit = true; }
+    if (!hit) { try { var reS = rosterEntries(); for (var iS = 0; iS < reS.length; iS++) { if (reS[iS] && reS[iS].key === cn) { reS[iS].base = nt; reS[iS].appearance = nt; hit = true; break; } } } catch (e8) {} }
+    saveSettings(); toast('success', cn + ' 锚点已保存'); renderArchiveInto(b);
+  });
   b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function () { var cn = jQuery(this).data('char'), btn = jQuery(this), pf = getProfiles(), cast = pf && pf.root[pf.charName] && pf.root[pf.charName].cast; if (!cast || !cast[cn] || !cast[cn].static) { toast('error', '没有静态档案'); return; } var anchor = cast[cn].static; var bm=(pf&&pf.root[pf.charName]&&pf.root[pf.charName].meta&&pf.root[pf.charName].meta.modelMode)||settings.modelType; if(bm==='anime'&&cast[cn].enPrompt)anchor=cast[cn].enPrompt; else if(bm==='anime_tag'&&cast[cn].enTags)anchor=cast[cn].enTags; var bodyT = cast[cn].body || '', prompt = anchor + ((bm==='anime'||bm==='anime_tag')?'':(bodyT?', '+bodyT:'')) + ', standing, front view, full body, simple background, neutral expression'; if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt); var wf = JSON.parse(settings.cWf || '{}'); if (!Object.keys(wf).length) { toast('error', '工作流未配置'); return; } btn.prop('disabled', true).text('排队中…'); enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function(result) { if (result && result.url) { cast[cn].portrait = result.url; saveSettings(); b.find('#sl_port_' + cn.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_')).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html(''); toast('success', cn + ' 立绘生成完毕'); } btn.prop('disabled', false).text('生成立绘'); }, function() { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); }); });
+  // ── 立绘：只用人物锚点，不带场景/其它人物（展示型全身立绘）──
+  b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function () {
+    var cn = jQuery(this).data('char'), btn = jQuery(this);
+    var ent = null;
+    try { var re2 = rosterEntries(); for (var i2 = 0; i2 < re2.length; i2++) { if (re2[i2] && re2[i2].key === cn) { ent = re2[i2]; break; } } } catch (e9) {}
+    if (!ent) { toast('error', '找不到该人物档案'); return; }
+    var bm = getActiveMode() || 'zit';
+    var anchor = ent.base || ent.appearance || '';
+    if (!anchor) { toast('error', '没有可用的外貌锚点'); return; }
+    var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
+    var prompt = anchor + frame;
+    if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt);
+    var wf2 = JSON.parse(settings.cWf || '{}');
+    if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
+    btn.prop('disabled', true).text('排队中…');
+    enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function (result) {
+      if (result && result.url) {
+        setPortraitUrl(ent, result.url);
+        saveSettings();
+        var safe = String(cn).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
+        b.find('#sl_port_' + safe).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html('');
+        toast('success', cn + ' 立绘生成完毕');
+      }
+      btn.prop('disabled', false).text('生成立绘');
+    }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
+  });
+  b.off('click', '.sl_edit_btn').on('click', '.sl_edit_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_cancel_btn').on('click', '.sl_dyn_cancel_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').hide(); });
   b.off('click', '.sl_dyn_save_btn').on('click', '.sl_dyn_save_btn', function () { var cn = jQuery(this).data('char'), nt = b.find('.sl_dyn_edit_ta[data-char="' + cn + '"]').val(), pf = getProfiles(); if (pf && pf.chat && pf.chat.dynamics) { pf.chat.dynamics[cn] = nt; saveSettings(); toast('success', cn + ' 动态已保存'); renderArchiveInto(b); } });

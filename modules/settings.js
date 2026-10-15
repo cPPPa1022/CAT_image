@@ -53,11 +53,12 @@ export function getDefaults() {
         // 导演模式：是否把扫描的卡库档案作为"人物基础档案"导入人物表。
         // true=默认（人物档案规则：扫描过→用插件档案作为权威 base，酒馆AI发来的只做动态 live）；
         // false=扫描仅用于立绘/档案查看，人物表只保留酒馆AI收集的信息（更省 token，一致性弱）。
-        directorCastImport: true,
+        // 档案跟着聊天走：同卡不同聊天【不继承】。开启后才会把卡级旧扫描档案导入新聊天（一般不需要）
+    directorCastImport: false,
         // ── v1.1.2 前端卡桥（重前端卡支持）──
         // feBridge: 接管"前端卡"（酒馆助手 iframe 应用）配图。这类卡的叙事正文由卡自己调
         //   TavernHelper.generate 生成、画在自己的 UI 里，从不进聊天消息 → 插件扫描永远扫不到。
-        //   打开后：从 generate 返回值截获叙事 → 走画师管线 → 图卡注入前端应用叙事区。
+        //   打开后：从 generate 返回值截获叙事 → 走导演管线 → 图卡注入前端应用叙事区。
         feBridge: true,
         // 图卡注入位置：true=优先注入前端应用自己的叙事区（推荐）；false=只放应用内浮层
         feBridgeInline: true,

@@ -41,31 +41,36 @@ Anima 系模型由两类语料共同训练：
 3. 构图段：3-5 个标签
 4. **禁止出现中文**、禁止分类前缀（`脸型:` `衣着:`）
 5. 权重语法：`(tag:1.2)`，不超过 1.5
-6. 结构段标签 **15-20 个**；超过 25 个会互相冲淡
-7. 标签必须真实存在于 Danbooru 标签库；不确定的用自然语言代替，**不要生造下划线标签**
+6. 结构段标签 **15-25 个**；超过 25 个会互相冲淡，优先删特写细节
+7. 标签**优先**用 Danbooru 标准词（见 `atomic-vocab.txt`，那是**参考库不是白名单**）；
+   表里没有、或你有更贴切的写法 → **自己写一个同风格的短标签**，但**不要生造带下划线的标签**
 
 ## ⚠️ 年龄 / 体型必须用标签显式写全（防幼态化）
 Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成年角色必须写全：
 
     mature female, tall, large breasts, narrow waist, wide hips, long legs
 
-- 胸：`flat chest` / `small breasts` / `medium breasts` / `large breasts` / `huge breasts`
-- 腰：`narrow waist` / `slim waist`
-- 臀：`wide hips` / `thick thighs`
-- 腿：`long legs` / `thick thighs`
-- 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged`
+- 身高感：`petite` / `tall` ｜ 肩：`broad shoulders` / `narrow shoulders` / `straight shoulders`
+- 腰：`narrow waist` / `slim waist` ｜ 腿：`long legs` / `thick thighs`
+- 胸·大小：`flat chest` / `small breasts` / `medium breasts` / `large breasts` / `huge breasts`
+- 胸·胸型：`sagging breasts` / `hanging breasts` / `teardrop breasts` / `sideboob` / `cleavage`
+- 胸·乳晕 / 乳头：`large areolae` / `dark areolae` / `puffy nipples` / `inverted nipples` / `erect nipples`
+- 臀 / 胯：`wide hips` / `thick thighs` / `round ass` ｜ 体毛：`pubic hair` / `shaved`
+- 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged` / `young man`
+- ⚠️ **看不见就不写**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 不写细节层
+  （硬写会让模型脑补出"衣服穿得好好的却莫名凸点"）
 
 **禁止只写 `slender` / `slim` 这类体脂词了事** —— 那等于没写身材，模型会退回默认幼态。
 
-## 静态锚点 → 标签 / 自然语言（v1.3）
-档案里的量化比例**禁止进提示词**，按 `ratio-to-atom.txt` 换算：
+## 档案锚点 → 标签（v2）
+档案（base）现在是**模型语言原子**，直接取用即可；按 `atomic-vocab.txt` 做**参考**（不是白名单，可自创同风格词）。
+**身份锚（瞳色/痣/疤痕/罕见发色）每张必写且逐字一致** —— 这是"像不像同一个人"的核心。
 
-    眼裂≈2.8:1    → almond eyes        腰宽≈0.72胸宽 → narrow waist
-    眼尾下垂5°     → tareme             胯宽≈1.15肩宽 → wide hips
-    C罩杯          → medium breasts     168cm/7头身   → tall, long legs
-    眼距≈一眼宽    → （不写，默认）
+老档案里可能还是量化比例：**比例禁止进提示词**（生图模型没有对应表示，写了只是噪音），按 `ratio-to-atom.txt` 换算：
+    眼裂≈2.8:1 → almond eyes ｜ 眼尾下垂5° → tareme ｜ 腰宽≈0.72胸宽 → narrow waist
+    C罩杯 → medium breasts ｜ 168cm/7头身 → tall, long legs ｜ 眼距≈一眼宽 →（不写）
 
-永久标记每张必写：标签用 `mole` / `beauty mark`，位置用短语补（`mole, under left eye`）。
+永久标记每张必写：`mole` / `beauty mark` + 位置短语（`mole, under left eye`）。
 
 ## 场景约束
 每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。

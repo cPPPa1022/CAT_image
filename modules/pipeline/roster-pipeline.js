@@ -241,7 +241,8 @@ export async function runRosterPipeline(bodyText, mesId) {
         // 0. 从卡库扫描档案导入人物表（人物一致性：脸部/身形锚点直接复用扫描产出）
         // [Fix] 可关闭：导演模式只想用扫描来看立绘/档案时，关闭后人物表只保留占位符收集的信息，
         // 插件AI每轮不再把卡库全量锚点发过去（省 token）。
-        if (settings.directorCastImport !== false) {
+        // 档案跟着聊天走：默认【不导入】卡级旧扫描档案（同卡不同聊天不继承）；只有用户显式打开开关才导入
+        if (settings.directorCastImport === true) {
             try {
                 var _pf = getProfiles();
                 var _cast = _pf && _pf.root && _pf.root[_pf.charName] ? (_pf.root[_pf.charName].cast || {}) : {};
@@ -255,8 +256,10 @@ export async function runRosterPipeline(bodyText, mesId) {
         try {
             var _re = rosterEntries();
             for (var _ri = 0; _ri < _re.length; _ri++) _known.push(String(_re[_ri].name || '').replace(/（[^）]*）$/, ''));
-            var _pf2 = getProfiles();
-            if (_pf2 && _pf2.root && _pf2.root[_pf2.charName]) { for (var _ck in _pf2.root[_pf2.charName].cast) _known.push(_ck); }
+            if (settings.directorCastImport === true) {
+                var _pf2 = getProfiles();
+                if (_pf2 && _pf2.root && _pf2.root[_pf2.charName]) { for (var _ck in _pf2.root[_pf2.charName].cast) _known.push(_ck); }
+            }
         } catch (e4) {}
         placeholders = placeholders.map(function(p) {
             if (p.personSegments && p.personSegments.length) {

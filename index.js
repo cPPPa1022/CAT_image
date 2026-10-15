@@ -15,8 +15,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.5.0';
-slLog('LOADED v1.5.0');
+window.SILLYLAB_VERSION = 'v1.6.0';
+slLog('LOADED v1.6.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -47,17 +47,13 @@ if (settings.imageMode === 'encourage' && !localStorage.getItem('sillab_image_mo
     slLog('配图策略已迁移: encourage → always（强制+鼓励）');
 }
 
-// ── [Fix] 导演模式人物基础档案规则启用迁移 ──
-// 旧版本该开关默认值为 false 且保存后的值不会被新默认值覆盖 → 用户有扫描档案却不生效。
-// 一次性地把历史 false 迁移为 true（"扫描过→用插件档案"新规则）；哨兵键保证只执行一次，
-// 用户之后在设置里的主动选择不会再被覆盖。
-if (settings.directorCastImport === false && !localStorage.getItem('sillab_director_cast_migrated')) {
-    settings.directorCastImport = true;
-    try {
-        saveSettings();
-        localStorage.setItem('sillab_director_cast_migrated', '1');
-    } catch (e) {}
-    slLog('导演模式人物基础档案已按新规则启用（扫描过→用插件档案为权威 base）；如需关闭请到 模型与偏好 设置');
+// ── v2.0：档案跟着聊天走 ──
+// 人物档案 = settings.roster[角色卡][聊天ID]，同卡不同聊天【不继承】。
+// 老的一次性迁移（把 directorCastImport 强制改成 true）已移除 —— 它会让每个新聊天自动继承卡级旧扫描档案。
+if (settings.directorCastImport === true && !localStorage.getItem('sillab_cast_import_off_v2')) {
+    settings.directorCastImport = false;   // 历史 true 统一落回"不继承"
+    try { saveSettings(); localStorage.setItem('sillab_cast_import_off_v2', '1'); } catch (e) {}
+    slLog('档案已改为「跟着聊天走」：同卡不同聊天不再继承旧扫描档案');
 }
 
 // ── 清旧缓存哨兵 ──
@@ -87,7 +83,7 @@ if (!localStorage.getItem('sillab_slid_cache_v1')) {
     slLog('🧹 图块精确缓存上线：旧图片缓存已清理（旧消息图片需重新生成一次，新图按块标识精确记录）');
 }
 
-slLog('v1.5.0 init');
+slLog('v1.6.0 init');
 
 // ── 注册斜杠命令 ──
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',callback:function(){var cb=jQuery('#sl_compact');if(cb.length){cb.trigger('click');}else{toastr.info('插件面板尚未初始化喵~');}}}));
@@ -104,7 +100,7 @@ else { slLog('提示词加载器: 呜呜 import.meta.url 不可用喵~ (╥﹏�
 setEnqueueGen(enqueueGen);
 
 // ── 构建 UI ──
-try { buildUI(extension_settings); slLog('v1.5.0 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
+try { buildUI(extension_settings); slLog('v1.6.0 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
 
 // ── 启动轮询 + 事件钩子 ──
 startPolling();

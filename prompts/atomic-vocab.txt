@@ -1,135 +1,247 @@
-# 生图原子词表（Atomic Vocab）
+# 生图原子词表（Atomic Vocab）v2.0
+# 最近更新：2026-10-16
 #
-# 用途：把「静态档案」里的量化比例翻译成**生图模型真正认得的词**。
-# 核心原则：拆分粒度 = 模型词表的粒度。拆得比模型词表更细 = 噪音。
+# ══════════════════════════════════════════════════════════
+# 【用途】这是**参考库**，不是白名单
+#   · 表里有 → 优先用
+#   · 表里没有、或你有更贴切的说法 → 自己选 / 自己造，风格保持一致即可
+#   · 同一角色的同一特征，跨轮必须复用同一个词（不许换说法）
+#   · 单一特征一个词，禁止复合词：`细腰，大胸，长腿` ✅ / `细腰大胸` ❌
 #
-# 标记说明：
-#   🟢 = 模型有标准标签（Danbooru / 训练集里的固有词）→ 直接用
-#   🟡 = 无标准标签，但 caption 里常见自然语言 → 用短语，禁止写数值
-#   🔴 = 模型没有任何对应表示 → **禁止写进提示词**，只留在档案里当内部基准
+# 【两个阶段，规则完全不同 —— 这是最容易搞混的地方】
 #
-# 铁律：
-#   1. 提示词里禁止出现任何数值/比例/角度/长度单位（2.8:1、≈一眼宽、5°、168cm、C罩杯…）
-#   2. 比例的唯一作用是"决定选哪个档位词"，选完即丢
-#   3. 每张图按 L1→L2→L3 顺序取词，总预算 15-20 个原子；超过 25 个会互相冲淡
-#   4. 【原子化·重要】每个原子必须是**独立可命中的单一标签**，禁止拼成复合词：
-#        ✅ 细腰，大胸，长腿        ❌ 细腰大胸
-#        ✅ large breasts, narrow waist, wide hips   ❌ curvy hourglass figure
-#      复合词的问题：模型容易只写一半、把顺序写乱，而且丢了任一部分整条都失效。
-#      中文侧尤其重要——「细腰大胸」是一个词，模型可能只写"细腰"就收工。
+#   ① 建档阶段（写进角色档案 base）：**写全**
+#      档案描述的是"一个完整的人"，每个维度都要有值，或明确不适用。
+#      建档不设原子数量上限 —— 它是全集，不是某一张图。
+#
+#   ② 写提示词阶段（每张图）：**做减法**
+#      画面里看不见的维度不写。
+#      例：角色穿着衣服/内衣且没有凸显 → 不写乳头、乳晕、乳沟。
+#          （硬写会让模型自己脑补，画成"穿得好好的却莫名凸点"）
+#      例：全身远景 → 不写卧蚕、泪痣、唇形这些特写才看得见的。
+#
+# 【铁律】
+#   1. 禁止数值/比例/角度/cm/罩杯字母进提示词（2.8:1 / 5° / 168cm / C杯）
+#      —— 比例只是"选择器"，选完即丢
+#   2. **不做性别预判**：身体部位只取这个角色**实际存在**的部位。
+#      判断依据是角色卡 / 剧情 / 主模型的描述，
+#      不是"男性该有什么、女性该有什么"的任何预设。
+#      拿不准的维度 → 宁可不写，也不要凭空造。
+#   3. 每张图的原子总数 15-25（建档不设上限，见上）
+#
+# 【标记说明】
+#   🟢 = 目标模型（Danbooru 系）有标准标签
+#   🟡 = 无标准标签，但 caption 里常见
+#   ❓ = 待实测确认（实测后回来改标记）
+#   ✅已用 = 用户现有真实提示词里出现过且效果正常
+# ══════════════════════════════════════════════════════════
 
 ---
-# 一、分层与预算
+# 一、面部（21 组）
 
-L1 身份锚（每张必写，5-7 个）—— 决定"是不是同一个人"
-   脸型轮廓 + 眼型 + 瞳色 + 永久标记 + 发型
-L2 形体锚（每张必写，4-6 个）—— 决定"身材"
-   身高感 + 肩 + 腰 + 胸 + 臀胯 + 整体体型
-L3 细节层（构图允许时写，5-8 个）—— 提高还原度
-   眉毛 + 鼻子 + 嘴唇 + 睫毛 + 肤质
-   （特写必写；中远景可省）
+【1 种族基底】
+  🟢 asian（亚洲人）✅已用 · 🟢 east asian（东亚人）· 🟡 japanese（日本人）
+  🟡 caucasian（白人）· 🟡 latina（拉美裔）· 🟢 dark-skinned female（深肤色女性）
 
-词序（越靠前权重越高）：
-  人种 → 年龄 → 脸型 → 眼睛 → 标记 → 发型 → 体型 → 衣着 → 动作 → 场景 → 光影
+【2 年龄感】
+  女：🟡 young woman（青年女性 18-24）✅已用 · 🟡 teenage girl（少女 13-17）✅已用
+      🟡 mature female（成熟女性 35-45）✅已用 · 🟡 middle-aged woman（中年女性 45+）
+  男：🟡 young man（青年男性）✅已用 · 🟡 middle-aged man（中年男性）· 🟢 old man（老年男性）
+  通用：🟢 child（儿童）· 🟢 elderly（老人）
+
+【3 脸型轮廓】
+  🟡 round face（圆脸）✅已用 · 🟡 oval face（鹅蛋脸）✅已用 · 🟡 heart-shaped face（瓜子脸/心形脸）
+  🟡 angular face（骨感棱角脸）· 🟡 square face（方脸）· 🟡 long face（长脸）
+
+【4 下颌线】
+  🟡 soft jawline（柔和）· 🟡 smooth jawline（平滑）· 🟡 sharp jawline（分明）✅已用
+  🟡 wide jaw（宽下颌）· 🟡 strong jawline（硬朗）· 🟡 square jaw（方下颌）
+
+【5 下巴】
+  🟢 pointy chin（尖下巴）· 🟡 round chin（圆下巴）· 🟡 small chin（小下巴）
+  🟡 cleft chin（美人沟）· 🟡 double chin（双下巴）
+
+【6 眉骨 / 眼窝】（v2 新增）
+  🟡 high brow bone（高眉骨）✅已用 · 🟡 deep-set eyes（深眼窝）
+  🟡 prominent brow ridge（突出眉骨）❓ · 🟡 flat brow bone（平缓眉骨）
+
+【7 眼型】
+  🟢 tareme（下垂眼）· 🟢 tsurime（上挑眼）· 🟢 jitome（半睁眼/死鱼眼）
+  🟡 almond eyes（杏眼）✅已用 · 🟡 round eyes（圆眼）· 🟡 narrow eyes（细长眼）· 🟡 large eyes（大眼）
+  🟡 upturned eyes（眼尾上挑）✅已用 · 🟡 downturned eyes（眼尾下垂）
+  🟡 fox eyes（狐狸眼）· 🟡 doe eyes（小鹿眼）
+
+【8 眼睑】
+  🟢 monolid（单眼皮）· 🟡 double eyelids（双眼皮）· 🟡 hooded eyes（内双/肿眼泡）
+  🟡 clear double eyelids（宽双眼皮）
+
+【9 瞳色】
+  🟢 brown eyes（棕瞳）✅已用 · 🟢 amber eyes（琥珀瞳）✅已用 · 🟢 blue eyes（蓝瞳）
+  🟢 green eyes（绿瞳）· 🟢 red eyes（红瞳）· 🟡 grey eyes（灰瞳）
+  🟡 light brown eyes（浅棕瞳）✅已用 · 🟡 dark brown eyes（深棕瞳）✅已用
+  🟡 gradient eyes（渐变瞳）· 🟡 heterochromia（异色瞳）
+
+【10 瞳孔】
+  🟢 slit pupils（竖瞳/猫瞳）· 🟢 constricted pupils（缩瞳）· 🟡 dilated pupils（放大）
+  🟡 heart-shaped pupils（心形瞳）
+
+【11 睫毛】
+  🟢 long eyelashes（长睫毛）✅已用 · 🟢 thick eyelashes（浓密睫毛）· 🟡 curled eyelashes（卷翘）
+
+【12 眼周】
+  🟢 eyebags（眼袋）· 🟢 tears（泪光）· 🟡 aegyo-sal（卧蚕）· 🟡 dark circles（黑眼圈）
+  🟡 reddened eyes（眼眶发红）✅已用 · 🟡 tear marks（泪痕）
+
+【13 眉毛】
+  粗细：🟢 thick eyebrows（浓眉）✅已用 · 🟢 thin eyebrows（细眉）✅已用
+  形状：🟢 v-shaped eyebrows（V字眉/剑眉）· 🟢 furrowed brow（皱眉）✅已用
+        🟡 straight eyebrows（平直眉）· 🟡 softly arched eyebrows（柔和弯眉）· 🟡 bushy eyebrows（粗野眉）
+  眉色：🟡 dark brown eyebrows（深棕眉）· 🟡 brows match hair color（眉色同发色）
+
+【14 鼻子】
+  🟡 straight nose bridge（挺直鼻梁）✅已用 · 🟡 narrow nose bridge（窄鼻梁）✅已用
+  🟡 small nose（小巧鼻）✅已用 · 🟡 round nose tip（圆鼻头）· 🟡 pointy nose tip（尖鼻头）
+  🟡 narrow nostrils（窄鼻翼）· 🟡 button nose（小圆鼻）· 🟡 upturned nose（翘鼻）
+
+【15 唇】
+  厚度：🟢 thick lips（厚唇）✅已用 · 🟡 thin lips（薄唇）✅已用 · 🟢 full lips（饱满唇）✅已用
+  唇形：🟡 defined cupid's bow（明显唇珠）· 🟡 round lips（圆唇）· 🟡 upturned lip corners（嘴角上扬）
+        🟡 wide mouth（大嘴）· 🟡 small mouth（小嘴）· 🟡 pouty lips（嘟唇）
+  唇色：🟢 red lips（红唇）· 🟢 lipstick（涂口红）· 🟡 pale pink lips（淡粉唇）✅已用
+        🟡 natural lip color（自然唇色）· 🟡 glossy lips（唇彩）
+
+【16 肤色】
+  🟢 pale skin（白皙）✅已用 · 🟢 dark skin（深色）· 🟡 light skin（浅色）
+  🟡 fair warm skin（暖白）· 🟡 fair cool skin（冷白）✅已用 · 🟡 fair skin（白）✅已用
+  🟡 tan skin（小麦色）· 🟡 olive skin（橄榄色）
+
+【17 肤质】
+  🟡 smooth skin（光滑）· 🟡 glossy skin（油亮）· 🟡 matte skin（哑光）
+  🟡 visible pores（可见毛孔）· 🟡 flushed skin（泛红）· 🟡 sweaty（汗湿）· 🟡 wet skin（湿润）
+
+【18 发型发色】
+  长度：🟢 long hair（长发）✅已用 · 🟢 short hair（短发）✅已用 · 🟢 medium hair（中长发）
+        🟢 very long hair（及腰长发）✅已用 · 🟡 hair past waist（过腰）✅已用
+  形态：🟢 low bun（低发髻）✅已用 · 🟢 ponytail（马尾）· 🟢 high ponytail（高马尾）✅已用
+        🟢 twintails（双马尾）✅已用 · 🟢 braid（麻花辫）· 🟢 hime cut（公主切）
+        🟡 straight hair（直发）✅已用 · 🟡 wavy hair（波浪）· 🟡 curly hair（卷发）
+        🟡 loose hair（披散）✅已用 · 🟡 messy hair（凌乱）· 🟡 hair up（盘起）
+  刘海：🟢 bangs（刘海）· 🟢 blunt bangs（齐刘海）✅已用 · 🟢 swept bangs（斜刘海）
+        🟢 hair between eyes（眼间发）✅已用 · 🟡 no bangs（无刘海）✅已用
+        🟡 center part（中分）✅已用 · 🟡 side part（侧分）
+  发色：🟢 black hair（黑发）✅已用 · 🟢 brown hair（棕发）✅已用 · 🟢 blonde hair（金发）
+        🟢 silver hair（银发）· 🟡 two-tone hair（双色）✅已用 · 🟡 gradient hair（渐变）
+        🟡 dark brown hair（深棕）· 🟡 honey blonde（蜜金挑染）
+
+【19 永久标记】（辨识度核心，建档必填；没有就写"无标记"，不要留空）
+  🟢 mole（痣）✅已用 · 🟢 beauty mark（美人痣）✅已用 · 🟢 freckles（雀斑）✅已用
+  🟢 scar（疤痕）✅已用 · 🟢 birthmark（胎记）· 🟢 tattoo（纹身）
+  位置：🟡 under left eye（左眼下）✅已用 · 🟡 under eye（眼下）· 🟡 beside mouth（嘴边）
+        🟡 on her cheek（脸颊）✅已用 · 🟡 below collarbone（锁骨下）· 🟡 on neck（颈侧）
+
+【20 面部毛发】（v2 新增）
+  🟢 stubble（胡茬）· 🟢 beard（络腮胡）· 🟢 mustache（小胡子）· 🟡 clean-shaven（净面/无须）
+
+【21 颈】（v2 新增）
+  🟢 adam's apple（喉结）· 🟡 slender neck（纤细脖颈）· 🟡 nape（后颈）
+  🟡 collarbone（锁骨）· 🟡 visible collarbone（锁骨明显）
 
 ---
-# 二、面部原子（13 组）
+# 二、身材（17 组）
 
-【种族基底】
-  🟡 asian / east asian / japanese
-  （ZIT 模式必须写；anima 模式建议写，防止欧美脸）
+【22 身高感】
+  🟢 petite（娇小）✅已用 · 🟢 tall（高挑）✅已用 · 🟡 average height（中等身高）
 
-【年龄感】—— 主模型硬需求，禁止留空
-  🟡 teenage girl / young woman / mature female / middle-aged woman
+【23 肩】
+  🟢 broad shoulders（宽肩）✅已用 · 🟡 narrow shoulders（窄肩）✅已用
+  🟡 straight shoulders（直角肩）✅已用 · 🟡 sloped shoulders（溜肩）
 
-【脸型】
-  轮廓   🟡 round face / oval face / heart-shaped face / angular face / square face
-  下颌线 🟡 soft jawline / smooth jawline / sharp jawline / wide jaw
-  下巴   🟢 pointy chin · 🟡 round chin / small chin / cleft chin
+【24 腰腹】
+  腰：🟢 narrow waist（细腰）✅已用 · 🟡 slim waist（纤腰）✅已用
+      🟡 straight waistline（直筒腰）· 🟡 cinched waist（束腰感）
+  腹：🟡 soft belly（小肚子）· 🟡 toned stomach（紧实腹部）· 🟢 abs（腹肌）
+      🟡 six-pack（六块腹肌）· 🟢 navel（肚脐）· 🟡 midriff（腰腹露出）
+  侧腰：🟡 waist dimples（腰窝）
 
-【眼睛】
-  眼型   🟢 tareme（下垂眼）/ tsurime（上挑眼）/ jitome（半睁眼）
-         · 🟡 almond eyes / round eyes / narrow eyes / large eyes
-  眼睑   🟢 monolid（单眼皮）· 🟡 double eyelids / hooded eyes
-  瞳色   🟢 brown eyes / amber eyes / blue eyes / green eyes / red eyes
-         · 🟡 gradient eyes / heterochromia
-  瞳孔   🟢 slit pupils / constricted pupils · 🟡 dilated pupils
-  睫毛   🟢 long eyelashes / thick eyelashes
-  眼周   🟢 eyebags / tears · 🟡 aegyo-sal（卧蚕）/ dark circles
+【25 胸 · 大小】
+  🟢 flat chest（平胸）✅已用 · 🟢 small breasts（小胸 A）✅已用 · 🟢 medium breasts（适中 B-C）✅已用
+  🟢 large breasts（丰满 D+）✅已用 · 🟢 huge breasts（巨乳）✅已用 · 🟢 gigantic breasts（超乳）
+  🟢 cleavage（乳沟）
 
-【眉毛】
-  粗细   🟢 thick eyebrows / thin eyebrows
-  形状   🟢 v-shaped eyebrows / furrowed brow · 🟡 straight eyebrows / softly arched eyebrows
-  眉色   🟡 dark brown eyebrows / brows match hair color
+【26 胸 · 胸型】（v2 新增）
+  🟡 round breasts（半球/碗型）· 🟡 teardrop breasts（水滴型）· 🟡 perky breasts（上挺）
+  🟢 sagging breasts（下垂）· 🟢 hanging breasts（悬垂）· 🟢 wide-set breasts（外扩）❓
+  🟢 sideboob（侧乳）· 🟢 underboob（下乳）
 
-【鼻子】—— anime 模型鼻子标签极少，只用 🟡
-  🟡 small nose / straight nose bridge / round nose tip / narrow nostrils / button nose
+【27 胸 · 乳晕】（v2 新增）
+  🟢 large areolae（大乳晕）· 🟢 dark areolae（深色乳晕）· 🟡 pale areolae（浅色乳晕）❓
+  🟡 small areolae（小乳晕）❓ · 🟢 puffy nipples（凸粒状，乳晕+乳头隆起）
 
-【嘴唇】
-  厚度   🟢 thick lips · 🟡 thin lips
-  唇形   🟡 defined cupid's bow / round lips / upturned lip corners
-  唇色   🟢 red lips / lipstick · 🟡 pale pink lips / natural lip color
+【28 胸 · 乳头】（v2 新增）
+  🟢 nipples（乳头）✅已用 · 🟡 erect nipples（挺立）✅已用 · 🟢 inverted nipples（内陷）
+  🟡 pointy nipples（尖挺）❓ · 🟡 hard nipples（硬挺）✅已用 · 🟢 covered nipples（隔衣显形）
 
-【肤色肤质】
-  色调   🟢 pale skin / dark skin · 🟡 fair warm skin / fair cool skin / tan skin
-  肤质   🟡 smooth skin / glossy skin / matte skin / visible pores
+【29 胸 · 动态 / 状态】（v2 新增）
+  🟡 bouncing breasts（晃动）❓ · 🟢 breast hold（手托）· 🟢 breast press（挤压）
+  🟡 breasts squeezed together（夹在一起）· 🟡 flushed chest（胸口泛红）✅已用
 
-【发型发色】
-  长度   🟢 long hair / short hair / medium hair / very long hair
-  形态   🟢 low bun / ponytail / high ponytail / twintails / braid / hime cut
-  刘海   🟢 bangs / blunt bangs / swept bangs / hair between eyes · 🟡 no bangs
-  发色   🟢 black hair / brown hair / blonde hair / silver hair
-         · 🟡 gradient hair / two-tone hair
+【30 胸肌】（v2 新增，男性/健壮向）
+  🟢 pectorals（胸肌）· 🟡 muscular chest（肌肉胸）✅已用 · 🟡 visible pectorals（胸肌明显）✅已用
+  🟡 toned chest（紧实胸部）· 🟡 visible chest muscles（胸肌线条）✅已用
 
-【永久标记】—— 唯一辨识度核心，每张必写
-  🟢 mole / beauty mark / freckles / scar / birthmark / tattoo
-  + 🟡 位置：under left eye / beside mouth / on her cheek / below collarbone
-  例：beauty mark under left eye（左眼角外侧痣）
+【31 臀】（v2 新增）
+  🟡 round ass（圆臀）· 🟡 plump ass（饱满臀）❓ · 🟡 perky ass（翘臀）❓ · 🟡 large ass（大臀）❓
+  🟢 ass focus（臀部特写）· 🟡 butt crack（臀缝）· 🟡 jiggly ass（晃动）❓
 
----
-# 三、身体原子（7 组）—— 最容易被漏，必须每张写 L2
+【32 胯】
+  🟢 wide hips（宽胯）✅已用 · 🟡 narrow hips（窄胯）· 🟡 round hips（圆胯）
+  🟡 thigh gap（大腿缝）❓
 
-【身高感】
-  🟢 petite（娇小）/ tall（高挑）· 🟡 average height
+【33 腿】
+  🟢 long legs（长腿）✅已用 · 🟢 thick thighs（粗大腿）✅已用 · 🟡 slender legs（纤细腿）
+  🟡 toned legs（紧实腿）· 🟡 muscular thighs（肌肉大腿）· 🟡 calf definition（小腿线条）
 
-【肩】
-  🟢 broad shoulders · 🟡 narrow shoulders / straight shoulders
+【34 脚】
+  🟢 bare feet（赤足）· 🟡 soles（脚底）· 🟡 slender feet（纤细足）· 🟡 high arches（足弓）
 
-【腰】
-  🟢 narrow waist · 🟡 slim waist / straight waistline / soft belly
+【35 整体体型】
+  🟢 slender（纤细）✅已用 · 🟢 curvy（有曲线）· 🟢 chubby（丰腴）✅已用 · 🟢 muscular（健壮）
+  🟡 plump（丰满）· 🟡 hourglass figure（沙漏型）· 🟡 pear-shaped（梨型）· 🟡 athletic build（运动型）✅已用
+  🟢 bara（壮熊体型）· 🟡 toned（紧实）
 
-【胸】—— ⚠️ **必写**：缺这一项，动漫模型会默认画成幼态（萝莉）
-  🟢 flat chest / small breasts / medium breasts / large breasts / huge breasts / cleavage
+【36 体毛】（v2 新增）
+  🟢 body hair（体毛）· 🟢 pubic hair（阴毛）· 🟢 armpit hair（腋毛）
+  🟡 hairless（无体毛）· 🟡 shaved（剃净）
 
-【臀胯】
-  🟢 wide hips / thick thighs · 🟡 narrow hips / round hips
+【37 生殖器】（v2 新增｜成人向）
+  ★ 本组**不按性别分组，不写任何"男性用X女性用Y"的规则**。
+    只取这个角色**实际存在**的部位；不存在的部位不写；
+    拿不准的（例如女性化外观的跨性别角色）以角色卡/剧情/主模型描述为准，仍不确定就不写。
+  🟢 penis（阴茎）· 🟢 erection（勃起）· 🟢 testicles（睾丸）· 🟡 size adjectives（尺寸描述）
+  🟢 pussy（女性生殖器）· 🟢 clitoris（阴蒂）· 🟡 labia（阴唇）· 🟡 vagina（阴道口）
+  🟢 uncensored（无码）· 🟢 pubic hair（阴毛）· 🟡 shaved pussy（剃净）
+  🟡 wet（湿润）· 🟡 fluids（体液）
 
-【腿】
-  🟢 long legs / thick thighs · 🟡 slender legs
-
-【整体体型】
-  🟢 slender / curvy / chubby / muscular
-  · 🟡 hourglass figure / pear-shaped / athletic build
-
----
-# 四、禁止写进提示词的内容（🔴 只留档案）
-
-眼裂长宽比（2.8:1）        眼距（≈一眼宽）           三庭比例（1:1:1）
-眼尾角度（5°）              眉峰位置（眉长2/3处）      鼻宽比（0.9眼宽）
-鼻长占比（中庭1/2）         唇宽比（1.1眼距）          上下唇比（1:1.2）
-肩宽头宽比（2.2头宽）       腰胸宽比（0.72）           胯肩宽比（1.15）
-头身比（7头身）             身高数值（168cm）          罩杯字母（C杯）
-绝对长度单位（cm/mm）
-
-→ 这些**必须翻译成上面的档位词**后再写。比例是选择器，不是描述。
+【38 穿孔 / 纹身】（v2 新增）
+  🟢 ear piercing（耳钉）· 🟢 navel piercing（脐钉）· 🟢 nipple piercing（乳钉）
+  🟢 tongue piercing（舌钉）· 🟢 tattoo（纹身）· 🟢 earring（耳环）· 🟡 multiple piercings（多孔）
 
 ---
-# 五、自检
+# 三、造型（服装/发型/鞋袜/配饰/妆容）
 
-1. 提示词里还有任何数字/比例/角度吗？→ 有就删，换成档位词
-2. L1 身份锚（脸型/眼型/瞳色/标记/发型）写全了吗？
-3. L2 形体锚（身高感/肩/腰/胸/臀/体型）写全了吗？—— 只写 slender/slim 等于没写
-   ⚠️ 动漫模型缺体型标签时**默认幼态化（萝莉）**：成年角色必须写全 胸 + 腰 + 臀
-   （如 `mature female, large breasts, narrow waist, wide hips`）
-4. 有没有用角色名代替外貌？（硬禁止）
-5. 原子总数在 15-20 之间吗？超过 25 个就删 L3
+  本组**不用本表**，见 `wardrobe-vocab.txt`（五槽维度表）+ `wardrobe-expand.txt`（具象化规则）。
+  造型以 key 建档、逐字复用，规则见 v1.5.0 造型库。
+
+---
+# 四、词序（越靠前权重越高）
+
+  人种 → 年龄 → 脸型 → 眉眼 → 标记 → 发型 → 体型 → 衣着 → 动作 → 场景 → 光影
+
+---
+# 五、自检（写提示词前）
+
+  1. 提示词里还有数字/比例/角度/cm/罩杯字母吗？→ 有就删，换档位词
+  2. 是"一个特征一个词"吗？→ 有复合词就拆
+  3. 画面里看不见的维度写了吗？→ 写了就删（尤其乳头/乳晕/乳沟/生殖器）
+  4. 这个角色的部位，是你**确认存在**的吗？→ 拿不准就删，不要凭空造
+  5. 原子的总数在 15-25 之间吗？→ 超了就优先删特写细节

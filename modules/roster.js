@@ -308,6 +308,11 @@ export function rosterDataTextFor(nameList) {
                         nmLines.push('■ ' + e.key);
                         nmLines.push('   ✅ 已解析锚点【' + getActiveMode() + '】（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
                         nmLines.push('   ⚠️ 原始锚点（主模型原文，**只用于对照是否缺维度，不要照抄**）：' + (e.base || e.appearance || '').slice(0, 200));
+                    } else if (e.base) {
+                        // [Fix v1.7.4] 只发【静态锚点】，**不夹带上一轮的 live**
+                        // （live 是上一轮辅助AI回传的可变状态，喂回去 = 读了之前的东西 → 状态串场）
+                        nmLines.push('■ ' + e.key + '：' + e.base);
+                        nmLines.push('   （以上是静态锚点；本轮衣着/状态/动作一律以【占位符】为准，**不要沿用上一轮**）');
                     } else {
                         nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
                     }

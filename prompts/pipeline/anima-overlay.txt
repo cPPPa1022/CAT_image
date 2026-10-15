@@ -58,8 +58,10 @@ Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成�
 - 臀 / 胯：`wide hips` / `thick thighs` / `round ass` ｜ 胸肌：`pectorals` / `muscular chest` / `visible pectorals`
 - 体毛 / 生殖器：`pubic hair` / `shaved` ｜ `penis` / `pussy` / `clitoris` / `uncensored`（**只写该角色实际有的部位**，拿不准就不写）
 - 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged` / `young man`
-- ⚠️ **看不见就不写**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 不写细节层
+- ⚠️ **看不见就不写（只删 L3/L4）**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 可省睫毛/肤质等细节层
   （硬写会让模型脑补出"衣服穿得好好的却莫名凸点"）
+- ⚠️ **L1 身份锚 + L2 形体锚每张必写，不受景别影响**（中景/远景也要写全，砍了就每张换脸）
+- ⛔ 结构段禁止出现角色名，全部用标签替代
 
 **禁止只写 `slender` / `slim` 这类体脂词了事** —— 那等于没写身材，模型会退回默认幼态。
 

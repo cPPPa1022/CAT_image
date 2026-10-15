@@ -219,6 +219,21 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
                 }
             }
         }
+        // [Fix v1.6.4] 提示词里**禁止出现角色名**（既有铁律）——
+        // 尾部若混进"白璐坐在沙发上歪头看向赵子珺"这种场景原文（兜底拼接/AI 复述），整段删掉
+        try {
+            prompt = String(prompt).replace(/[，,]?\s*要点\s*[:：]/g, '，').replace(/，{2,}/g, '，');
+            var _nm = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (n) { return n.length >= 2; });
+            if (_nm.length) {
+                var _segs = prompt.split('，');
+                while (_segs.length > 2) {
+                    var _last = _segs[_segs.length - 1]; var _hit = false;
+                    for (var _ni = 0; _ni < _nm.length; _ni++) { if (_last.indexOf(_nm[_ni]) >= 0) { _hit = true; break; } }
+                    if (_hit) { _segs.pop(); } else { break; }
+                }
+                prompt = _segs.join('，').replace(/[，,、\s]+$/, '');
+            }
+        } catch (eTail) {}
         return buildImageBlock(ph.scene, prompt);
     });
     // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见

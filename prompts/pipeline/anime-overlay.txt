@@ -23,6 +23,22 @@
    ⚠️ 年龄/体型缺失时动漫模型**默认偏幼态（萝莉化）**。成年角色必须把**胸部与腰臀**写出来，
    禁止只写 `slender` / `slim` 这类体脂词了事
 
+## 示例（**写成句子，不是堆词**）
+
+    A twenty-nine-year-old East Asian woman stands in the entryway. Her face is a soft oval with a full
+    forehead and a jawline that narrows gently into a small round chin. Her brow bone is flat and her
+    eyes sit shallow; her eyebrows are softly arched in dark brown and taper off naturally. Her eyes are
+    long almond-shaped with softly downturned outer corners, the upper lids a narrow double fold that
+    creases lightly when open; the irises are dark brown with a warm amber layer that catches a ring of
+    gold in the light, her lashes long and naturally curved with a faint aegyo-sal beneath. Her nose
+    bridge is straight with a small tip and narrow nostrils; her lips are full, the lower slightly
+    heavier, in pale pink. Her skin is fair with a warm undertone and a smooth, lightly glowing texture.
+    Her hair is shoulder-length and wavy, loosely curled at the ends, side-parted with no bangs, dark
+    brown and thick. She wears a light cotton shirt buttoned to the second button with a beige knit
+    cardigan draped loose over her shoulders, and a dark pencil skirt that hugs her hips. She stands in
+    the entryway holding a bag in both hands, leaning slightly forward, smiling toward the door. A warm
+    ceiling lamp casts honey light down over her shoulders. close-up, eye level, shallow depth of field.
+
 ## 动态字段转英文
 - `发型:黑色低发髻，斜刘海` → `black hair in a low bun with side bangs`
 - `衣着:深灰V领紧身短袖` → `a gray v-neck tight short-sleeve shirt`

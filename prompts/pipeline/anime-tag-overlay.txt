@@ -25,6 +25,18 @@
    ⚠️ 缺体型标签时动漫模型**默认偏幼态（萝莉化）**；禁止只写 `slender` 了事
 10. 所有持久性规则跟 ZIT 一样
 
+## 示例（标签**写全**入镜维度，通常 30-50 个；**不是只写十几个**）
+
+    asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
+    almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
+    aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip, narrow
+    nostrils, full lips, pale pink lips, fair skin, smooth skin, very long wavy hair, side part,
+    no bangs, dark brown hair, slender neck, visible collarbone, tall, narrow shoulders, narrow waist,
+    large breasts, wide hips, long legs, curvy, light blue cotton shirt, buttoned up, beige knit
+    cardigan, cardigan slipping off shoulder, dark pencil skirt, standing, holding bag, leaning
+    forward, looking at viewer, smile, closed mouth, indoor, entryway, warm lighting, ceiling light,
+    close-up, eye level, shallow depth of field
+
 ## 动态字段转标签
 - `发型:黑色低发髻，斜刘海` → `black hair, low bun, side bangs`
 - `衣着:深灰V领紧身短袖` → `dark gray v-neck shirt, tight, short sleeves`

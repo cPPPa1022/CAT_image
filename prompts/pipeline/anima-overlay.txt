@@ -14,12 +14,15 @@ Anima 系模型由两类语料共同训练：
     ② 氛围段（自然语言一句）   —— 光影 / 氛围 / 情绪，一句英文，≤40 词
     ③ 构图段（标签）          —— 景别 / 机位 / 景深，3-5 个标签
 
-示例：
-    asian, mature female, tall, large breasts, narrow waist, wide hips, long legs, oval face,
-    almond eyes, brown eyes, black hair, low bun, beauty mark under left eye, light gray cardigan,
-    champagne silk camisole, sheer black stockings. A warm floor lamp spills amber light across
-    her skin while cold window light rims her bare shoulder, the room quiet and close. side view,
-    close-up, shallow depth of field
+示例（结构段要**写全**：脸的全部细节 + 体型 + 衣着，通常 30-50 个标签；**不是只写十几个**）：
+    asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
+    almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
+    aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip,
+    narrow nostrils, full lips, pale pink lips, fair skin, smooth skin, very long wavy hair, side part,
+    no bangs, dark brown hair, slender neck, visible collarbone, tall, narrow shoulders, narrow waist,
+    large breasts, wide hips, long legs, curvy, light blue cotton shirt, buttoned up, beige knit
+    cardigan. A warm ceiling lamp spills honey-colored light over her shoulders while the hallway
+    behind her stays dim, the air quiet and still. close-up, eye level, shallow depth of field
 
 ## 分工表（关键，别用错）
 

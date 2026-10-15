@@ -226,12 +226,13 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             var _nm = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (n) { return n.length >= 2; });
             if (_nm.length) {
                 var _segs = prompt.split('，');
-                while (_segs.length > 2) {
-                    var _last = _segs[_segs.length - 1]; var _hit = false;
-                    for (var _ni = 0; _ni < _nm.length; _ni++) { if (_last.indexOf(_nm[_ni]) >= 0) { _hit = true; break; } }
-                    if (_hit) { _segs.pop(); } else { break; }
+                var _kept = [];
+                for (var _si2 = 0; _si2 < _segs.length; _si2++) {
+                    var _sg = _segs[_si2]; var _hasName = false;
+                    for (var _ni = 0; _ni < _nm.length; _ni++) { if (_sg.indexOf(_nm[_ni]) >= 0) { _hasName = true; break; } }
+                    if (!_hasName) _kept.push(_sg);
                 }
-                prompt = _segs.join('，').replace(/[，,、\s]+$/, '');
+                prompt = _kept.join('，').replace(/，{2,}/g, '，').replace(/[，,、\s]+$/, '');
             }
         } catch (eTail) {}
         return buildImageBlock(ph.scene, prompt);

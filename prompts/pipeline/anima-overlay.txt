@@ -55,18 +55,21 @@ Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成�
 - 胸·大小：`flat chest` / `small breasts` / `medium breasts` / `large breasts` / `huge breasts`
 - 胸·胸型：`sagging breasts` / `hanging breasts` / `teardrop breasts` / `sideboob` / `cleavage`
 - 胸·乳晕 / 乳头：`large areolae` / `dark areolae` / `puffy nipples` / `inverted nipples` / `erect nipples`
-- 臀 / 胯：`wide hips` / `thick thighs` / `round ass` ｜ 体毛：`pubic hair` / `shaved`
+- 臀 / 胯：`wide hips` / `thick thighs` / `round ass` ｜ 胸肌：`pectorals` / `muscular chest` / `visible pectorals`
+- 体毛 / 生殖器：`pubic hair` / `shaved` ｜ `penis` / `pussy` / `clitoris` / `uncensored`（**只写该角色实际有的部位**，拿不准就不写）
 - 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged` / `young man`
 - ⚠️ **看不见就不写**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 不写细节层
   （硬写会让模型脑补出"衣服穿得好好的却莫名凸点"）
 
 **禁止只写 `slender` / `slim` 这类体脂词了事** —— 那等于没写身材，模型会退回默认幼态。
 
-## 档案锚点 → 标签（v2）
-档案（base）现在是**模型语言原子**，直接取用即可；按 `atomic-vocab.txt` 做**参考**（不是白名单，可自创同风格词）。
+## 档案锚点 → 结构段标签（v2）
+⚠️ 档案（base）里是**主模型写的中文锚点**（+ 插件补全的维度）—— 你必须把它**具象化成英文标签**写进结构段，不是照抄中文。
+按 `atomic-vocab.txt` 取词（**参考库不是白名单**：表里没有、或你有更贴切的写法 → 自己写一个同风格的短标签）。
 **身份锚（瞳色/痣/疤痕/罕见发色）每张必写且逐字一致** —— 这是"像不像同一个人"的核心。
+⚠️ **跨轮复用同一个标签**：同一个人的同一个特征，这轮 `large breasts`，下轮还是 `large breasts` —— 换说法 = 长相漂移。
 
-老档案里可能还是量化比例：**比例禁止进提示词**（生图模型没有对应表示，写了只是噪音），按 `ratio-to-atom.txt` 换算：
+老档案里若还是量化比例：**比例禁止进提示词**（生图模型没有对应表示，写了只是噪音），按 `ratio-to-atom.txt` 换算：
     眼裂≈2.8:1 → almond eyes ｜ 眼尾下垂5° → tareme ｜ 腰宽≈0.72胸宽 → narrow waist
     C罩杯 → medium breasts ｜ 168cm/7头身 → tall, long legs ｜ 眼距≈一眼宽 →（不写）
 

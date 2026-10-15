@@ -10,6 +10,7 @@ import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { rosterEntries } from '../roster.js';
+import { auxApiCall } from '../pipeline/api.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -291,22 +292,39 @@ export function bindArchiveEvents(b) {
     var bm = getActiveMode() || 'zit';
     var anchor = ent.base || ent.appearance || '';
     if (!anchor) { toast('error', '没有可用的外貌锚点'); return; }
-    var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
-    var prompt = anchor + frame;
-    if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt);
     var wf2 = JSON.parse(settings.cWf || '{}');
     if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
-    btn.prop('disabled', true).text('排队中…');
-    enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function (result) {
-      if (result && result.url) {
-        setPortraitUrl(ent, result.url);
-        saveSettings();
-        var safe = String(cn).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
-        b.find('#sl_port_' + safe).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html('');
-        toast('success', cn + ' 立绘生成完毕');
-      }
-      btn.prop('disabled', false).text('生成立绘');
-    }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
+    var _runPortrait = function (anchorText) {
+      var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
+      var prompt = anchorText + frame;
+      if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt);
+      btn.prop('disabled', true).text('排队中…');
+      enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function (result) {
+        if (result && result.url) {
+          setPortraitUrl(ent, result.url);
+          saveSettings();
+          var safe = String(cn).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
+          b.find('#sl_port_' + safe).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html('');
+          toast('success', cn + ' 立绘生成完毕');
+        }
+        btn.prop('disabled', false).text('生成立绘');
+      }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
+    };
+    // 档案里存的是【主模型写的中文锚点】→ 英文系模式先用辅助 AI 转写成该模式的生图语言，再出图
+    if (bm !== 'zit' && /[\u4e00-\u9fff]/.test(anchor)) {
+      btn.prop('disabled', true).text('转写中…');
+      var _sysP = (bm === 'anime_tag')
+        ? '把下面的人物外貌锚点写成纯 Danbooru 英文标签链：逗号+空格分隔、全小写、单一特征一个词、禁止中文、禁止自然语言句子。只输出标签链本身，不要任何解释。'
+        : (bm === 'anima')
+        ? '把下面的人物外貌锚点写成 Danbooru 英文标签：逗号+空格分隔、全小写、单一特征一个词。只输出标签本身，不要任何解释。'
+        : '把下面的人物外貌锚点写成英文生图语言（短语或短句，逗号分隔）。只输出结果本身，不要任何解释。';
+      auxApiCall(_sysP, anchor, 700, 0.2).then(function (t) {
+        var _t = String(t || '').trim();
+        _runPortrait(_t || anchor);
+      }, function () { _runPortrait(anchor); });
+    } else {
+      _runPortrait(anchor);
+    }
   });
   b.off('click', '.sl_edit_btn').on('click', '.sl_edit_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });

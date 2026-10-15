@@ -5,7 +5,7 @@ import { catSVG, catStatusText } from './cat.js';
 import { setHeadStatus } from './panel.js';
 import { toast, chkProf } from './utils.js';
 import { settings, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
-import { getCharacterName, scanCharacterProfile } from '../pipeline/profile.js';
+import { getCharacterName } from '../pipeline/profile.js';
 import { getScannerStatus } from '../scanner.js';
 import { getQueueLength } from '../queue.js';
 import * as panel from './panel.js';  // 循环依赖：仅函数体内引用，运行时安全

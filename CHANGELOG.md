@@ -1,5 +1,17 @@
 # 📜 更新日志（Changelog）
 
+## v1.6.3 — 2026-10-16
+**🐛 紧急修复：v1.6.2 会导致插件整体加载失败**
+
+- `modules/roster.js` 里 `getActiveMode` 被 import 了两次（文件顶部 + 第 203 行一句历史遗留的游离 import）
+  → 浏览器报 `Uncaught SyntaxError: Identifier 'getActiveMode' has already been declared`，
+  ES 模块整体加载失败 → 插件不可用。已删除重复的那句。
+- **教训**：`node --check` 默认按 CommonJS 解析，**抓不到这种 ES 模块级错误**（重复 import / 重复声明）。
+  本次改用「把文件复制成 `.mjs` 再 `--check`」的方式把 27 个文件全查了一遍（0 失败），今后改动都走这个查法。
+- 顺手清掉 `compact-bar.js` 里已经用不到的 `scanCharacterProfile` import。
+
+---
+
 ## v1.6.2 — 2026-10-16
 **主题：锚点库 —— 脸/身形也享受「逐字复用」，四个模式拉齐**
 

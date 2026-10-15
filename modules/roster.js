@@ -200,7 +200,6 @@ export function rosterIndexText(limit) {
 // cast: { 角色名: { static, body, enPrompt, enTags, ... } }
 // mode: 'zit' | 'anime' | 'anime_tag' → 选对应语言锚点
 // 返回值：导入/更新条数
-import { getActiveMode } from './settings.js';
 // 身份维度过滤器：档案只保留"脸部/身材/永久标记"（用户规则）——
 // 发型/衣着/配饰/状态等可变维度由酒馆AI按轮次写（插件AI只做 档案+酒馆AI提示词 → 图片prompt）。
 export function identityAnchorOnly(text) {

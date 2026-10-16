@@ -7,7 +7,7 @@ import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
-import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setAtomAnchor } from '../roster.js';
+import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
 import { statusesDataTextFor, upsertStatus, setStatusActive } from '../statuses.js';
@@ -390,17 +390,22 @@ export async function runRosterPipeline(bodyText, mesId) {
         // 3. 解析 PROFILE（人物表更新）
         var profileData = parseRosterProfile(output);
         if (profileData && profileData.persons) {
-            var ups = 0, nAnchors = 0;
+            var ups = 0, nAnchors = 0, nZh = 0, nRej = 0;
             for (var k in profileData.persons) {
                 var pe = profileData.persons[k];
                 var upName = (pe && pe.name) || k.replace(/（[^）]*）$/, '');
                 var upIdm = (pe && pe.identity) || (k.indexOf('（') >= 0 ? k.slice(k.indexOf('（') + 1, k.lastIndexOf('）')) : '');
                 if (pe && pe.appearance) { upsertPerson(upName, upIdm, pe.appearance, 'profile'); ups++; }
-                // v1.6.2：模型语言锚点（首次具象化产出 → 存起来逐字复用，消除英文模式每轮重译的漂移）
-                if (pe && pe.anchor) { if (setAtomAnchor(upName, upIdm, getActiveMode(), pe.anchor)) nAnchors++; }
+                // v2.0 锚点库：anchor = **英文权威锚点**（四种模式共用，逐字复用 → 零漂移）
+                //            anchor_zh = 中文呈现缓存（只给 zit 中文模式用）
+                // 闸门在 roster.js：英文进 anchor；中文只允许在 zit 模式进缓存；其余拒绝并记日志
+                if (pe && pe.anchor) { if (setEnglishAnchor(upName, upIdm, pe.anchor)) nAnchors++; else nRej++; }
+                if (pe && pe.anchor_zh) { if (setZitAnchor(upName, upIdm, pe.anchor_zh)) nZh++; }
             }
             if (ups) slLog('协作PROFILE档案更新: ' + ups + ' 人');
-            if (nAnchors) slLog('锚点库更新: ' + nAnchors + ' 条（' + getActiveMode() + '）');
+            if (nAnchors) slLog('英文锚点更新: ' + nAnchors + ' 条');
+            if (nZh) slLog('中文呈现锚点更新: ' + nZh + ' 条');
+            if (nRej) slErr('⛔ PROFILE.anchor 被拒（含中文，英文槽位只收英文）: ' + nRej + ' 条 —— 详见上方锚点日志');
         }
 
         // 3.5 解析 ---WARDROBE--- → 回写造型库（下次即可原样复用，零漂移）

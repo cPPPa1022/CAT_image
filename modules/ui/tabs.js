@@ -3,13 +3,13 @@ import { CAT, CAT_THEMES, TEXT_THEMES, applyTheme, THEME_ORDER, THEME_ICONS } fr
 import { card, groupTitle, cell, cardHead, lbl, chip, btnMain, btnGhost, btnSm, btnDanger, switchHTML, empty } from './primitives.js';
 import { catSVG, catStatusText } from './cat.js';
 import { toast, esc, escAttr, fi, chkProf } from './utils.js';
-import { settings, saveSettings, getActiveMode } from '../settings.js';
+import { settings, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
 import { slLogDump, getLogCount, slClearLogs, slLog } from '../log.js';
 import { getProfiles, getCharacterName } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
-import { rosterEntries, atomValues, atomCount } from '../roster.js';
+import { rosterEntries, atomValues, atomCount, getAtomAnchor } from '../roster.js';
 import { composeFinalPrompt } from '../comfyui.js';
 import { activeStatuses, setStatusActive } from '../statuses.js';
 import { openSubPanel } from './sub-panels.js';
@@ -239,6 +239,8 @@ function renderArchiveInto(body) {
     h += '<div style="flex:1;min-width:0;">';
     h += '<div style="font-weight:700;font-size:13px;color:' + CAT.text + ';margin-bottom:3px;">' + esc(ppl.name || ck) + '</div>';
     h += '<div style="font-size:10.5px;color:' + CAT.sub + ';">' + esc(ppl.identity || '（无标签）') + '</div>';
+    // [v2.0] 立绘按钮上移到列表卡片（第2层）——不用点进详情页就能出图
+    h += '<button class="sl_port_btn" data-char="' + escAttr(ck) + '" style="' + btnSm() + 'font-size:10px;padding:5px 11px;margin-top:8px;">生成立绘</button>';
     h += '</div>';
     h += '<div style="color:' + CAT.mute + ';font-size:15px;padding-right:2px;">›</div>';
     h += '</div></div>';
@@ -263,24 +265,25 @@ function renderArchiveInto(body) {
 // 立绘提示词（生成立绘用的完整提示词，供复制去 ComfyUI 实测）
 function buildPortraitPrompt(anchor, bm) {
   if (!anchor) return '';
-  var vals = atomValues(anchor);   // 结构化锚点 → "值，值，值"（提示词里不能有 维度: 前缀）
+  var vals = atomValues(anchor, bm);   // 结构化锚点 → 生图语言（英文锚点 ', ' 分隔；中文锚点 '，'）
   // 立绘 = 对照图：明确"全裸无遮挡"，否则模型会自己脑补一层薄纱/滤镜，胸腹细节糊成一团（像伪人）
   var frame = (bm === 'zit')
     ? '，全裸，无衣物遮挡，站立，正面，全身，简洁纯色背景，表情平静'
     : ', completely nude, no clothes, uncensored, standing, front view, full body, simple background, neutral expression';
   var pr = vals + frame;
-  if (bm === 'anime' || bm === 'anime_tag') pr = cleanAnimePrompt(pr);
+  if (isEnglishMode(bm)) pr = cleanAnimePrompt(pr);   // [Fix v2.0] 原实现漏了 anima
   // v1.8.3：走与 generateImage 完全同源的组装（画风预设 / anime质量前缀 / 前置提示词 / 艺术家标签）
   return composeFinalPrompt(pr);
 }
 
-// ── 人物详情页：完整档案（补全后锚点）+ 编辑锚点 + 提示词 ──
+// ── 人物详情页（第3层）：完整档案（锚点）+ 提示词 ──
+// 立绘按钮在列表卡片（第2层）；锚点只读，不做手工编辑 ──
 function renderPersonDetail(body, key) {
   var people = collectArchivePeople(), ppl = null;
   for (var i = 0; i < people.length; i++) { if (people[i].key === key) { ppl = people[i]; break; } }
   if (!ppl) { renderArchiveInto(body); return; }
   var bm = getActiveMode() || 'zit';
-  var atom = (ppl.ent && ppl.ent.atoms && ppl.ent.atoms[bm]) || '';
+  var atom = getAtomAnchor(ppl.ent, bm);   // [v2.0] 英文三模式读英文权威锚点；zit 读中文呈现缓存
   var purl = getPortraitUrl(ppl.ent);
   var safe = String(ppl.key).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
   var h = '';
@@ -292,15 +295,16 @@ function renderPersonDetail(body, key) {
   h += '<div style="font-weight:700;font-size:14px;color:' + CAT.text + ';margin-bottom:3px;">' + esc(ppl.name || ppl.key) + '</div>';
   h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:9px;">' + esc(ppl.identity || '（无标签）') + '</div>';
   var _an = atomCount(atom);
-  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:3px;">完整档案 · 补全后原子锚点【' + esc(bm) + '】'
+  var _atomLabel = (bm === 'zit') ? '中文呈现锚点（zit 专用）' : '英文权威锚点（四种模式共用）';
+  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:3px;">完整档案 · ' + _atomLabel + '【' + esc(bm) + '】'
      + (atom ? ' · <span style="color:' + (_an >= 20 ? CAT.green : CAT.red) + ';">共 ' + _an + ' 项' + (_an >= 20 ? '' : ' ⚠️ 偏少') + '</span>' : '') + '</div>';
-  h += '<div style="font-size:10px;color:' + CAT.mute + ';line-height:1.75;max-height:190px;overflow:auto;">' + (atom ? esc(atom) : '（还没有补全后的锚点 —— 先正常聊一轮、出一次图，插件就会按 38 维建档）') + '</div>';
+  h += '<div style="font-size:10px;color:' + CAT.mute + ';line-height:1.75;max-height:190px;overflow:auto;">' + (atom ? esc(atom) : (bm === 'zit'
+     ? '（还没有锚点 —— 先正常聊一轮、出一次图，插件就会按 38 维建档）'
+     : '（还没有【英文锚点】—— 英文三模式只读英文锚点（中文会被清洗逻辑删空、立绘画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点）')) + '</div>';
+  // [v2.0] 立绘按钮在列表卡片上（第2层）；「编辑锚点」已移除 —— 锚点只由辅助 AI 产出，手工改的口子关掉
   h += '<div style="display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;">';
-  h += '<button class="sl_port_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10.5px;padding:6px 13px;">生成立绘</button>';
-  h += '<button class="sl_edit_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10.5px;padding:6px 13px;">编辑锚点</button>';
   h += '<button class="sl_prompt_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10.5px;padding:6px 13px;">提示词</button>';
   h += '</div>';
-  h += '<div class="sl_edit_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;"><textarea class="sl_edit_ta" data-char="' + escAttr(ppl.key) + '" style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(atom) + '</textarea><div style="display:flex;gap:5px;margin-top:6px;"><button class="sl_save_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10px;background:' + CAT.green + ';box-shadow:none;">保存</button><button class="sl_cancel_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10px;padding:6px 12px;">取消</button></div><div style="font-size:9.5px;color:' + CAT.mute + ';margin-top:6px;">保存后：下一轮出图时辅助 AI 会看到这份锚点（LLM 没有上轮记忆，所以体感是"下一次生效"）</div></div>';
   h += '<div class="sl_prompt_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;">';
   h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:4px;">下方就是**实际发给 ComfyUI 的那一条**（含画风预设 / 质量前缀 / 前置提示词 / 艺术家标签）</div>';
   h += '<textarea class="sl_prompt_ta" data-char="' + escAttr(ppl.key) + '" readonly style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(buildPortraitPrompt(atom, bm)) + '</textarea>';
@@ -312,26 +316,6 @@ export function bindArchiveEvents(b) {
   b.off('change input', '#sl_user_name,#sl_user_desc').on('change input', '#sl_user_name,#sl_user_desc', function () { settings.userName = b.find('#sl_user_name').val(); settings.userDesc = b.find('#sl_user_desc').val(); saveSettings(); });
   b.off('change input', '#sl_specialization').on('change input', '#sl_specialization', function () { var pf = getProfiles(); if (pf && pf.root[pf.charName] && pf.root[pf.charName].meta) { pf.root[pf.charName].meta.specialization = jQuery(this).val(); saveSettings(); } });
   b.off('click', '.sl_arch_st').on('click', '.sl_arch_st', function () { var st = parseInt(jQuery(this).data('ast')); b.find('.sl_arch_st').css({ background: 'transparent', color: CAT.sub, fontWeight: '600' }); jQuery(this).css({ background: CAT.accent, color: '#fff', fontWeight: '700' }); b.find('#sl_arch_static').toggle(st === 0); b.find('#sl_arch_dynamic').toggle(st === 1); });
-  b.off('click', '.sl_cancel_btn').on('click', '.sl_cancel_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').hide(); });
-  // 保存的是【补全后的锚点】= atoms[当前模式]（不是主模型原文 base）
-  b.off('click', '.sl_save_btn').on('click', '.sl_save_btn', function () {
-    var cn = jQuery(this).data('char'), nt = b.find('.sl_edit_ta[data-char="' + cn + '"]').val();
-    var bm2 = getActiveMode() || 'zit';
-    var hit = false;
-    try {
-      var reS = rosterEntries();
-      for (var iS = 0; iS < reS.length; iS++) {
-        if (reS[iS] && reS[iS].key === cn) {
-          if (!reS[iS].atoms) reS[iS].atoms = {};
-          reS[iS].atoms[bm2] = nt;
-          hit = true; break;
-        }
-      }
-    } catch (e8) {}
-    if (!hit) { toast('error', '找不到该人物档案'); return; }
-    saveSettings(); toast('success', cn + ' 锚点已保存（下一次出图生效）');
-    renderPersonDetail(b, cn);
-  });
   // 卡片 → 详情页；返回
   b.off('click', '.sl_st_off').on('click', '.sl_st_off', function (e) {
     e.stopPropagation();
@@ -350,7 +334,7 @@ export function bindArchiveEvents(b) {
     var people2 = collectArchivePeople(), p2 = null;
     for (var i2 = 0; i2 < people2.length; i2++) { if (people2[i2].key === cn2) { p2 = people2[i2]; break; } }
     var bm3 = getActiveMode() || 'zit';
-    var atom2 = (p2 && p2.ent && p2.ent.atoms && p2.ent.atoms[bm3]) || '';
+    var atom2 = p2 ? getAtomAnchor(p2.ent, bm3) : '';
     box.find('.sl_prompt_ta').val(buildPortraitPrompt(atom2, bm3));
     box.show();
   });
@@ -366,28 +350,33 @@ export function bindArchiveEvents(b) {
       } else { ta[0].select(); document.execCommand('copy'); done(); }
     } catch (e9) { toast('error', '复制失败，请手动选中'); }
   });
-  b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function () { var cn = jQuery(this).data('char'), btn = jQuery(this), pf = getProfiles(), cast = pf && pf.root[pf.charName] && pf.root[pf.charName].cast; if (!cast || !cast[cn] || !cast[cn].static) { toast('error', '没有静态档案'); return; } var anchor = cast[cn].static; var bm=(pf&&pf.root[pf.charName]&&pf.root[pf.charName].meta&&pf.root[pf.charName].meta.modelMode)||settings.modelType; if(bm==='anime'&&cast[cn].enPrompt)anchor=cast[cn].enPrompt; else if(bm==='anime_tag'&&cast[cn].enTags)anchor=cast[cn].enTags; var bodyT = cast[cn].body || '', prompt = anchor + ((bm==='anime'||bm==='anime_tag')?'':(bodyT?', '+bodyT:'')) + ', standing, front view, full body, simple background, neutral expression'; if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt); var wf = JSON.parse(settings.cWf || '{}'); if (!Object.keys(wf).length) { toast('error', '工作流未配置'); return; } btn.prop('disabled', true).text('排队中…'); enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function(result) { if (result && result.url) { cast[cn].portrait = result.url; saveSettings(); b.find('#sl_port_' + cn.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_')).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html(''); toast('success', cn + ' 立绘生成完毕'); } btn.prop('disabled', false).text('生成立绘'); }, function() { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); }); });
   // ── 立绘：只用人物锚点，不带场景/其它人物（展示型全身立绘）──
-  b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function () {
+  // 按钮挂在列表卡片（第2层）→ 必须阻止冒泡，否则会顺带触发"进详情页"
+  b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function (e) {
+    if (e && e.stopPropagation) e.stopPropagation();
     var cn = jQuery(this).data('char'), btn = jQuery(this);
     var ent = null;
     try { var re2 = rosterEntries(); for (var i2 = 0; i2 < re2.length; i2++) { if (re2[i2] && re2[i2].key === cn) { ent = re2[i2]; break; } } } catch (e9) {}
     if (!ent) { toast('error', '找不到该人物档案'); return; }
     var bm = getActiveMode() || 'zit';
-    // [v1.7.6 · 方案A] 立绘**只用补全后的原子锚点**(atoms)，**不退到 base** ——
-    // base 是主模型原文，可能夹带衣着/缺维度，会让"对照图"不干净、比对失效
-    var _atom = (ent.atoms && ent.atoms[bm]) || '';
-    var anchor = _atom;
+    // [v2.0] 立绘只吃锚点库：英文三模式读【英文权威锚点】——**绝不退回中文**
+    // （中文锚点会被 cleanAnimePrompt 整段删空，只剩框架词 → 画出与角色无关的路人）；
+    // zit 读中文呈现缓存。base（主模型原文）永不进立绘。
+    var anchor = getAtomAnchor(ent, bm);
     if (!anchor) {
-      toast('warning', '还没有【已解析锚点】—— 先正常聊一轮（出一次图）让插件按 38 维建档，之后立绘才是干净的对照图');
+      toast('warning', bm === 'zit'
+        ? '还没有锚点 —— 先正常聊一轮（出一次图）让插件按 38 维建档，之后立绘才是干净的对照图'
+        : '还没有【英文锚点】—— ' + bm + ' 模式只读英文锚点（中文会被清洗逻辑删空、画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点');
       return;
     }
     var wf2 = JSON.parse(settings.cWf || '{}');
     if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
     var _runPortrait = function (anchorText) {
       var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
-      var prompt = anchorText + frame;
-      if (bm === 'anime' || bm === 'anime_tag') prompt = cleanAnimePrompt(prompt);
+      // [Fix v2.0] 必须走 atomValues 还原成生图语言：原实现把 `维度:值 | …` 原样拼进去，
+      // 维度前缀和 | 都进了提示词（2026-10-16 12:26 的真实成图里能看到 `种族:亚洲人 | 脸型:…`）
+      var prompt = atomValues(anchorText, bm) + frame;
+      if (isEnglishMode(bm)) prompt = cleanAnimePrompt(prompt);   // [Fix v2.0] 原实现漏了 anima
       btn.prop('disabled', true).text('排队中…');
       enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function (result) {
         if (result && result.url) {
@@ -406,7 +395,7 @@ export function bindArchiveEvents(b) {
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_cancel_btn').on('click', '.sl_dyn_cancel_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').hide(); });
   b.off('click', '.sl_dyn_save_btn').on('click', '.sl_dyn_save_btn', function () { var cn = jQuery(this).data('char'), nt = b.find('.sl_dyn_edit_ta[data-char="' + cn + '"]').val(), pf = getProfiles(); if (pf && pf.chat && pf.chat.dynamics) { pf.chat.dynamics[cn] = nt; saveSettings(); toast('success', cn + ' 动态已保存'); renderArchiveInto(b); } });
-  b.off('click', '[id^=sl_port_]').on('click', '[id^=sl_port_]', function () { var bg = jQuery(this).css('background-image'); if (!bg || bg === 'none') return; var url = bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');
+  b.off('click', '[id^=sl_port_]').on('click', '[id^=sl_port_]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var bg = jQuery(this).css('background-image'); if (!bg || bg === 'none') return; var url = bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');
         jQuery('<div style="position:fixed;z-index:30001;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:pointer;"><img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:16px;box-shadow:0 4px 30px rgba(0,0,0,0.5);"></div>').appendTo('body').on('click', function () { jQuery(this).remove(); }); });
 }
 function cardTypeSelectHTML(selected) {

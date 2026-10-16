@@ -240,16 +240,49 @@ export function importFromCast(cast) {
 }
 
 // ══════════════════════════════
-// ── 已解析锚点（v1.6.2 · 和造型库同构）──
-// 问题：档案 base 里是【主模型写的中文锚点】，英文三模式每轮都要重新翻译 → 每轮措辞可能不同 → 长相漂移。
-// 做法：辅助 AI 第一次具象化产出的「模型语言锚点」按【模式】存进这个人，
-//       之后每轮以「✅ 已解析锚点（逐字复用）」下发，不再重译。
+// ── 锚点库 v2.0 · 英文权威，四种模式共用一份 ──
+// 演进：
+//   v1.6.2 之前 —— 英文三模式每轮重新翻译主模型的中文锚点 → 措辞漂移（同一特征四种写法）。
+//   v1.6.2 做法 —— 按【模式】各存一份"该模式语言"的锚点。但 anima 的锚点规范没写清楚，
+//                  辅助AI 照 PROFILE 示例存成了中文 → 立绘走 cleanAnimePrompt 时被整段删空 →
+//                  只剩框架词 → 画出与角色无关的路人（2026-10-17 实测 8/8 全废）。
+//   v2.0 做法 —— 锚点**只有一套、只写英文**（`维度:值 | …`，维度名与值全 ASCII）：
+//      · entry.anchor    = 英文权威锚点（唯一来源，anima / anime / anime_tag / zit 共用）
+//      · entry.atoms.zit = 中文呈现缓存（zit 中文模式逐字复用；辅助AI 在 zit 模式回传 anchor_zh）
+//      英文三模式一律读 entry.anchor，**绝不读中文**（读了就会被 cleanAnimePrompt 删空 = 低级失误）。
+// 写入闸门：英文 → entry.anchor；中文 → 只允许进 atoms.zit 且模式必须是 zit；
+//          其余（英文模式收到中文锚点）一律拒绝并记日志。
 // 写入规则：首次写入即冻结；之后只接受「包含旧文且更长」的版本（= 追加缺失维度，而不是重写措辞）。
+var CJK_RE = /[\u2e80-\u2eff\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/;
+// 是否"可安全进英文提示词"的锚点：不含任何中日韩字符/全角标点，且有英文字母
+export function isEnglishAnchor(text) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    if (CJK_RE.test(t)) return false;
+    return /[A-Za-z]/.test(t);
+}
+// 旧存档兼容：v2.0 之前按模式分桶存过锚点，挑第一个英文的当权威锚点（只读，不回写）
+function _legacyEnglishAtoms(e) {
+    try {
+        if (!e || !e.atoms) return '';
+        for (var m in e.atoms) { if (isEnglishAnchor(e.atoms[m])) return e.atoms[m]; }
+    } catch (e2) {}
+    return '';
+}
+export function getEnglishAnchor(entry) {
+    try {
+        if (!entry) return '';
+        if (isEnglishAnchor(entry.anchor)) return entry.anchor;
+        return _legacyEnglishAtoms(entry);
+    } catch (e) { return ''; }
+}
+// 该模式下"该用的锚点文本"：zit → 中文呈现缓存（没有才退回英文权威锚点）；英文三模式 → 英文权威锚点
 export function getAtomAnchor(entry, mode) {
     try {
-        if (!entry || !entry.atoms) return '';
+        if (!entry) return '';
         var m = mode || getActiveMode();
-        return entry.atoms[m] || '';
+        if (m === 'zit') return (entry.atoms && entry.atoms.zit) || getEnglishAnchor(entry) || '';
+        return getEnglishAnchor(entry);
     } catch (e) { return ''; }
 }
 
@@ -264,54 +297,124 @@ export function atomCount(text) {
     } catch (e) { return 0; }
 }
 
-// 把结构化锚点还原成"值，值，值"（立绘提示词里不能出现 维度: 前缀）
-export function atomValues(text) {
+// 把结构化锚点还原成生图语言（立绘提示词里不能出现 `维度:` 前缀）
+// ⚠️ 分隔符必须跟语言走：英文锚点用 `, ` —— 中文逗号 `，` 属于全角区间，
+//    会被 cleanAnimePrompt 当全角字符**删掉**，删掉后标签会粘成一坨（asian1girlsolo）。
+export function atomValues(text, mode) {
     try {
         var t = String(text || '').trim();
         if (!t) return '';
-        if (t.indexOf('|') < 0) return t;   // 旧格式（纯逗号串）原样返回
+        var en = isEnglishAnchor(t);
+        var sep = en ? ', ' : '，';
+        if (mode === 'zit' && !en) sep = '，';
+        var _norm = function (s) {
+            s = String(s).replace(/\s*[/、，]\s*/g, sep);
+            s = en ? s.replace(/\s*,\s*/g, ', ') : s.replace(/\s*,\s*/g, sep);
+            return s.trim();
+        };
+        if (t.indexOf('|') < 0) return _norm(t);   // 旧格式（纯逗号串）：归一后原样返回
         return t.split('|').map(function (seg) {
             var s = String(seg).trim();
             var i = s.search(/[:：]/);
-            if (i < 0) return s;
-            return s.slice(i + 1).trim().split('/').join('，').split('、').join('，');
-        }).filter(Boolean).join('，');
+            if (i >= 0) s = s.slice(i + 1).trim();   // 去掉 `维度:` 前缀（只有值进提示词）
+            return _norm(s);
+        }).filter(Boolean).join(sep);
     } catch (e) { return String(text || ''); }
 }
 
-export function setAtomAnchor(name, identity, mode, text) {
+function _findAnchorEntry(name, identity) {
+    var r = ensureRoster();
+    if (!r) return null;
+    var key = personKey(name, identity);
+    var e = r.list[key];
+    if (!e) {   // 容错：按名字找同名条目（裸名 ↔ 带标签）
+        for (var sk in r.list) { if (sk === name || sk.indexOf(name + '（') === 0) { e = r.list[sk]; break; } }
+    }
+    return e || null;
+}
+// 冻结写入：老值不动，只接受"包含旧文且更长"（追加维度）或"旧格式 → 新格式"的升级
+function _applyFrozen(old, t) {
+    if (!old) return { write: true, why: '建档' };
+    if (t === old) return { write: false, why: '' };
+    if (t.length > old.length && t.indexOf(old) >= 0) return { write: true, why: '追加' };
+    if (old.indexOf('|') < 0 && t.indexOf('|') >= 0) return { write: true, why: '升级为新格式' };
+    return { write: false, why: '回传被忽略（旧文已冻结，防重写）' };
+}
+// ── 英文权威锚点（四种模式共用；英文模式读它出图）──
+export function setEnglishAnchor(name, identity, text) {
     try {
         var t = String(text || '').trim();
         if (!t) return null;
-        var r = ensureRoster();
-        if (!r) return null;
-        var key = personKey(name, identity);
-        var e = r.list[key];
-        if (!e) {   // 容错：按名字找同名条目（裸名 ↔ 带标签）
-            for (var sk in r.list) { if (sk === name || sk.indexOf(name + '（') === 0) { e = r.list[sk]; break; } }
+        if (!isEnglishAnchor(t)) {   // 闸门：英文槽位只收英文
+            slLog('⛔ 英文锚点被拒（含中文/全角字符，防立绘被删空）: ' + name + ' — ' + t.slice(0, 40));
+            return null;
         }
+        var e = _findAnchorEntry(name, identity);
         if (!e) return null;
-        var m = mode || getActiveMode();
-        if (!e.atoms) e.atoms = {};
-        var old = e.atoms[m] || '';
-        if (!old) {
-            e.atoms[m] = t;
+        var act = _applyFrozen(e.anchor || '', t);
+        if (act.write) {
+            e.anchor = t;
             var _n = atomCount(t);
-            slLog('锚点建档[' + m + ']: ' + e.key + '（' + _n + ' 项）' + (_n < 20 ? '  ⚠️ 项数偏少，可能没按 38 维补全' : '  ✅')
+            slLog('英文锚点' + act.why + ': ' + e.key + '（' + _n + ' 项）' + (_n < 20 ? '  ⚠️ 项数偏少，可能没按 38 维补全' : '  ✅')
                 + (t.indexOf('|') < 0 ? '  ⚠️ 不是维度:值格式' : ''));
-        } else if (t.length > old.length && t.indexOf(old) >= 0) {
-            e.atoms[m] = t;   // 只在"旧文是新文的一部分"时才更新（追加维度，不是换措辞）
-            slLog('锚点追加[' + m + ']: ' + e.key + '（' + atomCount(t) + ' 项）');
-        } else if (old.indexOf('|') < 0 && t.indexOf('|') >= 0) {
-            // [v1.8.2] 旧格式（逗号串/散文）→ 新格式（维度:值 | …）：直接升级，
-            // 否则旧锚点会被"防重写冻结"永久卡住，永远补不全
-            e.atoms[m] = t;
-            slLog('锚点升级为新格式[' + m + ']: ' + e.key + '（' + atomCount(old) + ' 项 → ' + atomCount(t) + ' 项）');
-        } else {
-            slLog('锚点回传被忽略（旧文已冻结，防重写）: ' + e.key);
-        }
-        return e.atoms[m];
+        } else if (act.why) slLog('锚点' + act.why + ': ' + e.key);
+        return e.anchor || null;
     } catch (e2) { return null; }
+}
+// ── zit 中文呈现缓存（只给中文模式用，不参与英文模式）──
+export function setZitAnchor(name, identity, text) {
+    try {
+        var t = String(text || '').trim();
+        if (!t) return null;
+        var e = _findAnchorEntry(name, identity);
+        if (!e) return null;
+        if (!e.atoms) e.atoms = {};
+        var act = _applyFrozen(e.atoms.zit || '', t);
+        if (act.write) {
+            e.atoms.zit = t;
+            slLog('中文锚点' + act.why + ': ' + e.key + '（' + atomCount(t) + ' 项）');
+        }
+        return e.atoms.zit || null;
+    } catch (e2) { return null; }
+}
+// ── v2.0 一次性清理：清掉旧版本残留的【分模式锚点】atoms ──
+// 旧版四种模式各存一份锚点，anima 那份被辅助 AI 按中文 PROFILE 示例写成了中文 →
+// 立绘走 cleanAnimePrompt 时被整段删空 → 只剩框架词 → 画出与角色无关的路人（实测 8/8 全废）。
+// 新版只认 entry.anchor（英文权威）+ entry.atoms.zit（中文呈现缓存），旧桶一律作废，
+// 由辅助 AI 在下一轮按新规范重建。⚠️ 只动锚点字段：base/appearance/live/portrait 与 API 配置全部保留。
+export function cleanLegacyAnchors() {
+    var stat = { persons: 0, slots: 0, bad: 0 };
+    try {
+        var root = settings.roster || {};
+        for (var c in root) {
+            var chats = root[c] || {};
+            for (var ch in chats) {
+                var list = chats[ch] || {};
+                for (var k in list) {
+                    var e = list[k];
+                    if (!e) continue;
+                    if (e.atoms) {
+                        stat.slots += Object.keys(e.atoms).length;
+                        delete e.atoms;
+                        stat.persons++;
+                    }
+                    // 保险：非英文的权威锚点（不该存在）一并清掉，避免又被清洗逻辑删空
+                    if (e.anchor && !isEnglishAnchor(e.anchor)) { delete e.anchor; stat.bad++; }
+                }
+            }
+        }
+    } catch (e3) {}
+    return stat;
+}
+// ── 兼容旧调用：按文本语言自动路由（英文 → 权威锚点；中文 → 仅 zit 模式进中文缓存）──
+export function setAtomAnchor(name, identity, mode, text) {
+    var t = String(text || '').trim();
+    if (!t) return null;
+    if (isEnglishAnchor(t)) return setEnglishAnchor(name, identity, t);
+    var m = mode || getActiveMode();
+    if (m === 'zit') return setZitAnchor(name, identity, t);
+    slLog('⛔ 中文锚点被拒（当前模式 ' + m + ' 只用英文锚点）: ' + name + ' — ' + t.slice(0, 40));
+    return null;
 }
 
 // ── 人物表正文（按名字过滤，不再全量发送） ──
@@ -335,15 +438,25 @@ export function rosterDataTextFor(nameList) {
                 if (seen[k]) continue;
                 if (k === nm || k.indexOf(nm + '（') === 0) {
                     var e = r.list[k];
-                    var _atom = getAtomAnchor(e);
+                    var _m = getActiveMode();
+                    var _atom = getAtomAnchor(e, _m);
                     if (_atom) {
-                        // 已有模型语言锚点 → 逐字复用（零漂移）；同时给出主模型原文供"补全缺失维度"对照
+                        // 已有锚点 → 逐字复用（零漂移）；同时给出主模型原文供"补全缺失维度"对照
                         nmLines.push('■ ' + e.key);
-                        nmLines.push('   ✅ 已解析锚点【' + getActiveMode() + '】（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
+                        nmLines.push('   ✅ 已解析锚点' + (_m === 'zit' ? '（中文呈现 · 逐字复用）' : '（英文权威锚点 · 四种模式共用 · 逐字复用）')
+                            + '（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
                         nmLines.push('   ⚠️ 原始锚点（主模型原文，**只用于对照是否缺维度，不要照抄**）：' + (e.base || e.appearance || '').slice(0, 200));
-                    } else if (e.base) {
+                        // zit 模式下若英文权威锚点还缺着：顺手让它补一份（英文锚点四种模式共用，缺了英文模式画不了立绘）
+                        if (_m === 'zit' && !getEnglishAnchor(e)) {
+                            nmLines.push('   ⭐ 另：这位还缺【英文权威锚点】—— 本轮请一并回传 anchor（英文，维度名与值全英文）字段；它与中文呈现表达同一件事，四种模式共用。');
+                        }
+                    } else if (_m !== 'zit' && e.base) {
                         // [Fix v1.7.4] 只发【静态锚点】，**不夹带上一轮的 live**
                         // （live 是上一轮辅助AI回传的可变状态，喂回去 = 读了之前的东西 → 状态串场）
+                        nmLines.push('■ ' + e.key + '：' + e.base);
+                        nmLines.push('   （以上是主模型写的中文静态锚点；⭐ 你这一轮必须把它具象化成**英文锚点**并通过 ---PROFILE--- 的 anchor 字段回传（维度名与值全英文），下一轮起即可逐字复用）');
+                        nmLines.push('   （本轮衣着/状态/动作一律以【占位符】为准，**不要沿用上一轮**）');
+                    } else if (_m === 'zit' && e.base) {
                         nmLines.push('■ ' + e.key + '：' + e.base);
                         nmLines.push('   （以上是静态锚点；本轮衣着/状态/动作一律以【占位符】为准，**不要沿用上一轮**）');
                     } else {

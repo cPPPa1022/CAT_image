@@ -1,5 +1,65 @@
 # 📜 更新日志（Changelog）
 
+## v1.10.0 — 2026-10-17
+**主题：锚点库 v2.0 —— 锚点统一英文（四种模式共用一份）+ 旧残留清理 + 档案页小改**
+
+### 🐛 根因（有产物实证）
+
+anima 模式下「生成立绘」画出来的**永远是与角色无关的路人**。扒 PNG 内嵌提示词（564 张全扫）：
+
+    8 张立绘的提示词全部一模一样：
+    "masterpiece, best quality, score_7, safe, , standing, front view, full body, simple background, neutral expression"
+                                                      ↑ 这里本该是人物锚点，是空的
+
+推论链（可证伪）：`tabs.js` 里锚点为空会 toast 并 return（**根本不出图**）→ 既然出了图，锚点必然非空；
+而提示词里一个字都没剩 → 那段内容 100% 由 CJK/全角字符组成 → **`atoms['anima']` 存的是中文**。
+
+为什么是中文：`roster/system.txt` 的 PROFILE 示例、以及"正确示例"全是中文 `维度:值`；
+锚点字段的模式说明只举了 anime / anime_tag / zit，**漏了 anima** → 模型照示例给中文。
+
+谁把它删空的：`atomValues()` 用中文逗号拼接 → `cleanAnimePrompt()` 把 `\uff00-\uffef`（**含全角逗号**）
+整段删除（是删除，不是替换成 `, `）→ 中文锚点蒸发；英文锚点则被粘成一坨（`asian，1girl，solo` → `asian1girlsolo`）。
+
+### ✅ 做法：锚点只写英文，四种模式共用
+
+| 字段 | 含义 |
+|---|---|
+| `entry.anchor` | **英文权威锚点**（`维度:值 | …`，维度名与值全 ASCII）——anima / anime / anime_tag / zit 共用 |
+| `entry.atoms.zit` | **中文呈现缓存**——只给 zit 逐字复用，不重译（保留 v1.6.2 的零漂移） |
+
+- **写入闸门**：英文 → `anchor`；中文 → 只允许 `atoms.zit`（且模式必须是 zit）；其余**拒绝 + ⛔ 日志**
+- **读取**：英文三模式只读 `anchor`（**绝不退回中文**）；读不到就**拦下并提示**，不再静默画路人
+- `atomValues(text, mode)`：英文锚点用 `', '` 拼接（旧实现用 `，`，会被清洗逻辑删掉后粘成一坨）
+- `roster/system.txt`：anchor 规范改**全英文 + 固定维度名清单**（race / jawline / eye_shape / breasts_size…），
+  新增 `anchor_zh` 字段（**仅 zit 模式**回传中文呈现）；三个 overlay 改成两层写法（有英文锚点 → 值逐字复用）
+- **顺带修**：`tabs.js` 立绘的 `cleanAnimePrompt` 原来只判断 `anime||anime_tag`，**漏了 anima**（统一走 `isEnglishMode()`）
+- **顺带修**：立绘此前把 `维度:值 | …` **原样**拼进提示词（2026-10-16 12:26 的成图里能看到 `种族:亚洲人 | 脸型:…`），现走 `atomValues`
+
+### 🧹 旧版本残留清理（一次性）
+
+`index.js` 哨兵 `sillab_anchor_v2_clean` → `roster.cleanLegacyAnchors()`：
+
+- 清掉旧版按模式分桶的 `entry.atoms`（anima 那份是中文，正是病根）+ 非英文的 `anchor`（保险）
+- **保留** `base / appearance / live / portrait`；**API 配置一字不碰**（`auxUrl / auxKey / auxModel / cUrl / cWf…`）
+- 清完辅助 AI 在下一轮按新规范重建（英文 anchor + 中文 anchor_zh），不存在"半中半英"过渡
+
+### 🖼️ 档案页
+
+- **移除「编辑锚点」**（连同编辑框与保存/取消绑定）——锚点只由辅助 AI 产出，手工改的口子关掉
+- **「生成立绘」上移到第 2 层**（人物列表卡片，`renderArchiveInto`），不用再点进详情页；
+  卡片按钮与缩略图都加了 `stopPropagation`（此前点缩略图会"既开大图又跳详情页"）
+- 删掉被下一行立刻 `off` 掉的死立绘处理器（旧 `[FACE:]` 角色卡扫描路径）
+
+### 🧪 验证
+
+- 脱离浏览器单测（直接 import 真实模块，stub ST context）：**42 项断言全过**
+  - 关键回归：英文锚点 → `asian, almond eyes, downturned, large breasts, none` → 过 `cleanAnimePrompt` **原样不变**
+  - 旧行为对照：中文锚点 + anima 框架 → 只剩 `standing, front view, full body…`（复现那 8 张废图）
+  - 闸门：中文写英文槽被拒、换措辞被冻结、旧文+追加被接受
+  - 清理：atoms 全清 / `base·portrait` 保留 / API 快照前后一致 / 幂等 / 无 roster 不炸
+
+---
+
 ## v1.9.1 — 2026-10-16
 **补：协作卡注入【状态库索引】**
 

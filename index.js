@@ -11,12 +11,13 @@ import { setEnqueueGen } from './modules/render.js';
 import { enqueueGen } from './modules/queue.js';
 import { startPolling, stopPolling, getScannerStatus, hasCastCache } from './modules/scanner.js';
 import { refreshCoopCards } from './modules/sync-cards.js';
+import { cleanLegacyAnchors } from './modules/roster.js';
 import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.9.1';
-slLog('LOADED v1.9.1');
+window.SILLYLAB_VERSION = 'v1.10.0';
+slLog('LOADED v1.10.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -83,7 +84,26 @@ if (!localStorage.getItem('sillab_slid_cache_v1')) {
     slLog('🧹 图块精确缓存上线：旧图片缓存已清理（旧消息图片需重新生成一次，新图按块标识精确记录）');
 }
 
-slLog('v1.9.1 init');
+// ── v2.0 锚点库改版：一次性清掉【旧版本残留】的分模式锚点 ──
+// 旧版：四种模式各存一份锚点（roster[卡][聊天][人物].atoms.<模式>）。anima 那份因为 PROFILE 示例
+//       全是中文，被辅助 AI 照抄成中文 → 立绘走 cleanAnimePrompt 时被整段删空 → 只剩框架词 →
+//       画出与角色无关的路人（2026-10-17 实测 8/8 全废）。
+// 新版：锚点只有一套、只写英文（entry.anchor）+ zit 中文呈现缓存（entry.atoms.zit）。
+// 旧桶一律作废：清掉后辅助 AI 下一轮会按新规范重建（英文 anchor + 中文 anchor_zh）。
+// ⚠️ 只动锚点字段：base / appearance / live / portrait 全部保留，
+//    API 配置（auxUrl / auxKey / auxModel / cUrl / cWf…）一个字都不碰。
+if (!localStorage.getItem('sillab_anchor_v2_clean')) {
+    try {
+        var _ac = cleanLegacyAnchors();
+        try { saveSettings(); } catch (e) {}
+        localStorage.setItem('sillab_anchor_v2_clean', '1');
+        slLog('🧹 锚点库 v2.0：清掉旧版分模式锚点 ' + _ac.slots + ' 条（涉及 ' + _ac.persons + ' 人）'
+            + (_ac.bad ? '，另清掉 ' + _ac.bad + ' 条非英文锚点' : '')
+            + '，人物档案/立绘/API 配置未动 → 下一轮聊天会自动重建【英文权威锚点】');
+    } catch (e) { slLog('锚点清理跳过: ' + e.message); }
+}
+
+slLog('v1.10.0 init');
 
 // ── 注册斜杠命令 ──
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',callback:function(){var cb=jQuery('#sl_compact');if(cb.length){cb.trigger('click');}else{toastr.info('插件面板尚未初始化喵~');}}}));
@@ -100,7 +120,7 @@ else { slLog('提示词加载器: 呜呜 import.meta.url 不可用喵~ (╥﹏�
 setEnqueueGen(enqueueGen);
 
 // ── 构建 UI ──
-try { buildUI(extension_settings); slLog('v1.9.1 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
+try { buildUI(extension_settings); slLog('v1.10.0 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
 
 // ── 启动轮询 + 事件钩子 ──
 startPolling();

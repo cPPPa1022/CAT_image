@@ -11,6 +11,7 @@ import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { rosterEntries, atomValues, atomCount } from '../roster.js';
 import { composeFinalPrompt } from '../comfyui.js';
+import { activeStatuses, setStatusActive } from '../statuses.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -242,6 +243,20 @@ function renderArchiveInto(body) {
     h += '<div style="color:' + CAT.mute + ';font-size:15px;padding-right:2px;">›</div>';
     h += '</div></div>';
   }
+  // ⏳ 当前生效的状态（聊天级：晒黑/吻痕/淤青/缠绷带…）—— 主模型忘写 -key 时在这里手动取消
+  var _act = [];
+  try { _act = activeStatuses(); } catch (e10) {}
+  if (_act.length) {
+    h += '<div style="' + card() + 'margin-top:10px;padding:11px 14px;">';
+    h += '<div style="font-weight:700;font-size:12px;color:' + CAT.text + ';margin-bottom:7px;">⏳ 当前生效的状态<span style="font-weight:400;font-size:9.5px;color:' + CAT.mute + ';margin-left:6px;">（主模型忘写 -key 时，在这里手动取消）</span></div>';
+    for (var _ai3 = 0; _ai3 < _act.length; _ai3++) {
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+      h += '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:' + CAT.text + ';">' + esc(_act[_ai3].key) + '</div>';
+      h += '<div style="font-size:9.5px;color:' + CAT.mute + ';line-height:1.5;">' + esc(_act[_ai3].detail) + '</div></div>';
+      h += '<button class="sl_st_off" data-key="' + escAttr(_act[_ai3].key) + '" style="' + btnGhost() + 'font-size:10px;padding:5px 11px;">取消</button></div>';
+    }
+    h += '</div>';
+  }
   body.html(h); bindArchiveEvents(body);
 }
 
@@ -318,6 +333,13 @@ export function bindArchiveEvents(b) {
     renderPersonDetail(b, cn);
   });
   // 卡片 → 详情页；返回
+  b.off('click', '.sl_st_off').on('click', '.sl_st_off', function (e) {
+    e.stopPropagation();
+    var k = jQuery(this).data('key');
+    setStatusActive(k, false); saveSettings();
+    toast('success', '已取消：' + k + '（条目保留，主模型可再 + 激活）');
+    renderArchiveInto(b);
+  });
   b.off('click', '.sl_pcard').on('click', '.sl_pcard', function () { renderPersonDetail(b, jQuery(this).data('char')); });
   b.off('click', '.sl_pback').on('click', '.sl_pback', function () { renderArchiveInto(b); });
   // 提示词：打开时按最新锚点重新生成

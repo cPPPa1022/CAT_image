@@ -165,7 +165,31 @@ export function parseStyleSegment(text) {
     return out;
 }
 
-// 从文本中提取所有 [img:…] 占位符 → [{ scene, personSegments:[{name,identity,appearance}], styleGroups, topic, raw }]
+// ══════════════════════════════
+// ── v1.9.0 状态段解析（时效性状态：半永久 / 跨轮暂时）──
+// 语法：状态:+晒黑；+左颈吻痕；-淤青
+//   +key = 激活（库里命中 → 复用 detail；未命中 → 辅助AI 具象化建档）
+//   -key = 取消激活（条目保留，不删档，以后可再 +）
+// detail 只存"是什么"（左颈暗红色吻痕），不存"现在怎么样"（淡了/更明显了 → 写要点）
+export function parseStatusSegment(text) {
+    var out = [];
+    var body = String(text || '').replace(/^(状态|时效|变化)[：:]\s*/, '');
+    if (!body.trim()) return out;
+    var parts = body.split(/[；;]/);
+    for (var i = 0; i < parts.length; i++) {
+        var p = (parts[i] || '').trim();
+        if (!p) continue;
+        var op = '+';
+        if (/^[-－—]/.test(p)) { op = '-'; p = p.replace(/^[-－—]\s*/, ''); }
+        else if (/^[+＋]/.test(p)) { p = p.replace(/^[+＋]\s*/, ''); }
+        p = p.trim();
+        if (!p) continue;
+        out.push({ op: op, key: p });
+    }
+    return out;
+}
+
+// 从文本中提取所有 [img:…] 占位符 → [{ scene, personSegments:[{name,identity,appearance}], styleGroups, statusOps, topic, raw }]
 export function findImagePlaceholders(text) {
     var result = [];
     if (!text) return result;
@@ -179,11 +203,18 @@ export function findImagePlaceholders(text) {
         var topicParts = [];
         var personSegments = [];
         var styleGroups = [];
+        var statusOps = [];
         for (var i = 0; i < segs.length; i++) {
             var seg = segs[i].trim();
             if (!seg) continue;
             if (i === 0) {
                 scene = seg;
+                continue;
+            }
+            // v1.9.0：状态段（可选，以「状态:/时效:/变化:」开头）
+            if (/^(?:状态|时效|变化)[：:]/.test(seg)) {
+                var _so = parseStatusSegment(seg);
+                for (var _soi = 0; _soi < _so.length; _soi++) statusOps.push(_so[_soi]);
                 continue;
             }
             // v1.5.0：造型段（可选，以「造型:/穿搭:/衣柜:」开头）
@@ -207,6 +238,7 @@ export function findImagePlaceholders(text) {
             scene: scene,
             personSegments: personSegments,
             styleGroups: styleGroups,
+            statusOps: statusOps,
             topic: topicParts.join('\n'),
             raw: content
         });

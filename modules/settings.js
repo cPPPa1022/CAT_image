@@ -55,6 +55,8 @@ export function getDefaults() {
         // false=扫描仅用于立绘/档案查看，人物表只保留酒馆AI收集的信息（更省 token，一致性弱）。
         // 档案跟着聊天走：同卡不同聊天【不继承】。开启后才会把卡级旧扫描档案导入新聊天（一般不需要）
     directorCastImport: false,
+    // v1.9.0 状态库（时效性状态：晒黑/吻痕/淤青/染发…）—— 按 [角色卡][聊天ID] 存，和造型库同构
+    statuses: {},
         // ── v1.1.2 前端卡桥（重前端卡支持）──
         // feBridge: 接管"前端卡"（酒馆助手 iframe 应用）配图。这类卡的叙事正文由卡自己调
         //   TavernHelper.generate 生成、画在自己的 UI 里，从不进聊天消息 → 插件扫描永远扫不到。

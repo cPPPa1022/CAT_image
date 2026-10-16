@@ -10,6 +10,7 @@ import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatc
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setAtomAnchor } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
+import { statusesDataTextFor, upsertStatus, setStatusActive } from '../statuses.js';
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
@@ -25,6 +26,11 @@ function buildRosterSystemPrompt() {
     if (r2a) parts.push(r2a);
     var vocab = isPromptsLoaded() ? (getPrompt('atomic-vocab.txt') || '') : '';
     if (vocab) parts.push(vocab);
+    // v1.9.0：状态库规则（时效性状态：晒黑/吻痕/淤青/染发…）
+    var stVocab = isPromptsLoaded() ? (getPrompt('statuses-vocab.txt') || '') : '';
+    if (stVocab) parts.push(stVocab);
+    var stExpand = isPromptsLoaded() ? (getPrompt('statuses-expand.txt') || '') : '';
+    if (stExpand) parts.push(stExpand);
     var pipeMode = getActiveMode();
     var overlayFile = 'pipeline/' + (pipeMode === 'anima' ? 'anima-overlay' : pipeMode === 'anime_tag' ? 'anime-tag-overlay' : pipeMode === 'anime' ? 'anime-overlay' : 'zit-overlay') + '.txt';
     var overlay = isPromptsLoaded() ? (getPrompt(overlayFile) || '') : '';
@@ -37,14 +43,14 @@ function buildRosterSystemPrompt() {
 }
 
 // ── 用户消息：人物表 + 占位符（不发送正文——导演模式插件AI 只做"档案+酒馆AI要点 → 提示词"的编辑） ──
-function buildRosterUserContent(placeholders, wardrobeInfo) {
+function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
     var avatar = '';
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
     lines.push('【任务】为每个 [img:] 占位符输出 1 条提示词，按【占位符】编号一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
     // [Fix] 格式硬约束（格式缺失=整轮作废，是此前 0 条提示词/串味的主因）
     lines.push('【输出格式·必须严格遵守·PROFILE 与 IMAGES 漏一段整轮作废】');
-    lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n[---WARDROBE---\n{造型具象化 JSON}---END---  ← **仅当【造型库】有「待具象化」条目时才输出这一段；没有就整段省略**]\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
+    lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n[---WARDROBE---\n{造型具象化 JSON}---END---  ← **仅当【造型库】有「待具象化」条目时才输出这一段；没有就整段省略**]\n\n[---STATUSES---\n{状态具象化 JSON}---END---  ← **仅当【状态库】有「待具象化」条目时才输出；没有就整段省略**]\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
     lines.push('只输出以上段落，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
     lines.push('');
     lines.push('【人物档案】（按本轮占位符注明的人物名字过滤，插件自动匹配——同名不同身份全部给出，由你按场景选用；写提示词必须引用外貌锚点，禁止只写名字）');
@@ -61,6 +67,16 @@ function buildRosterUserContent(placeholders, wardrobeInfo) {
         lines.push('· ⚠️ 待具象化：按 wardrobe-vocab.txt 的维度逐项取词，写进提示词，并通过 ---WARDROBE--- 回传');
         lines.push('· 造型详情属于**结构**（服装/发型是什么），放在提示词的标签区；**「怎么穿」**（滑落/卷袖/湿透）仍写要点');
         lines.push('· 禁止把造型详情写进氛围段；禁止把「怎么穿」写进 ---WARDROBE--- 回传');
+        lines.push('');
+    }
+    // v1.9.0：【状态库】—— 时效性状态（晒黑/染发/吻痕/淤青/缠绷带…）
+    if (statusInfo && statusInfo.text) {
+        lines.push('【状态库】（主模型写了 ±key；你负责「原样复用」或「具象化」，规则见 statuses-vocab.txt / statuses-expand.txt）');
+        lines.push(statusInfo.text);
+        lines.push('· ✅ 已解析：**逐字写进提示词，禁止改写、禁止同义替换**');
+        lines.push('· ⚠️ 待具象化：按维度表写具体（位置 / 颜色 / 形态），并通过 ---STATUSES--- 回传');
+        lines.push('· ⚠️ **看不见就不写**（被衣服挡住 / 景别拍不到）—— 但库里仍然要有');
+        lines.push('· ⛔ 已取消的状态：本轮起不要写进提示词');
         lines.push('');
     }
     lines.push('【占位符】（输出顺序必须与本列表一致）');
@@ -111,6 +127,18 @@ export function parseRosterWardrobe(output) {
         var outerI = fixed.indexOf('{'), outerEnd = fixed.lastIndexOf('}');
         if (outerI >= 0 && outerEnd > outerI) return JSON.parse(fixed.substring(outerI, outerEnd + 1));
     } catch (e) { slLog('造型 WARDROBE JSON解析失败: ' + e.message); }
+    return null;
+}
+
+// v1.9.0：解析可选的 ---STATUSES--- 段（key → detail）
+export function parseRosterStatuses(output) {
+    var m = output.match(/---\s*STATUSES\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
+    if (!m) return null;
+    try {
+        var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
+        var outerI = fixed.indexOf('{'), outerEnd = fixed.lastIndexOf('}');
+        if (outerI >= 0 && outerEnd > outerI) return JSON.parse(fixed.substring(outerI, outerEnd + 1));
+    } catch (e) { slLog('状态 STATUSES JSON解析失败: ' + e.message); }
     return null;
 }
 
@@ -235,6 +263,19 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
                 prompt = _kept.join('，').replace(/，{2,}/g, '，').replace(/[，,、\s]+$/, '');
             }
         } catch (eTail) {}
+        // v1.9.0：状态兜底 —— 本轮激活的状态详情必须出现在提示词里，缺了就补
+        if (ph._statuses && ph._statuses.length) {
+            for (var _sk2 = 0; _sk2 < ph._statuses.length; _sk2++) {
+                var _sd = String(ph._statuses[_sk2].detail || '');
+                if (!_sd) continue;
+                var _sdn = normForMatch(_stripNames(_sd));
+                var _sprobe = _sdn.slice(0, Math.min(20, _sdn.length));
+                if (_sprobe && normForMatch(_stripNames(prompt)).indexOf(_sprobe) < 0) {
+                    prompt = prompt ? (prompt + '，' + _sd) : _sd;
+                    slLog('状态兜底补入: ' + ph._statuses[_sk2].key);
+                }
+            }
+        }
         return buildImageBlock(ph.scene, prompt);
     });
     // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见
@@ -311,9 +352,35 @@ export async function runRosterPipeline(bodyText, mesId) {
             }
         }
 
+        // 1.6 状态库：解析状态段 → 查库（取消立即生效，不等 AI 回传）
+        var _allStatusOps = [];
+        for (var _spi = 0; _spi < placeholders.length; _spi++) {
+            var _so2 = placeholders[_spi].statusOps || [];
+            for (var _soj = 0; _soj < _so2.length; _soj++) _allStatusOps.push(_so2[_soj]);
+        }
+        for (var _offi = 0; _offi < _allStatusOps.length; _offi++) {
+            if (_allStatusOps[_offi].op === '-') setStatusActive(_allStatusOps[_offi].key, false);
+        }
+        var statusInfo = { text: '', resolved: [], pending: [], off: [] };
+        if (_allStatusOps.length) {
+            statusInfo = statusesDataTextFor(_allStatusOps);
+            slLog('状态库: 已解析 ' + statusInfo.resolved.length + ' / 待具象化 ' + statusInfo.pending.length + ' / 取消 ' + statusInfo.off.length);
+            for (var _spj = 0; _spj < placeholders.length; _spj++) {
+                var _pp = placeholders[_spj];
+                _pp._statuses = [];
+                var _ops2 = _pp.statusOps || [];
+                for (var _oki = 0; _oki < _ops2.length; _oki++) {
+                    if (_ops2[_oki].op !== '+') continue;
+                    for (var _rki = 0; _rki < statusInfo.resolved.length; _rki++) {
+                        if (statusInfo.resolved[_rki].query === _ops2[_oki].key) _pp._statuses.push(statusInfo.resolved[_rki]);
+                    }
+                }
+            }
+        }
+
         // 2. 调用插件AI
         var systemPrompt = buildRosterSystemPrompt();
-        var userContent = buildRosterUserContent(placeholders, wardrobeInfo);
+        var userContent = buildRosterUserContent(placeholders, wardrobeInfo, statusInfo);
         var output = await auxApiCall(systemPrompt, userContent, 16384, 0.25);
         if (!output || !output.trim()) throw new Error('插件AI返回空');
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
@@ -357,6 +424,26 @@ export async function runRosterPipeline(bodyText, mesId) {
             if (wUps) slLog('造型库回写: ' + wUps + ' 条');
         }
         saveSettings();
+
+        // 3.6 解析 ---STATUSES--- → 回写状态库，并激活本轮 +key
+        var stData = parseRosterStatuses(output);
+        if (stData && statusInfo.pending.length) {
+            var sUps = 0;
+            for (var _sk in stData) {
+                var _sdet = stData[_sk];
+                if (typeof _sdet !== 'string' || !_sdet.trim()) continue;
+                var _pendKey = null;
+                for (var _pi3 = 0; _pi3 < statusInfo.pending.length; _pi3++) {
+                    if (normKey(statusInfo.pending[_pi3].key) === normKey(_sk)) { _pendKey = statusInfo.pending[_pi3].key; break; }
+                }
+                if (!_pendKey) { slLog('状态回写跳过（不在待办里）: ' + _sk); continue; }
+                if (upsertStatus(_pendKey, _sdet.trim())) sUps++;
+            }
+            if (sUps) slLog('状态库回写: ' + sUps + ' 条');
+        }
+        for (var _ai2 = 0; _ai2 < _allStatusOps.length; _ai2++) {
+            if (_allStatusOps[_ai2].op === '+') setStatusActive(_allStatusOps[_ai2].key, true);
+        }
 
         // 4. 解析提示词并填充
         var prompts = parseRosterImages(output);

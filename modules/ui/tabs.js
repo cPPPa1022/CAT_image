@@ -10,6 +10,7 @@ import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
 import { rosterEntries, atomValues, atomCount } from '../roster.js';
+import { composeFinalPrompt } from '../comfyui.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -248,10 +249,14 @@ function renderArchiveInto(body) {
 function buildPortraitPrompt(anchor, bm) {
   if (!anchor) return '';
   var vals = atomValues(anchor);   // 结构化锚点 → "值，值，值"（提示词里不能有 维度: 前缀）
-  var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
+  // 立绘 = 对照图：明确"全裸无遮挡"，否则模型会自己脑补一层薄纱/滤镜，胸腹细节糊成一团（像伪人）
+  var frame = (bm === 'zit')
+    ? '，全裸，无衣物遮挡，站立，正面，全身，简洁纯色背景，表情平静'
+    : ', completely nude, no clothes, uncensored, standing, front view, full body, simple background, neutral expression';
   var pr = vals + frame;
   if (bm === 'anime' || bm === 'anime_tag') pr = cleanAnimePrompt(pr);
-  return pr;
+  // v1.8.3：走与 generateImage 完全同源的组装（画风预设 / anime质量前缀 / 前置提示词 / 艺术家标签）
+  return composeFinalPrompt(pr);
 }
 
 // ── 人物详情页：完整档案（补全后锚点）+ 编辑锚点 + 提示词 ──
@@ -281,7 +286,10 @@ function renderPersonDetail(body, key) {
   h += '<button class="sl_prompt_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10.5px;padding:6px 13px;">提示词</button>';
   h += '</div>';
   h += '<div class="sl_edit_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;"><textarea class="sl_edit_ta" data-char="' + escAttr(ppl.key) + '" style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(atom) + '</textarea><div style="display:flex;gap:5px;margin-top:6px;"><button class="sl_save_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10px;background:' + CAT.green + ';box-shadow:none;">保存</button><button class="sl_cancel_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10px;padding:6px 12px;">取消</button></div><div style="font-size:9.5px;color:' + CAT.mute + ';margin-top:6px;">保存后：下一轮出图时辅助 AI 会看到这份锚点（LLM 没有上轮记忆，所以体感是"下一次生效"）</div></div>';
-  h += '<div class="sl_prompt_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;"><textarea class="sl_prompt_ta" data-char="' + escAttr(ppl.key) + '" readonly style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(buildPortraitPrompt(atom, bm)) + '</textarea><div style="margin-top:6px;"><button class="sl_copy_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10px;">复制提示词</button></div></div>';
+  h += '<div class="sl_prompt_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;">';
+  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:4px;">下方就是**实际发给 ComfyUI 的那一条**（含画风预设 / 质量前缀 / 前置提示词 / 艺术家标签）</div>';
+  h += '<textarea class="sl_prompt_ta" data-char="' + escAttr(ppl.key) + '" readonly style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(buildPortraitPrompt(atom, bm)) + '</textarea>';
+  h += '<div style="margin-top:6px;display:flex;gap:6px;align-items:center;"><button class="sl_copy_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10px;">复制提示词</button><span style="font-size:9.5px;color:' + CAT.mute + ';">负向：' + (settings.neg ? esc(String(settings.neg).slice(0, 60)) : '（未设置）') + '</span></div></div>';
   h += '</div></div></div>';
   body.html(h); bindArchiveEvents(body);
 }

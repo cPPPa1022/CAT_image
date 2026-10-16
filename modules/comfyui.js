@@ -192,58 +192,41 @@ export function resolveConditioningNodes(workflow) {
     return { pos: pos, neg: neg, wired: wired };
 }
 
-export async function generateImage(workflow, prompt) {
-    // [Fix] 最后防线：剥掉图块/提示词包装残留（插件AI偶发输出 [image:…]【提示词】…格式，原样会进生图模型）
+// ── 最终正向提示词组装（v1.8.3 抽出）──
+// 目的：面板里"复制提示词"必须等于**实际发给 ComfyUI 的那一条**（走一遍真实管线，而不是只给裸提示词）
+// 顺序与 generateImage 原实现完全一致：画风预设(zit) → anime质量前缀 → 前置提示词 → 主体 → 艺术家标签
+export function composeFinalPrompt(prompt) {
     prompt = String(prompt || '')
         .replace(/\[image:[^\]]*\]/g, '')
         .replace(/【提示词[】:：]*/g, '').replace(/【\/提示词】/g, '')
         .replace(/【\s*💬[^\n]*/g, '')
         .replace(/\n\s*【[^】]*】/g, '\n')
         .trim();
-    // [Fix] 角色名过滤（LLM 违规写人名 / FACE 占位符残留的最后防线）
     prompt = stripCharacterNames(prompt);
-    slLog('🎨ComfyUI-prompt('+prompt.length+'字):', prompt);
-    // 直接从 DOM 读下拉框的最新值（绕过任何事件绑定问题）
     var domVal = (jQuery('#sl_style_preset').length ? jQuery('#sl_style_preset').val() : '') || '';
     var stylePrefix = domVal || settings.stylePreset || '';
-    if (stylePrefix) {
-        // 如果精确匹配不到，尝试模糊匹配（兼容旧名字和新名字不一致）
-        if (!STYLE_PRESETS[stylePrefix]) {
-            var matched = null;
-            for (var k in STYLE_PRESETS) {
-                if (k.indexOf(stylePrefix.slice(0,15)) >= 0 || stylePrefix.indexOf(k.slice(0,15)) >= 0) {
-                    matched = k;
-                    break;
-                }
-            }
-            if (matched) stylePrefix = matched;
+    if (stylePrefix && !STYLE_PRESETS[stylePrefix]) {
+        var matched = null;
+        for (var k in STYLE_PRESETS) {
+            if (k.indexOf(stylePrefix.slice(0, 15)) >= 0 || stylePrefix.indexOf(k.slice(0, 15)) >= 0) { matched = k; break; }
         }
-        slLog('DEBUG 画风预设值: 「' + stylePrefix + '」, 来源: ' + (domVal ? 'DOM' : 'settings') + ', 存在预设表: ' + (STYLE_PRESETS[stylePrefix] ? '是' : '否'));
+        if (matched) stylePrefix = matched;
     }
-    if (stylePrefix && STYLE_PRESETS[stylePrefix]) {
-        var curMode = getActiveMode();
-        if (curMode === 'zit' || !curMode) {
-            prompt = STYLE_PRESETS[stylePrefix] + ' ' + prompt;
-            slLog('画风预设: ' + stylePrefix);
-        }
-    }
-
-    // [Fix] Anime 质量前缀/艺术家标签接线：原实现仅在设置页保存，generateImage 从未读取（死配置）
     var curMode = getActiveMode();
-    if (isEnglishMode(curMode) && settings.animeQualityPrefix) {
-        prompt = settings.animeQualityPrefix + ', ' + prompt;
-        slLog('Anime质量前缀: ' + settings.animeQualityPrefix);
+    if (stylePrefix && STYLE_PRESETS[stylePrefix] && (curMode === 'zit' || !curMode)) {
+        prompt = STYLE_PRESETS[stylePrefix] + ' ' + prompt;
     }
-    if (isEnglishMode(curMode) && settings.animeArtist) {
-        prompt = prompt + ', ' + settings.animeArtist;
-        slLog('Anime艺术家标签: ' + settings.animeArtist);
-    }
+    if (isEnglishMode(curMode) && settings.animeQualityPrefix) prompt = settings.animeQualityPrefix + ', ' + prompt;
+    if (isEnglishMode(curMode) && settings.animeArtist) prompt = prompt + ', ' + settings.animeArtist;
+    if (settings.promptPrefix) prompt = settings.promptPrefix + ', ' + prompt;
+    return prompt;
+}
 
-    // 前置提示词（用户自定义）
-    if (settings.promptPrefix) {
-        prompt = settings.promptPrefix + ', ' + prompt;
-        slLog('前置提示词: ' + settings.promptPrefix);
-    }
+export async function generateImage(workflow, prompt) {
+    // 最终组装（画风预设 / anime质量前缀 / 前置提示词 / 艺术家标签）——
+    // 与面板"提示词"里显示的完全同源（v1.8.3）
+    prompt = composeFinalPrompt(prompt);
+    slLog('🎨ComfyUI-prompt(' + prompt.length + '字):', prompt);
 
     // ── v1.4.2：按连线定位正向/负向文本节点（旧实现靠遍历顺序 + 输入名判断，保护形同虚设）──
     var cond = resolveConditioningNodes(workflow);

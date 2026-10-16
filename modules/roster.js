@@ -301,7 +301,12 @@ export function setAtomAnchor(name, identity, mode, text) {
                 + (t.indexOf('|') < 0 ? '  ⚠️ 不是维度:值格式' : ''));
         } else if (t.length > old.length && t.indexOf(old) >= 0) {
             e.atoms[m] = t;   // 只在"旧文是新文的一部分"时才更新（追加维度，不是换措辞）
-            slLog('锚点追加[' + m + ']: ' + e.key);
+            slLog('锚点追加[' + m + ']: ' + e.key + '（' + atomCount(t) + ' 项）');
+        } else if (old.indexOf('|') < 0 && t.indexOf('|') >= 0) {
+            // [v1.8.2] 旧格式（逗号串/散文）→ 新格式（维度:值 | …）：直接升级，
+            // 否则旧锚点会被"防重写冻结"永久卡住，永远补不全
+            e.atoms[m] = t;
+            slLog('锚点升级为新格式[' + m + ']: ' + e.key + '（' + atomCount(old) + ' 项 → ' + atomCount(t) + ' 项）');
         } else {
             slLog('锚点回传被忽略（旧文已冻结，防重写）: ' + e.key);
         }

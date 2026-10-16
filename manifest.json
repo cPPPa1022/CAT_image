@@ -1,11 +1,11 @@
 {
-  "display_name": "小猫的生图插件 v1.8.1",
+  "display_name": "小猫的生图插件 v1.8.2",
   "loading_order": 10,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "author": "cPPPa1022",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "homePage": "https://github.com/cPPPa1022/sillyCAT",
   "auto_update": false
 }

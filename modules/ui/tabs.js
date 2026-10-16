@@ -9,7 +9,7 @@ import { getProfiles, getCharacterName } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
-import { rosterEntries } from '../roster.js';
+import { rosterEntries, atomValues, atomCount } from '../roster.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -247,8 +247,9 @@ function renderArchiveInto(body) {
 // 立绘提示词（生成立绘用的完整提示词，供复制去 ComfyUI 实测）
 function buildPortraitPrompt(anchor, bm) {
   if (!anchor) return '';
+  var vals = atomValues(anchor);   // 结构化锚点 → "值，值，值"（提示词里不能有 维度: 前缀）
   var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
-  var pr = anchor + frame;
+  var pr = vals + frame;
   if (bm === 'anime' || bm === 'anime_tag') pr = cleanAnimePrompt(pr);
   return pr;
 }
@@ -270,7 +271,9 @@ function renderPersonDetail(body, key) {
   h += '<div style="flex:1;min-width:0;">';
   h += '<div style="font-weight:700;font-size:14px;color:' + CAT.text + ';margin-bottom:3px;">' + esc(ppl.name || ppl.key) + '</div>';
   h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:9px;">' + esc(ppl.identity || '（无标签）') + '</div>';
-  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:3px;">完整档案 · 补全后原子锚点【' + esc(bm) + '】</div>';
+  var _an = atomCount(atom);
+  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:3px;">完整档案 · 补全后原子锚点【' + esc(bm) + '】'
+     + (atom ? ' · <span style="color:' + (_an >= 20 ? CAT.green : CAT.red) + ';">共 ' + _an + ' 项' + (_an >= 20 ? '' : ' ⚠️ 偏少') + '</span>' : '') + '</div>';
   h += '<div style="font-size:10px;color:' + CAT.mute + ';line-height:1.75;max-height:190px;overflow:auto;">' + (atom ? esc(atom) : '（还没有补全后的锚点 —— 先正常聊一轮、出一次图，插件就会按 38 维建档）') + '</div>';
   h += '<div style="display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;">';
   h += '<button class="sl_port_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10.5px;padding:6px 13px;">生成立绘</button>';

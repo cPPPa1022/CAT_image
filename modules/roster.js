@@ -253,6 +253,32 @@ export function getAtomAnchor(entry, mode) {
     } catch (e) { return ''; }
 }
 
+// ── 结构化锚点工具（v1.8.1）──
+// anchor 格式 = 维度:值 | 维度:值 | …；项数用于"到底补全了没有"的可检测校验
+export function atomCount(text) {
+    try {
+        var t = String(text || '').trim();
+        if (!t) return 0;
+        if (t.indexOf('|') >= 0) return t.split('|').filter(function (s) { return s.trim(); }).length;
+        return t.split(/[，,。；;]/).filter(function (s) { return s.trim(); }).length;   // 兼容旧的逗号串
+    } catch (e) { return 0; }
+}
+
+// 把结构化锚点还原成"值，值，值"（立绘提示词里不能出现 维度: 前缀）
+export function atomValues(text) {
+    try {
+        var t = String(text || '').trim();
+        if (!t) return '';
+        if (t.indexOf('|') < 0) return t;   // 旧格式（纯逗号串）原样返回
+        return t.split('|').map(function (seg) {
+            var s = String(seg).trim();
+            var i = s.search(/[:：]/);
+            if (i < 0) return s;
+            return s.slice(i + 1).trim().split('/').join('，').split('、').join('，');
+        }).filter(Boolean).join('，');
+    } catch (e) { return String(text || ''); }
+}
+
 export function setAtomAnchor(name, identity, mode, text) {
     try {
         var t = String(text || '').trim();
@@ -270,7 +296,9 @@ export function setAtomAnchor(name, identity, mode, text) {
         var old = e.atoms[m] || '';
         if (!old) {
             e.atoms[m] = t;
-            slLog('锚点建档[' + m + ']: ' + e.key + '，' + t.slice(0, 40) + '…');
+            var _n = atomCount(t);
+            slLog('锚点建档[' + m + ']: ' + e.key + '（' + _n + ' 项）' + (_n < 20 ? '  ⚠️ 项数偏少，可能没按 38 维补全' : '  ✅')
+                + (t.indexOf('|') < 0 ? '  ⚠️ 不是维度:值格式' : ''));
         } else if (t.length > old.length && t.indexOf(old) >= 0) {
             e.atoms[m] = t;   // 只在"旧文是新文的一部分"时才更新（追加维度，不是换措辞）
             slLog('锚点追加[' + m + ']: ' + e.key);

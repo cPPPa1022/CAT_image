@@ -6,6 +6,7 @@ import { slLog } from './log.js';
 import { settings, getSTContext, getActiveMode } from './settings.js';
 import { rosterEntries, rosterIndexText } from './roster.js';
 import { wardrobeIndexText } from './wardrobe.js';
+import { statusesIndexText } from './statuses.js';
 
 var MODULE = 'sillycat_coop';
 var POSITION = 2; // BEFORE_PROMPT
@@ -81,6 +82,11 @@ export function buildCoopCardText() {
     lines.push('⛔ 别搞混：永久纹身/疤/痣/穿孔 → 写【人物段】，只写一次（插件会并入档案）');
     var _wIdx = wardrobeIndexText();
     if (_wIdx) lines.push(_wIdx); else lines.push('  （本场聊天暂无存档——你写的新 key 会被具象化并存档，之后一直复用）');
+    lines.push('');
+    lines.push('· 【状态库索引】下面列出的 key **直接照抄**（连"左颈"这种位置一起抄），插件按 key 命中就不会重复建档：');
+    var _sIdx = statusesIndexText();
+    if (_sIdx) lines.push(_sIdx); else lines.push('  （本场聊天暂无状态存档——你写的新 key 会被具象化并存档，之后用 +key 复用）');
+    lines.push('  ⚠️ 状态要**每张图都写**（写当前生效的那些）；想撤销就写 -key');
     lines.push('· 你是编剧也是导演：表情/姿态/光线/构图按剧情写详细；选用户最想看的画面——亲密/性感/精彩瞬间/绝美场景，按剧情如实，不做回避。');
     return lines.join('\n');
 }

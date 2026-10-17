@@ -57,7 +57,8 @@ async function _post(endpoint, headers, body, timeoutMs) {
     } finally { clearTimeout(timer); }
 }
 
-export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperature, forceModel) {
+// forceThinking：仅重试时用 —— 换一套解码条件，避免"同一条件下反复被拒"
+export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperature, forceModel, forceThinking) {
     var model = forceModel || settings.auxModel;
     if (!settings.auxUrl || !model) {
         slLog('auxApiCall: auxUrl或model未配置');
@@ -65,7 +66,7 @@ export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperatu
     }
     var endpoint = settings.auxUrl.replace(/\/+$/, '');
     if (!/\/chat\/completions$/.test(endpoint)) endpoint += '/chat/completions';
-    var level = currentThinkingLevel();
+    var level = (forceThinking && THINKING_LEVELS.indexOf(String(forceThinking)) >= 0) ? String(forceThinking) : currentThinkingLevel();
     slLog('auxApiCall →', endpoint, 'model:', model, '| thinking:', level);
 
     var headers = { 'Content-Type': 'application/json' };

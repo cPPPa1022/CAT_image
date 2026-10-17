@@ -480,6 +480,7 @@ export async function runRosterPipeline(bodyText, mesId) {
         //   拒绝/空回/格式崩 → **不带上次输出**重发（带着拒绝语重试会让它锚定在"我刚拒绝了"上）
         //   条数不足       → **带上上次输出** + 点名缺第几条（让它接着补，而不是整轮重写又漏）
         var _fail = classifyPipelineFailure(output, expectN);
+        var _beforeRetry = output;
         if (_fail) {
             slErr('⚠️ 管线输出不合格(' + _fail + ', ' + (output ? output.length : 0) + ' 字, 需要 ' + expectN + ' 条) → 重试');
             var _gotN = 0;
@@ -510,21 +511,28 @@ export async function runRosterPipeline(bodyText, mesId) {
                     { role: 'assistant', content: output },
                     { role: 'user', content: _retryNote + '\n禁止输出拒绝、道歉、警告、元评论。' }
                 ];
-                output = await auxApiCall(_msgs, null, 16384, 0.25);
+                output = await auxApiCall(_msgs, null, 16384, 0.25, undefined, 'off');
             } else {
                 var _retryContent = userContent
                     + '\n\n---\n【系统重试 · 上一次输出不合格（' + _fail + '）】\n'
                     + '本轮任务必须完成。即使某个情节你不愿展开，也只允许**删掉该情节的敏感细节**，\n'
                     + '但 ---PROFILE--- 与 ---IMAGES--- 两段必须完整输出，' + _need + '，每条提示词必须是可用的生图描述。\n'
                     + '禁止输出拒绝、道歉、警告、元评论；拒绝或空回 = 格式错误 = 本轮管线中断、用户算力作废。';
-                output = await auxApiCall(systemPrompt, _retryContent, 16384, 0.25);
+                output = await auxApiCall(systemPrompt, _retryContent, 16384, 0.25, undefined, 'off');
             }
             var _fail2 = classifyPipelineFailure(output, expectN);
             if (_fail2) {
-                slErr('❌ 重试后仍不合格(' + _fail2 + ') → 本轮按失败处理（0 图）');
-                throw new Error('插件AI输出不合格（重试后仍失败: ' + _fail2 + '）');
+                // [Fix v1.13.3] 重试也失败时**不要 0 图**：取两次里条数多的那次继续，
+                // 缺的那几条交给 fillPlaceholders 的「锚点+场景」兜底（脸是对的，只是描述薄）。
+                // 0 图对用户来说是最差结果 —— 比"描述薄一点"糟糕得多。
+                var _n1 = 0, _n2 = 0;
+                try { _n1 = _beforeRetry ? (parseRosterImages(_beforeRetry) || []).length : 0; } catch (eN1) {}
+                try { _n2 = (parseRosterImages(output) || []).length; } catch (eN2) {}
+                if (_n1 >= _n2 && _n1 > 0) { output = _beforeRetry; _n2 = _n1; }
+                slErr('⚠️ 重试后仍不合格(' + _fail2 + ') → 用已拿到的 ' + _n2 + '/' + expectN + ' 条继续；缺失的走【锚点+场景】兜底（本轮不是 0 图）');
+            } else {
+                slLog('重试成功: ' + output.length + ' 字, ' + (parseRosterImages(output) || []).length + ' 条');
             }
-            slLog('重试成功: ' + output.length + ' 字, ' + (parseRosterImages(output) || []).length + ' 条');
         }
         if (!output || !output.trim()) throw new Error('插件AI返回空');
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
@@ -543,7 +551,17 @@ export async function runRosterPipeline(bodyText, mesId) {
                 // v2.0 锚点库：anchor = **英文权威锚点**（四种模式共用，逐字复用 → 零漂移）
                 //            anchor_zh = 中文呈现缓存（只给 zit 中文模式用）
                 // 闸门在 roster.js：英文进 anchor；中文只允许在 zit 模式进缓存；其余拒绝并记日志
-                if (pe && pe.anchor) { if (setEnglishAnchor(upName, upIdm, pe.anchor)) nAnchors++; else nRej++; }
+                if (pe && pe.anchor) {
+                    if (setEnglishAnchor(upName, upIdm, pe.anchor)) nAnchors++;
+                    else if (String(getActiveMode()) === 'zit') {
+                        // [Fix v1.13.3] zit 模式下辅助AI 习惯把**中文锚点塞进 anchor 字段** →
+                        // 旧实现被英文闸门直接拒掉，而 anchor_zh 又没给 → anchor 和 atoms.zit **两边都空**
+                        // （实测：萝莉岛 13:30 / 13:53 两个聊天的人物档案就是"有 base 无锚点"，锚点永远填不上）。
+                        // 现在：zit 模式下把中文锚点收进中文呈现缓存，别白扔。
+                        if (setZitAnchor(upName, upIdm, pe.anchor)) { nZh++; slLog('锚点回退为中文呈现缓存（anchor 字段给了中文）: ' + upName); }
+                        else nRej++;
+                    } else nRej++;
+                }
                 if (pe && pe.anchor_zh) { if (setZitAnchor(upName, upIdm, pe.anchor_zh)) nZh++; }
             }
             if (ups) slLog('协作PROFILE档案更新: ' + ups + ' 人');

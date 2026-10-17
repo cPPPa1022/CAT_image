@@ -127,6 +127,58 @@ export function parsePersonString(pStr) {
 }
 
 // ══════════════════════════════
+// ── v1.11.1 种子（seed）解析 / 剥离 ──
+// 主模型在「种子:」段（或误写进人物段）里给的是**取词方向**：气质=…；调性=…；重心=…；反差=…
+// ⛔ 它不是画面素材。实测 bug：`反差=看着懒散邋遢` 里的「着」命中 DYNAMIC_CUE，
+//    被 extractDynamicBits 当成"本轮动态要素"抄进了成图提示词 → 提示词尾部出现
+//    「，反差=看着懒散邋遢，白色棉质背心…」这种垃圾。所以所有兜底路径必须先剥种子。
+export var SEED_FIELDS = ['气质', '调性', '重心', '反差'];
+
+// 从一段文本里抽出种子字段 → { 气质, 调性, 重心, 反差 }
+export function parseSeedSegment(text) {
+    var body = String(text || '').replace(/^s*(?:种子|印象)s*[：:]?s*/, '');
+    var out = {};
+    if (!body.trim()) return out;
+    var re = /(气质|调性|重心|反差|第一印象)s*[=＝]s*([^；;|]*)/g;
+    var m;
+    while ((m = re.exec(body)) !== null) {
+        var k = (m[1] === '第一印象') ? '气质' : m[1];
+        var v = String(m[2] || '').trim();
+        if (!v) continue;
+        out[k] = out[k] ? (out[k] + '；' + v) : v;
+    }
+    return out;
+}
+
+// 种子对象 → 标准写法（气质=…；调性=…；重心=…；反差=…）
+export function formatSeed(obj) {
+    if (!obj) return '';
+    var out = [];
+    for (var i = 0; i < SEED_FIELDS.length; i++) {
+        var k = SEED_FIELDS[i];
+        if (obj[k]) out.push(k + '=' + obj[k]);
+    }
+    return out.join('；');
+}
+
+// 把种子从任意文本里剥掉（人物段 / 场景 / 要点 都可能混进种子）
+export function stripSeedText(text) {
+    var t = String(text || '');
+    if (!t) return t;
+    // ① 「种子：」之后到段尾（种子习惯写在最后）
+    t = t.replace(/(?:^|[。；;|])s*种子s*[：:][sS]*$/, '');
+    // ② 散落的 气质=/调性=/重心=/反差= 字段，各自到下一个分号/竖线
+    t = t.replace(/(?:气质|调性|重心|反差|第一印象)s*[=＝]s*[^；;|]*/g, '');
+    // ③ 收尾清理
+    return t.replace(/[；;，,]{2,}/g, '，').replace(/^[；;，,。\s]+/, '').replace(/[；;，,。\s]+$/, '').trim();
+}
+
+// 文本里是否含种子字段
+export function hasSeedField(text) {
+    return /(?:气质|调性|重心|反差)s*[=＝]/.test(String(text || ''));
+}
+
+// ══════════════════════════════
 // ── v1.5.0 造型段解析（衣柜/造型库）──
 // 语法：造型:服装=XX中学·校服（夏季）；发型=温若兰·短发扎尾；配饰=A、B
 // 槽之间用「；」，槽名与 key 用「=」，一个槽多个 key 用「、」
@@ -204,11 +256,18 @@ export function findImagePlaceholders(text) {
         var personSegments = [];
         var styleGroups = [];
         var statusOps = [];
+        var seedObj = {};
         for (var i = 0; i < segs.length; i++) {
             var seg = segs[i].trim();
             if (!seg) continue;
             if (i === 0) {
-                scene = seg;
+                scene = stripSeedText(seg);
+                continue;
+            }
+            // v1.11.1：种子段（可选，以「种子:/印象:」开头）—— 只给插件看，绝不进提示词
+            if (/^(?:种子|印象)\s*[：:]/.test(seg)) {
+                var _sd = parseSeedSegment(seg);
+                for (var _sdk in _sd) { seedObj[_sdk] = seedObj[_sdk] ? (seedObj[_sdk] + '；' + _sd[_sdk]) : _sd[_sdk]; }
                 continue;
             }
             // v1.9.0：状态段（可选，以「状态:/时效:/变化:」开头）
@@ -228,10 +287,27 @@ export function findImagePlaceholders(text) {
                 var persons = splitPersonList(pm[1]);
                 for (var pIdx = 0; pIdx < persons.length; pIdx++) {
                     var _ps = parsePersonString(persons[pIdx]);
-                    if (_ps) personSegments.push(_ps);
+                    if (!_ps) continue;
+                    // [Fix v1.11.1] 主模型常把种子直接写在人物段末尾 → 从这里剥出来，
+                    // 否则它会被当成外貌喂给辅助AI / 被动态要素兜底抄进提示词
+                    if (_ps.appearance && hasSeedField(_ps.appearance)) {
+                        var _pd = parseSeedSegment(_ps.appearance);
+                        for (var _pk in _pd) { seedObj[_pk] = seedObj[_pk] ? (seedObj[_pk] + '；' + _pd[_pk]) : _pd[_pk]; }
+                        _ps.appearance = stripSeedText(_ps.appearance);
+                    }
+                    _ps.seedObj = {};
+                    personSegments.push(_ps);
                 }
             } else {
-                topicParts.push(seg);
+                var _topicSeg = stripSeedText(seg);
+                if (_topicSeg) topicParts.push(_topicSeg);
+            }
+        }
+        var _seedText = formatSeed(seedObj);
+        // 把种子挂到各自的人物段上（同一个人有多段时不重复塞）
+        for (var _psi = 0; _psi < personSegments.length; _psi++) {
+            if (!personSegments[_psi].seedObj || !Object.keys(personSegments[_psi].seedObj).length) {
+                personSegments[_psi].seedObj = seedObj;
             }
         }
         result.push({
@@ -240,6 +316,8 @@ export function findImagePlaceholders(text) {
             styleGroups: styleGroups,
             statusOps: statusOps,
             topic: topicParts.join('\n'),
+            seed: _seedText,
+            seedObj: seedObj,
             raw: content
         });
     }
@@ -250,6 +328,9 @@ export function findImagePlaceholders(text) {
 // 都是"本轮可变、由酒馆AI写"的部分，必须逐项润色进提示词，不得省略）
 var DYNAMIC_CUE = /(穿|着|披|围|戴|系|套|衣|裤|裙|袜|丝|鞋|靴|帽|开衫|风衣|马甲|吊带|抹胸|内衣|内搭|束腰|领口|束带|头发|发丝|发色|刘海|马尾|表情|神态|眼神|目光|微笑|皱眉|浅笑|光线|灯光|烛光|阳光|阴影|氛围|动作|姿势|站|坐|靠|蹲|跪|转身|弯腰|低头|抬头|抬手|伸手|撑|倚|抱|吻)/;
 export function extractDynamicBits(text) {
+    if (!text) return [];
+    // [Fix v1.11.1] 先剥种子：`反差=看着懒散邋遢` 里的「着」会命中 DYNAMIC_CUE → 被当成动态要素抄进提示词
+    text = stripSeedText(text);
     if (!text) return [];
     var parts = String(text).split(/[，。；、\n,;]/);
     var out = [];

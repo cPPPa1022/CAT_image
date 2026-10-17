@@ -16,8 +16,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.11.0';
-slLog('LOADED v1.11.0');
+window.SILLYLAB_VERSION = 'v1.11.1';
+slLog('LOADED v1.11.1');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -103,7 +103,7 @@ if (!localStorage.getItem('sillab_anchor_v2_clean')) {
     } catch (e) { slLog('锚点清理跳过: ' + e.message); }
 }
 
-slLog('v1.11.0 init');
+slLog('v1.11.1 init');
 
 // ── 注册斜杠命令 ──
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',callback:function(){var cb=jQuery('#sl_compact');if(cb.length){cb.trigger('click');}else{toastr.info('插件面板尚未初始化喵~');}}}));

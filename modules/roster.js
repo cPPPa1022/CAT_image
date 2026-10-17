@@ -7,6 +7,7 @@ import { slLog } from './log.js';
 import { settings, saveSettings, getSTContext, getActiveMode } from './settings.js';
 import { getCharacterName, getChatId } from './pipeline/profile.js';
 import { refreshCoopCards } from './sync-cards.js';  // [Fix] 人物表变化时刷新导演模式协作卡索引
+import { stripSeedText, parseSeedSegment, formatSeed, hasSeedField } from './text-utils.js';  // v1.11.1 种子剥离
 
 // ── key 归一化 ──
 export function personKey(name, identity) {
@@ -73,12 +74,19 @@ export function composePersonAppearance(e) {
     if (base.indexOf(live) >= 0) return base;   // base 已包含 live → 只发 base
     return base + '，' + live;
 }
-export function upsertPerson(name, identity, appearance, source) {
+export function upsertPerson(name, identity, appearance, source, seed) {
     try {
         var r = ensureRoster();
         if (!r) return null;
         var key = personKey(name, identity);
         if (!key) return null;
+        // [Fix v1.11.1] 种子不是外貌：从 appearance 里剥出来单独存（entry.seed）
+        // 留在 base 里会被当成"静态锚点"喂给辅助AI、还会被动态要素兜底抄进提示词
+        var _seedRaw = String(seed || '').trim();
+        try {
+            if (!_seedRaw && appearance && hasSeedField(appearance)) _seedRaw = formatSeed(parseSeedSegment(appearance));
+            if (appearance && hasSeedField(appearance)) appearance = stripSeedText(appearance);
+        } catch (eSeed) {}
         var existing = r.list[key];
         var isCast = source === 'cast';
         // v1.3：主模型在占位符里写的「静态锚点」也进 base（来源 'anchor'）
@@ -137,6 +145,7 @@ export function upsertPerson(name, identity, appearance, source) {
                 baseSrc: writesBase ? newSrc : '',
                 base: writesBase ? (appearance || '') : '',
                 live: writesBase ? '' : (appearance || ''),
+                seed: _seedRaw || '',
                 _updated: !writesBase
             };
             slLog('人物表建档: ' + key + (isCast ? '（角色卡扫描）' : isAnchor ? '（主模型锚点）' : '（酒馆AI收集）') + (appearance ? '，' + appearance.slice(0, 20) + '…' : ''));
@@ -173,6 +182,8 @@ export function upsertPerson(name, identity, appearance, source) {
                 existing.source = source || existing.source;
             }
             if (identity && !existing.identity) { existing.identity = identity; changed = true; }
+            // 种子是"方向"不是"锚点"：后写的覆盖前面的（不参与冻结，也不影响长相）
+            if (_seedRaw && _seedRaw !== existing.seed) { existing.seed = _seedRaw; changed = true; }
             // 重组展示/发送内容 = 基础(扫描) + 动态(酒馆AI)
             existing.appearance = composePersonAppearance(existing);
             // 只有"酒馆AI发来的"更新才打 *更新* ACK；扫描库导入是后台动作，不打标
@@ -192,7 +203,12 @@ export function applyPersonSegments(segments, source) {
     for (var i = 0; i < segments.length; i++) {
         var s = segments[i];
         if (!s || !s.name) continue;
-        upsertPerson(s.name, s.identity, s.appearance, src);
+        var _sd = '';
+        try {
+            if (s.seedObj && Object.keys(s.seedObj).length) _sd = formatSeed(s.seedObj);
+            else if (s.seed) _sd = String(s.seed);
+        } catch (eS) {}
+        upsertPerson(s.name, s.identity, s.appearance, src, _sd);
         n++;
     }
     return n;
@@ -497,6 +513,8 @@ export function rosterDataTextFor(nameList) {
                     } else {
                         nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
                     }
+                    // v1.11.1：种子单独下发（四个分支都要带上 —— 它是"取词方向"，不是外貌）
+                    if (e.seed) nmLines.push('   🌱 种子（主模型给的**取词方向**：气质/调性/重心/反差 —— 按「种子 → 锚点反推」执行，⛔ 禁止把这行原文放进提示词）：' + e.seed);
                     nmCount++;
                     if (e.identity) nmLabels.push(e.identity);
                     seen[k] = true;

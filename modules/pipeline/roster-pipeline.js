@@ -79,6 +79,19 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
         lines.push('· ⛔ 已取消的状态：本轮起不要写进提示词');
         lines.push('');
     }
+    // v1.11.1：【种子】—— 主模型给的是"取词方向"，精度由你按 roster/system.txt 的四步反推
+    var _seedLines = [];
+    for (var _sqi = 0; _sqi < placeholders.length; _sqi++) {
+        var _sdTxt = placeholders[_sqi].seed || '';
+        if (!_sdTxt) continue;
+        var _nmList = (placeholders[_sqi].personSegments || []).map(function (s) { return s.name; }).filter(Boolean).join('、');
+        _seedLines.push('  ' + (_sqi + 1) + '. ' + (_nmList ? _nmList + ' → ' : '') + _sdTxt);
+    }
+    if (_seedLines.length) {
+        lines.push('');
+        lines.push('【种子】（主模型给的**取词方向**：气质 / 调性 / 重心 / 反差 —— 按「种子 → 锚点反推」四步执行；⛔ **禁止把这行原文写进提示词**）');
+        lines.push(_seedLines.join('\n'));
+    }
     lines.push('【占位符】（输出顺序必须与本列表一致）');
     if (placeholders.length) {
         for (var i = 0; i < placeholders.length; i++) {
@@ -89,6 +102,7 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
                 for (var j = 0; j < ph.personSegments.length; j++) ps.push(ph.personSegments[j].name + (ph.personSegments[j].identity ? '（' + ph.personSegments[j].identity + '）' : ''));
                 lines.push('   人物：' + ps.join('、'));
             }
+            if (ph.seed) lines.push('   种子：' + ph.seed);
             if (ph.topic) lines.push('   要点：' + ph.topic.replace(/\n/g, '；'));
             // [Fix] 动态要素保真：酒馆AI写的本轮可变内容（衣着/发型/表情/光线/氛围/动作）逐项列出，
             // 插件AI 必须逐项润色进提示词（这是评分重点）

@@ -1,5 +1,86 @@
 # 📜 更新日志（Changelog）
 
+## v1.12.0 — 2026-10-17
+**主题：辅助 AI 思考档位 + CoT 剥离 + 兜底改为「标准档」**
+
+### 🧠 思考档位（协议依据：deepseek-harness 的 `dsh-llm-deepseek` 适配器源码）
+
+```js
+// dsh-llm-deepseek/lib/index.js:236-247
+...thinking !== undefined        ? { thinking: { type: thinking } } : {},          // enabled | disabled
+...reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {},     // low | high | max
+```
+
+**DeepSeek 官方只认 4 档：`off / low / high / max`** —— 没有 `medium`（medium/minimal/xhigh 是 pi-ai 的通用档位，DS 不认）。
+
+| UI | 实际发出 |
+|---|---|
+| 关（默认） | `thinking:{type:'disabled'}`，**不发** reasoning_effort |
+| low / high / max | `thinking:{type:'enabled'}` + `reasoning_effort:'low'/'high'/'max'` |
+
+- 位置：AI 助理 tab 新增「🧠 思考强度」下拉
+- **自动抬 max_tokens**：off 16k / low 32k / high 64k / max 98k（DS V4 Flash 单次上限 256k）
+- **正文为空 → 自动关思考重试一次**（否则这一轮 0 条提示词 → 中文兜底 → 烂图）
+- 日志：`thinking=high, reasoning_len=…, content_len=…`
+
+### 💣 顺手修掉一个隐藏地雷（这才是"reasoning 吃光 max_tokens"的真凶）
+
+旧 `api.js` 遇到 400 的处理是：
+
+```js
+if (/thinking|parameter|invalid|unknown/i.test(errorText)) { delete body.thinking; /* 重试 */ }
+```
+
+而 DeepSeek 服务端**默认 `thinking=enabled` + `reasoning_effort=high`**（`dsh-llm-deepseek/README.zh.md:19-20`）。
+
+> **删掉 thinking 参数 ≠ 关掉思考，而是"按服务端默认"= 开到 high。**
+
+所以那条"降级"路径实际是**把思考打开**，reasoning 吃掉全部 max_tokens → content 为空 →
+解析出 0 条提示词 → 走中文场景兜底 → 出烂图。
+
+**修法**：降级时不再 delete，而是**显式设为 `thinking:{type:'disabled'}`** 并补回 off 档的 max_tokens。
+
+### 🧹 CoT（思维链）剥离
+
+`stripCoT()` 四层：
+
+1. `<thought>` / `<thinking>` / `<reasoning>` 标签整段
+2. 「思考过程：」/「推理过程：」/「Thought process:」整段（到下一个 `---` 或空行）
+3. 含 `---PROFILE---` 时，**它前面的一切都是废话** → 砍掉
+4. 最后一个 `---END---` 之后的残留（思考写在后头）→ 砍掉
+
+（DeepSeek 正常把思考放在独立的 `reasoning_content` 字段，不会混进 content；这层是防御网关合并。）
+
+### 🔧 兜底改为「标准档」
+
+那三道兜底用的是**字面包含**判断，模型一润色（多一个逗号 / 换语序）就误判成"缺失"，
+于是把原文又追加回提示词。实测污染：
+
+    …近景构图。，索菲亚蹲在池边抱膝          ← 场景原文（还带人名）
+    …浅景深。，白色棉质背心，细肩带，圆领      ← 造型 detail 重复
+
+现在（`settings.fallbackMode = 'warn'`，默认）：
+
+| 兜底 | 旧 | 新 |
+|---|---|---|
+| 动态要素 | 缺了就 append 原文 | **只打 ⚠️ 日志** |
+| 场景/要点覆盖 | 缺了就 append 场景+要点 | **只打 ⚠️ 日志** |
+| 造型 detail | 没逐字命中就 append | **只打 ⚠️ 日志** |
+| 状态 detail | 同上 | **只打 ⚠️ 日志** |
+| 该条压根没提示词 | 用场景原文顶上 | 保留（否则无图），但打 ⛔ 醒目告警 |
+
+**保真责任移交给辅助 AI**：`roster/system.txt` 新增「交稿前自检（7 项）」——
+动态要素逐项 / 造型 detail 逐字 / 状态 / 永久标记与罕见特征 / 反差加权 / 污染检查 / 景别裁剪。
+任一项不过自己补、自己删，再交。**想恢复旧行为：`fallbackMode` 设为 `'patch'`。**
+
+### 🧪 验证
+
+- 全量 JS 语法检查通过
+- `stripCoT` 单测：`<thinking>` 块 / 「思考过程：」段 / PROFILE 前废话 / END 后残留 四类全部剥净
+- 思考档位映射单测：off 不发 effort、low/high/max 发 enabled+effort、400 降级后仍是 disabled
+
+---
+
 ## v1.11.2 — 2026-10-17
 **主题：修「主模型把人物外貌整体丢了」—— 外貌骨架 10 维 + 惜字如金**
 

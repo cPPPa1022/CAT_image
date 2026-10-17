@@ -197,6 +197,13 @@ export function parseRosterImages(output) {
 }
 
 // ── 占位符替换：原文 [img:…] → [image:场景]【提示词】…【/提示词】 ──
+// ── v1.12.0「标准档」兜底策略 ──
+// 这些兜底用的是"字面包含"判断，模型一润色（多一个逗号/换语序）就误判成"缺失"，
+// 然后把场景原文 / 造型 detail 原样塞回提示词（实测污染：`，索菲亚蹲在池边抱膝`、`，白色棉质背心，细肩带，圆领`）。
+// 现在默认只报警、不改模型输出；保真改由辅助AI 的「交稿前自检清单」负责（roster/system.txt）。
+// 想恢复旧行为：设置 fallbackMode = 'patch'。
+function _fallbackPatch() { return String(settings.fallbackMode || 'warn') === 'patch'; }
+
 export function fillPlaceholders(bodyText, placeholders, prompts) {
     var phIdx = 0;
     var pIdx = 0;
@@ -210,7 +217,11 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             // 要点已被插件AI用于写提示词，无需重复；若提示词似乎太短（<12字）则拼接场景兜底
             if (prompt.length < 12) prompt = (ph.scene + '，' + prompt);
         }
-        if (!prompt) prompt = ph.scene;  // 无提示词：场景直写（渲染兜底用场景生成）
+        if (!prompt) {
+            // 辅助AI 这一条没交稿（漏行/空回）→ 只能用场景原文顶上，但那基本等于出烂图
+            slErr('⚠️ 本条占位符没有提示词（辅助AI漏回）→ 退化为场景原文，成图质量会明显下降');
+            prompt = ph.scene;
+        }
         if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
         // [Fix] 动态要素保真兜底1：占位符里的可变片段（衣着/发型/表情/光线/动作…），
         // 若提示词没有对应内容则补入（用前6字核心匹配，AI 润色加词也认）
@@ -231,8 +242,12 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             var _db = _dynBits[_di];
             var _dbNorm = normForMatch(_stripNames(_db));
             if (_pNorm.indexOf(_dbNorm) < 0) {
-                prompt = prompt + '，' + _db;
-                slLog('动态要素兜底补入: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
+                if (_fallbackPatch()) {
+                    prompt = prompt + '，' + _db;
+                    slLog('动态要素兜底补入: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
+                } else {
+                    slLog('⚠️ 动态要素未被逐字包含（仅告警不补入，交给自检清单）: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
+                }
             }
             _pNorm = normForMatch(_stripNames(prompt));
         }
@@ -244,7 +259,10 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             var _cov = false;
             for (var _ci = 0; _ci + 4 <= _scene4.length && !_cov; _ci++) { if (normForMatch(prompt).indexOf(normForMatch(_scene4.slice(_ci, _ci + 4))) >= 0) _cov = true; }
             for (var _ci2 = 0; _ci2 + 4 <= _topic4.length && !_cov; _ci2++) { if (normForMatch(prompt).indexOf(normForMatch(_topic4.slice(_ci2, _ci2 + 4))) >= 0) _cov = true; }
-            if (!_cov) prompt = prompt + '，' + (ph.scene || '') + (ph.topic ? '，' + ph.topic : '');
+            if (!_cov) {
+                if (_fallbackPatch()) prompt = prompt + '，' + (ph.scene || '') + (ph.topic ? '，' + ph.topic : '');
+                else slLog('⚠️ 场景/要点覆盖不足（仅告警不补入原文）: ' + (ph.scene || '').slice(0, 30));
+            }
         }
         // v1.5.0：造型兜底 —— 已解析的造型详情必须出现在提示词里，缺了就补（防漂移的最后一道闸）
         // 存档的 detail 本身就是生图语言，所以原样拼接即可，不需要再经 LLM 措辞
@@ -256,8 +274,12 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
                 var _dn = normForMatch(_stripNames(_det));
                 var _probe = _dn.slice(0, Math.min(24, _dn.length));
                 if (_probe && normForMatch(_stripNames(prompt)).indexOf(_probe) < 0) {
-                    prompt = prompt ? (prompt + '，' + _det) : _det;
-                    slLog('造型兜底补入[' + _wd.slot + ']: ' + _wd.key);
+                    if (_fallbackPatch()) {
+                        prompt = prompt ? (prompt + '，' + _det) : _det;
+                        slLog('造型兜底补入[' + _wd.slot + ']: ' + _wd.key);
+                    } else {
+                        slLog('⚠️ 造型 detail 未逐字命中（仅告警不补入，交给自检清单）[' + _wd.slot + ']: ' + _wd.key);
+                    }
                 }
             }
         }
@@ -285,8 +307,12 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
                 var _sdn = normForMatch(_stripNames(_sd));
                 var _sprobe = _sdn.slice(0, Math.min(20, _sdn.length));
                 if (_sprobe && normForMatch(_stripNames(prompt)).indexOf(_sprobe) < 0) {
-                    prompt = prompt ? (prompt + '，' + _sd) : _sd;
-                    slLog('状态兜底补入: ' + ph._statuses[_sk2].key);
+                    if (_fallbackPatch()) {
+                        prompt = prompt ? (prompt + '，' + _sd) : _sd;
+                        slLog('状态兜底补入: ' + ph._statuses[_sk2].key);
+                    } else {
+                        slLog('⚠️ 状态 detail 未逐字命中（仅告警不补入，交给自检清单）: ' + ph._statuses[_sk2].key);
+                    }
                 }
             }
         }

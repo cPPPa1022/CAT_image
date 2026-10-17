@@ -12,6 +12,12 @@ export function getDefaults() {
         auxUrl: '',
         auxKey: '',
         auxModel: '',
+        // v1.12.0 思考档位：DeepSeek 官方只认 off / low / high / max（没有 medium）
+        //   off  → thinking:{type:'disabled'}（不发 reasoning_effort）
+        //   其它 → thinking:{type:'enabled'} + reasoning_effort:<档位>
+        auxThinking: 'off',
+        // v1.12.0 兜底策略：warn（默认·兜底只报警不擅改模型输出）| patch（旧行为·缺什么补什么原文）
+        fallbackMode: 'warn',
         profileModel: '',
         userName: '',
         userDesc: '',

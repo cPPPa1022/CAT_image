@@ -518,6 +518,19 @@ export function rosterDataTextFor(nameList) {
                                 + '并以「**旧文原样 + aura:…**」的形式回传 anchor，**其余维度一个字不许改**。'
                                 + '没有 aura = 皮相交给模型先验 = 画出来是真实路人脸。');
                         }
+                        // v1.15.1：立绘还是旧版（含丑化词）→ 点名要求重写（立绘是缓存，改 prompt 不会自动更新）
+                        (function () {
+                            try {
+                                var _pp = e.portraitPrompts;
+                                if (!_pp) return;
+                                var _t = String(_pp.front || '') + String(_pp.left || '') + String(_pp.right || '') + String(_pp.back || '');
+                                if (!_t) return;
+                                if (/粗糙|毛孔|晒斑|晒伤|干裂|起皮|血丝|痘印|指甲剪到肉里/.test(_t)) {
+                                    nmLines.push('   ⭐ 这位的【立绘】还是旧版（含「粗糙/毛孔/晒斑」这类丑化词）—— 本轮请按 v1.15.1 重写四条 portrait '
+                                        + '并通过 ---PROFILE--- 回传：皮相改用 aura 承载（通透/光泽/血色），骨相逐字复用锚点、⛔ 不许升档。');
+                                }
+                            } catch (e3) {}
+                        })();
                         // zit 模式下若英文权威锚点还缺着：顺手让它补一份（英文锚点四种模式共用，缺了英文模式画不了立绘）
                         if (_m === 'zit' && !getEnglishAnchor(e)) {
                             nmLines.push('   ⭐ 另：这位还缺【英文权威锚点】—— 本轮请一并回传 anchor（英文，维度名与值全英文）字段；它与中文呈现表达同一件事，四种模式共用。');

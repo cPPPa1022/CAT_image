@@ -25,13 +25,15 @@
    ⚠️ 缺体型标签时动漫模型**默认偏幼态（萝莉化）**；禁止只写 `slender` 了事
 10. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 的值 → 逐字融进标签链**最前面**
     ⛔ 禁止 `rough skin` / `sun spots` / `red knuckles` / `tired eyes` 这类缺陷标签（除非角色卡/正文明确要求）
-    ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light` / `refined features`
+    ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light`（只限光学）
+    ⛔ `refined features` / `delicate features` / `perfect face` **禁止使用**（骨相美化词 = 五官偏移）
     ⛔ `beautiful` 可以和维度**并存**，不能**替代**维度
+    ⛔ **锚点值逐字落地**：`low bridge` 不许写 `straight nose bridge`，`thin upper lip` 不许写 `full lips`，`short wide face` 不许省
 11. 所有持久性规则跟 ZIT 一样
 
 ## 示例（标签**写全**入镜维度，通常 30-50 个；**不是只写十几个**）
 
-    luminous skin, healthy glow, refined features, soft bright light,
+    luminous skin, healthy glow, soft bright light, gentle sheen,
     asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
     almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
     aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip, narrow

@@ -15,7 +15,7 @@ Anima 系模型由两类语料共同训练：
     ③ 构图段（标签）          —— 景别 / 机位 / 景深，3 个起，够用即可（不凑数）
 
 示例（结构段要**写全**：脸的全部细节 + 体型 + 衣着；**维度写全优先于写短**，不是只写十几个）：
-    luminous skin, healthy glow, refined features, soft bright light,
+    luminous skin, healthy glow, soft bright light, gentle sheen,
     asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
     almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
     aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip,
@@ -55,8 +55,11 @@ Anima 系模型由两类语料共同训练：
    表里没有、或你有更贴切的写法 → **自己写一个同风格的短标签**，但**不要生造带下划线的标签**
 8. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 那一项的值 → 逐字融进结构段**最前面**。
    ⛔ 禁止写 `rough skin` / `sun spots` / `red knuckles` / `tired eyes` 这类缺陷标签（除非角色卡/正文明确要求）
-   ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light` / `refined features`
+   ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light`（只限光学）
+   ⛔ `refined features` / `delicate features` / `perfect face` **禁止使用** —— 那是骨相美化词，会让五官偏移
    ⛔ 别用 `beautiful` 单独顶掉肤质/五官维度 —— 它可以和维度**并存**，不能**替代**
+   ⛔ **锚点里的值必须逐字出现**：`low bridge` 不许写 `straight nose bridge`；`thin upper lip` 不许写 `full lips`；
+      `short wide face` 不许省；`inner double eyelids` 不许写 `narrow double`
 
 ## ⚠️ 年龄 / 体型必须用标签显式写全（防幼态化）
 Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成年角色必须写全：

@@ -690,36 +690,57 @@ export function portraitPromptsMode(entry) {
     try { return (entry && entry.portraitPrompts && entry.portraitPrompts.mode) || ''; } catch (e) { return ''; }
 }
 
-// ── v1.13.8 年龄闸门（只用于立绘）──
-// 立绘默认是"无衣物遮挡"的体型对照图。**未成年角色一律改用素色紧身打底衣** ——
+// ── 立绘年龄闸门（v1.13.8 引入 · v1.13.9 改窄）──
+// 立绘默认是"无衣物遮挡"的体型对照图。**明确写了未成年年龄的角色一律改用素色紧身打底衣** ——
 // 代码硬拦，不依赖模型自觉，也不管提示词是谁写的。
+// v1.13.9 改窄：删掉「整条档案里出现 少女/萝莉 就当未成年」的启发式 —— 它会误伤成年角色，
+//   而且 seed（气质/调性）是**取词方向**，不是年龄证据。现在只看两处真正的年龄来源：
+//   ① base / anchor / anchor_zh 里的**明确数字年龄**（14岁 / 十四岁 / 17周岁）
+//   ② 锚点里 **age / 年龄 这一维的值**（age:teenage girl / 年龄:少女）—— 只认这一维，不做全文扫描
 var _AGE_NUM_RE = /(\d{1,2})\s*(?:岁|周岁)/g;
 var _AGE_CN_RE = /(十[一二三四五六七八九]?|[一二三四五六七八九])\s*岁/g;
 var _AGE_CN_VAL = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+var _AGE_DIM_RE = /(?:^|\|)\s*(?:age|年龄)\s*[:：]\s*([^|]*)/gi;
+var _AGE_TIER_RE = /(teenage|young girl|child|loli|elementary|underage|少女|萝莉|幼女|幼童|儿童|女童)/i;
+
+// 明确数字年龄 < 18？（14岁 / 十四岁 / 17周岁）
+function _ageNumUnder18(t) {
+    if (!t) return false;
+    var m, n;
+    _AGE_NUM_RE.lastIndex = 0;
+    while ((m = _AGE_NUM_RE.exec(t)) !== null) {
+        n = parseInt(m[1], 10);
+        if (n > 0 && n < 18) return true;
+    }
+    _AGE_CN_RE.lastIndex = 0;
+    while ((m = _AGE_CN_RE.exec(t)) !== null) {
+        var s = m[1];
+        n = _AGE_CN_VAL[s] || 0;
+        if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
+        if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
+        if (n > 0 && n < 18) return true;
+    }
+    return false;
+}
+
 export function isUnderageEntry(entry) {
     try {
-        var t = [
-            String((entry && (entry.base || entry.appearance)) || ''),
-            String((entry && entry.anchor) || ''),
-            String((entry && (entry.anchor_zh || (entry.atoms && entry.atoms.zit))) || ''),
-            String((entry && entry.seed) || '')
-        ].join(' ');
-        if (!t) return false;
-        var m, i, n;
-        _AGE_NUM_RE.lastIndex = 0;
-        while ((m = _AGE_NUM_RE.exec(t)) !== null) {
-            n = parseInt(m[1], 10);
-            if (n > 0 && n < 18) return true;
+        if (!entry) return false;
+        var base = String((entry.base || entry.appearance) || '');
+        var anchor = String(entry.anchor || '');
+        var zh = String((entry.anchor_zh || (entry.atoms && entry.atoms.zit)) || '');
+        // ① 明确数字年龄
+        if (_ageNumUnder18(base) || _ageNumUnder18(anchor) || _ageNumUnder18(zh)) return true;
+        // ② 只认锚点里 age / 年龄 这一维的值（不做全文扫描 —— 少女感 / 少女漫 这类不再算）
+        var texts = [anchor, zh];
+        for (var k = 0; k < texts.length; k++) {
+            _AGE_DIM_RE.lastIndex = 0;
+            var m;
+            while ((m = _AGE_DIM_RE.exec(texts[k])) !== null) {
+                var val = String(m[1] || '').trim();
+                if (val && _AGE_TIER_RE.test(val)) return true;
+            }
         }
-        _AGE_CN_RE.lastIndex = 0;
-        while ((m = _AGE_CN_RE.exec(t)) !== null) {
-            var s = m[1];
-            n = _AGE_CN_VAL[s] || 0;
-            if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
-            if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
-            if (n > 0 && n < 18) return true;
-        }
-        if (/(少女|萝莉|幼女|幼童|儿童|女童|teenage girl|young girl|child|loli|elementary|underage)/i.test(t)) return true;
         return false;
     } catch (e) { return false; }
 }

@@ -710,7 +710,7 @@ function _ageNumUnder18(t) {
     _AGE_NUM_RE.lastIndex = 0;
     while ((m = _AGE_NUM_RE.exec(t)) !== null) {
         n = parseInt(m[1], 10);
-        if (n > 0 && n < 1) return true;
+        if (n > 0 && n < 18) return false;
     }
     _AGE_CN_RE.lastIndex = 0;
     while ((m = _AGE_CN_RE.exec(t)) !== null) {
@@ -718,7 +718,7 @@ function _ageNumUnder18(t) {
         n = _AGE_CN_VAL[s] || 0;
         if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
         if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
-        if (n > 0 && n < 1) return true;
+        if (n > 0 && n < 18) return false;
     }
     return false;
 }

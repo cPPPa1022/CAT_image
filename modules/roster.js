@@ -95,10 +95,27 @@ export function upsertPerson(name, identity, appearance, source) {
                 if (_sk === name || _sk.indexOf(name + '（') === 0) _sameName.push(r.list[_sk]);
             }
             if (_sameName.length === 1) {
-                // [Fix] 仅"至少一侧无标签"才合并（同一人不同 key 形式：裸名↔带标签）；
-                // 双方都有非空标签且不同 → 视为同名不同人，各存各条（用户规则：两个柳如烟）
+                // [Fix v1.11] 身份标签变了 ≠ 换了一个人，但也 ≠ 一定是同一人 —— 要分两种情况：
+                //   ① 剧情里她改嫁/被赎身/升职/落难 → 标签变了但**外貌还是同一套** → 合并（否则新建空条目 → 重新捏脸 = OOC）
+                //   ② 真·同名不同人（柳如烟（千金小姐）/ 柳如烟（青楼妓女））→ 标签不同且**外貌也不同** → 各存各条
+                // 判据 = 新旧外貌文本的 Dice 相似度（≥0.75 → 同一人换身份）
                 var _cand = _sameName[0];
-                if (!identity || !_cand.identity) existing = _cand;
+                if (!identity || !_cand.identity) {
+                    existing = _cand;
+                } else if (String(_cand.identity) !== String(identity)) {
+                    var _sim = _appearanceSimilarity(appearance, _cand.base || _cand.appearance || '');
+                    if (_sim >= 0.75) {
+                        if (!_cand.aliases) _cand.aliases = [];
+                        if (_cand.aliases.indexOf(identity) < 0) _cand.aliases.push(identity);
+                        slLog('🔒 身份标签变化（外貌相似度 ' + _sim.toFixed(2) + '）→ 判定同一人换身份，合并不新建: '
+                            + _cand.key + ' ← 新标签「' + identity + '」记为别名');
+                        existing = _cand;
+                    } else {
+                        slLog('同名但标签与外貌都不同（相似度 ' + _sim.toFixed(2) + '）→ 视为另一个同名人物，新建: ' + key);
+                    }
+                } else {
+                    existing = _cand;
+                }
             } else if (_sameName.length > 1 && identity) {
                 for (var _mi = 0; _mi < _sameName.length; _mi++) {
                     if (_sameName[_mi] && String(_sameName[_mi].identity || '') === String(identity)) { existing = _sameName[_mi]; break; }
@@ -179,6 +196,24 @@ export function applyPersonSegments(segments, source) {
         n++;
     }
     return n;
+}
+
+// ── 外貌文本相似度（Dice 2-gram）—— 用于区分"同一人换身份" vs "真·同名不同人" ──
+function _appearanceSimilarity(a, b) {
+    try {
+        var grams = function (t) {
+            t = String(t || '').replace(/[\s，,。；;：:、｜|/=]/g, '');
+            var s = {};
+            for (var i = 0; i + 1 < t.length; i++) s[t.substr(i, 2)] = 1;
+            return s;
+        };
+        var A = grams(a), B = grams(b);
+        var na = 0, nb = 0, hit = 0, k;
+        for (k in A) { na++; if (B[k]) hit++; }
+        for (k in B) nb++;
+        if (!na || !nb) return 0;
+        return (2 * hit) / (na + nb);
+    } catch (e) { return 0; }
 }
 
 // ── 索引文本（注入协作卡用） ──

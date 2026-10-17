@@ -2,18 +2,29 @@
 # 最近更新：2026-10-16
 #
 # ══════════════════════════════════════════════════════════
-# 【用途】这是**取词的参考库**，不是"要拼进去的词表"
-#   ⚠️ 最终产物是**写成画面的句子**（一组维度合成一句话），不是把词用逗号堆起来。
-#      例：❌ `杏眼，内双，深棕瞳，长睫毛` → ✅ `她的眼睛是标准的杏眼，眼型偏长、眼尾微微下垂；
-#          上眼睑是内双的窄双眼皮，睁眼时压出一道浅浅的褶；瞳色是深棕色，中间透出一层琥珀的暖调`
+# 【这是什么】—— 先读这一节，它决定你怎么用整份文件
+#
+#   ⚠️ 这是**坐标轴标定表**，不是"选择题菜单"。
+#      · 每个维度后面的词 = 这条轴的**端点**，用来让你定位"往哪边偏"
+#      · ⛔ **禁止直接把表里的值照抄进锚点**（照抄 = 填词游戏 = 所有角色长同一张脸）
+#        —— 2026-10-17 实测 591 张图：asian 出现 206 次；oval face 占 65%；
+#           flat brow bone 占 79%；narrow double eyelids 占 81%；aegyo-sal 占 77%
+#           —— 全是"照抄本表最顺手那一档"的结果
+#      · ✅ 正确用法：用端点确定方向，然后**自己写值**，写到"能跟同聊天另一个人一眼分开"的精度
+#        例：眼睑轴 = 单眼皮 ←→ 深双眼皮
+#            照抄（❌）：narrow double eyelids
+#            自己写（✅）：极浅的内双，睁眼时只剩一道压痕，眼皮偏厚略肿
+#   ⚠️ 最终产物是**写成画面的句子**，不是把词用逗号堆起来。
+#      ❌ 杏眼，内双，深棕瞳，长睫毛
+#      ✅ 她的眼睛是标准的杏眼，眼型偏长、眼尾微微下垂；上眼睑是内双，睁眼时压出一道浅浅的褶
 #   ⚠️ 写之前先按【景别】裁剪（裁剪表在 roster/system.txt）：中景不写腿/臀/脚，特写不写身体
 #   ⚠️ 主体（1-2 个）逐维展开成句；次要入镜者维度不省但写短；不入镜者不写
 #
-# 【用途】这是**参考库**，不是白名单
-#   · 表里有 → 优先用
-#   · 表里没有、或你有更贴切的说法 → 自己选 / 自己造，风格保持一致即可
-#   · 同一角色的同一特征，跨轮必须复用同一个词（不许换说法）
-#   · 单一特征一个词，禁止复合词：`细腰，大胸，长腿` ✅ / `细腰大胸` ❌
+# 【三条使用规则】
+#   1. **同一角色跨轮**：同一特征必须复用同一个词（包括你自创的）—— 换说法 = 漂移
+#   2. **同一维度跨角色**：必须换档 —— 这一档被同聊天其他角色占了，就换到轴的另一段
+#   3. **允许自创**：表里没有、或你有更贴切的写法 → 自己造一个同风格的短词；**造完就冻结**
+#   单一特征一个词，禁止复合词：细腰，大胸，长腿 ✅ / 细腰大胸 ❌
 #
 # 【两个阶段，规则完全不同 —— 这是最容易搞混的地方】
 #
@@ -234,15 +245,87 @@
   🟢 tongue piercing（舌钉）· 🟢 tattoo（纹身）· 🟢 earring（耳环）· 🟡 multiple piercings（多孔）
 
 ---
+【39 眼球突出度】（v1.11 新增 · 东亚脸差异的关键维度）
+  🟡 deep-set eyes（深眼窝）· 🟡 protruding eyes（凸眼）· 🟡 sunken eyes（凹陷）· 平（normal）
+
+【40 眼皮厚度】（v1.11 新增 · "亚洲脸为什么看起来都一样"的第一凶手）
+  🟢 puffy eyelids（肿眼泡）· 🟡 thin eyelids（薄眼皮）· 🟢 hooded eyes（眼皮盖住褶）
+  轴：**薄而清透** ←→ **厚而浮肿**（中间档自己写，如"略肿但不糊"）
+
+【41 虹膜占比 / 三白眼】（v1.11 新增）
+  🟢 large pupils（黑眼珠大）· 🟢 small pupils（黑眼珠小）· 🟢 sanpaku（三白眼，露眼白）
+  🟡 tsurime-sanpaku（上三白）· 🟡 tareme-sanpaku（下三白）
+
+【42 脸的长宽比】（v1.11 新增 · 比"脸型名字"更能定人）
+  🟡 long narrow face（长窄脸）· 🟡 short wide face（短宽脸）· 🟡 long midface（中庭长）· 🟡 short midface（中庭短）
+
+【43 发际线 · 颅顶】（v1.11 新增）
+  🟢 square hairline（方发际线）· 🟢 widow's peak（美人尖）· 🟡 round hairline（圆发际线）
+  🟢 receding hairline（后移）· 🟡 flat crown（颅顶平）· 🟡 high forehead（额头高）· 🟡 low forehead（额头低）
+
+【44 面部起伏（颧骨位置 · 腮 · 人中）】（v1.11 新增）
+  颧骨位置：🟡 high cheekbones（高位）· 🟡 wide-set cheekbones（横向外扩）· 🟡 low cheekbones（低位）
+            🟢 prominent cheekbones（突出）· 🟡 flat cheekbones（平）
+  腮：🟡 hollow cheeks（凹腮）· 🟡 fleshy lower face（腮部有肉）· 🟡 sharp cheek line（颊线分明）
+  人中：🟡 long philtrum（人中长）· 🟡 short philtrum（人中短）
+
+【45 体态】（v1.11 新增 · L2 · 用自然语言写，不进标签链）
+  🟡 upright dancer carriage（舞者的挺拔）· 🟡 slightly stooped（微含胸）· 🟡 rounded shoulders（圆肩）
+  🟡 lumbar lordosis（塌腰翘臀）· 🟡 military posture（军姿）· 🟡 relaxed slouch（松垮）
+  🟡 weight on one leg（重心压在一条腿上）· 🟡 hands clasped in front（双手交叠身前）
+
+【46 职业与生活痕迹】（v1.11 新增 · L2）
+  🟡 calloused hands（手上有茧）· 🟡 rough knuckles（指节粗）· 🟡 short practical nails（指甲剪短）
+  🟡 toned calves（小腿有肌肉线条）· 🟡 visible shoulder blades（肩胛骨明显）· 🟡 high arch feet（足弓高）
+  🟡 farmer tan（晒痕分界）· 🟡 freckles（雀斑）· 🟡 sun-weathered skin（风吹日晒的皮肤）
+  🟡 ink-stained fingers（指腹有墨/颜料）· 🟡 scarred hands（手上有旧伤）
+
+【47 打理程度】（v1.11 新增 · L2 · 区分"村妇"和"贵妇"的第一眼依据）
+  🟡 bare face（素颜）· 🟡 natural makeup（淡妆）· 🟡 groomed brows（修过的眉形）
+  🟡 manicured nails（指甲精修）· 🟡 neat but soft hair（打理过但随意挽起）· 🟡 unkempt（不修边幅）
+  🟡 dyed roots showing（发根露出染前发色）· 🟡 glossy hair（发有光泽）
+
+【48 皮肤状态（生活史）】（v1.11 新增 · L2 · 与【17 肤质】配合）
+  🟡 tired under-eye shadow（眼下淡青）· 🟡 dull tired skin（暗沉）· 🟡 highland flush（高原红）
+  🟡 dry chapped lips（唇干起皮）· 🟡 fine crow's feet（眼角细纹）· 🟡 thin translucent skin（皮肤薄而透）
+  🟡 healthy glow（健康的光泽）· 🟡 no blemish（无瑕）
+
+【49 表情习惯纹 / 静息表情】（v1.11 新增 · L2）
+  🟡 resting frown lines（川字纹）· 🟡 nasolabial lines（法令纹）· 🟡 faint smile lines（笑纹）
+  🟡 downturned mouth corners at rest（静息时嘴角向下）· 🟡 slightly parted lips（静息时唇微张）
+  🟡 eyes-only smile（笑起来只有眼睛）· 🟡 level unfocused gaze（目光平、不聚焦）
+
+【50 成熟度 / 倦意】（v1.11 新增 · L2 · 直接对应"少女感 ↔ 人妻感"）
+  🟡 girlish softness（稚气未脱）· 🟡 firm young adult（青年紧致）· 🟡 soft slightly lax（少妇的柔软微松）
+  🟡 mature relaxed（中年松弛）· 🟡 weary but composed（疲惫但克制）· 🟡 frail delicate（清癯病弱）
+
+---
+
+# 二·五、社会身体层（L2 · v1.11 新增）—— 这一层**不进标签链**
+
+  45-50 描述"这个人过的什么日子在身上留下的痕迹"，它决定第一印象，
+  但**不要写进结构段的标签链**（会挤占人物标签预算、稀释权重）。
+  ✅ 写法：写成**一句自然语言**，放在氛围段或结构段末尾的短句里。
+     例：a dancer's carriage — spine straight, shoulder blades showing; calloused hands, nails cut short
+  ⛔ 禁止把 L2 拆成一堆标签塞进标签链。
+
+---
+
 # 三、造型（服装/发型/鞋袜/配饰/妆容）
 
   本组**不用本表**，见 `wardrobe-vocab.txt`（五槽维度表）+ `wardrobe-expand.txt`（具象化规则）。
   造型以 key 建档、逐字复用，规则见 v1.5.0 造型库。
 
 ---
-# 四、词序（越靠前权重越高）
+# 四、词序（越靠前权重越高 · v1.11 修订）
 
-  人种 → 年龄 → 脸型 → 眉眼 → 标记 → 发型 → 体型 → 衣着 → 动作 → 场景 → 光影
+  族裔亚型 → 脸骨架（脸型/下颌/颧骨/下巴/眉骨）→ 眼（型/眼距/眼睑/眼尾/瞳色/眼球突出度/眼皮厚度/虹膜占比）
+  → 鼻（根/梁/翼/头）→ 唇 → 肤色肤质 → 发 → 颈 → 体态 → 体型（身高/肩/腰/胸/胯/腿）→ 衣着 → 姿势 → 场景
+
+  · 反差支点加权：(toned calves:1.2) —— 不加权会被“纤细/瘦小”盖掉
+  · 权重只给 2-4 个标签，范围 1.1-1.3
+  · ⛔ 「美女默认词」不要写：smooth skin / long eyelashes / aegyo-sal / delicate / beautiful / starry eyes
+    （除非种子或角色卡明确要求 —— 它们是“所有人长一样”的胶水）
 
 ---
 # 五、自检（写提示词前）
@@ -252,3 +335,6 @@
   3. 画面里看不见的维度写了吗？→ 写了就删（尤其乳头/乳晕/乳沟/生殖器）
   4. 这个角色的部位，是你**确认存在**的吗？→ 拿不准就删，不要凭空造
   5. 原子的总数在 15-25 之间吗？→ 超了就优先删特写细节
+  6. **有没有一句“只属于这个角色”的东西**（反差支点/记忆点）？没有 = 一张可以替换任何人的脸
+  7. **这些值是从本表照抄的吗**？→ 是就重写：用端点定方向，自己造值
+  8. **L2（体态/痕迹/打理/皮肤状态/表情纹/成熟度）写了吗**？写了的话，是不是自然语言而不是标签？

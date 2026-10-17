@@ -510,6 +510,14 @@ export function rosterDataTextFor(nameList) {
                         nmLines.push('   ✅ 已解析锚点' + (_m === 'zit' ? '（中文呈现 · 逐字复用）' : '（英文权威锚点 · 四种模式共用 · 逐字复用）')
                             + '（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
                         nmLines.push('   ⚠️ 原始锚点（主模型原文，**只用于对照是否缺维度，不要照抄**）：' + (e.base || e.appearance || '').slice(0, 200));
+                        // v1.15.0：锚点里缺【美学基调 aura】→ 点名要回来（老档案都是 v1.14 前建的，全都没有）
+                        // 没有 aura 的后果：皮相只能按模型先验补 = 画出来是"真实路人脸"（丑的根源）
+                        if (!/(^|\|\s*)(aura|气质)\s*[:：]/i.test(String(_atom))) {
+                            nmLines.push('   ⭐ 这位的锚点里还缺【美学基调 aura】（v1.15 新增 · 必须是锚点第一个维度）—— 本轮请按种子补上：'
+                                + '取「她美在哪 / 皮相往哪个方向」，用光学质感词写（如 aura:warm luminous skin, healthy glow, refined features），'
+                                + '并以「**旧文原样 + aura:…**」的形式回传 anchor，**其余维度一个字不许改**。'
+                                + '没有 aura = 皮相交给模型先验 = 画出来是真实路人脸。');
+                        }
                         // zit 模式下若英文权威锚点还缺着：顺手让它补一份（英文锚点四种模式共用，缺了英文模式画不了立绘）
                         if (_m === 'zit' && !getEnglishAnchor(e)) {
                             nmLines.push('   ⭐ 另：这位还缺【英文权威锚点】—— 本轮请一并回传 anchor（英文，维度名与值全英文）字段；它与中文呈现表达同一件事，四种模式共用。');

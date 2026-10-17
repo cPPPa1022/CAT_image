@@ -16,8 +16,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.14.2';
-slLog('LOADED v1.14.2');
+window.SILLYLAB_VERSION = 'v1.15.0';
+slLog('LOADED v1.15.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -103,7 +103,7 @@ if (!localStorage.getItem('sillab_anchor_v2_clean')) {
     } catch (e) { slLog('锚点清理跳过: ' + e.message); }
 }
 
-slLog('v1.14.2 init');
+slLog('v1.15.0 init');
 
 // ── 注册斜杠命令 ──
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',callback:function(){var cb=jQuery('#sl_compact');if(cb.length){cb.trigger('click');}else{toastr.info('插件面板尚未初始化喵~');}}}));
@@ -120,7 +120,7 @@ else { slLog('提示词加载器: 呜呜 import.meta.url 不可用喵~ (╥﹏�
 setEnqueueGen(enqueueGen);
 
 // ── 构建 UI ──
-try { buildUI(extension_settings); slLog('v1.10.0 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
+try { buildUI(extension_settings); slLog('v1.15.0 UI OK'); } catch (e) { slErr('buildUI失败: ' + e.message); console.error('[sillab] buildUI失败:', e); }
 
 // ── 启动轮询 + 事件钩子 ──
 startPolling();

@@ -22,6 +22,11 @@
 6. **年龄/体型关键词必须显式写全**（示例：`mature female, tall, large breasts, narrow waist, wide hips`）
    ⚠️ 年龄/体型缺失时动漫模型**默认偏幼态（萝莉化）**。成年角色必须把**胸部与腰臀**写出来，
    禁止只写 `slender` / `slim` 这类体脂词了事
+7. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 的值 → 用自然语言**写在外貌描写的最前面**，润色进句子。
+   ⛔ 禁止写 `her skin is rough / sun-spotted / her knuckles are red / tired eyes` 这类缺陷描述
+      （除非角色卡/正文明确要求）
+   ✅ 允许并鼓励 `her skin is warm and luminous, lit from within` / `translucent` / `refined features` / `soft light`
+   ⛔ `beautiful` 可以和维度**并存**，但不能**替代**维度
 
 ## 示例（**写成句子，不是堆词**）
 

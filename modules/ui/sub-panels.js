@@ -17,13 +17,6 @@ export function fillSubPanel(type, body) {
     h += '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">🔑 API Key</div><input id="sl_aux_key" type="password" value="' + escAttr(settings.auxKey || "") + '" style="' + f + '"></div>';
     h += '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">🧠 聊天分析模型</div><input id="sl_aux_model" type="text" value="' + escAttr(settings.auxModel || "") + '" style="' + f + '"></div>';
     h += '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">👤 角色卡分析模型</div><input id="sl_profile_model" type="text" value="' + escAttr(settings.profileModel || "") + '" style="' + f + '"></div>';
-    var _th = String(settings.auxThinking || 'off');
-    h += '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">🧠 思考强度</div><select id="sl_aux_thinking" style="' + f + '">'
-      + '<option value="off"' + (_th === 'off' ? ' selected' : '') + '>关（默认 · 最快最省）</option>'
-      + '<option value="low"' + (_th === 'low' ? ' selected' : '') + '>low</option>'
-      + '<option value="high"' + (_th === 'high' ? ' selected' : '') + '>high</option>'
-      + '<option value="max"' + (_th === 'max' ? ' selected' : '') + '>max</option>'
-      + '</select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:4px;line-height:1.6;">DeepSeek 只有 <b>off / low / high / max</b> 四档（没有 medium）。开了会自动抬高 max_tokens；正文为空会自动关掉重试一次；管线耗时变长时记得把 ComfyUI 超时（cTimeout）调大。</div></div>';
     h += '<div style="display:flex;gap:8px;align-items:center;"><button id="sl_test_aux" style="' + sbtn(CAT.accent) + '">🐾 测试连接</button><span id="sl_aux_status" style="font-size:11px;color:' + CAT.sub + ';"></span></div>';
     body.html(h);
     jQuery("#sl_aux_provider").on("change", function () { settings.auxProvider = jQuery(this).val(); saveSettings(); });
@@ -31,7 +24,6 @@ export function fillSubPanel(type, body) {
     jQuery("#sl_aux_key").on("change input", function () { settings.auxKey = jQuery(this).val(); saveSettings(); });
     jQuery("#sl_aux_model").on("change input", function () { settings.auxModel = jQuery(this).val(); saveSettings(); });
     jQuery("#sl_profile_model").on("change input", function () { settings.profileModel = jQuery(this).val(); saveSettings(); });
-    jQuery("#sl_aux_thinking").on("change", function () { settings.auxThinking = jQuery(this).val(); saveSettings(); });
     jQuery("#sl_test_aux").on("click", async function () { var b = jQuery(this), s = jQuery("#sl_aux_status"); b.prop("disabled", true).text("测试中..."); try { var baseUrl = (jQuery("#sl_aux_url").val() || "").replace(/\/+$/, ""), url = /\/chat\/completions$/.test(baseUrl) ? baseUrl : baseUrl + "/chat/completions", key = jQuery("#sl_aux_key").val(), hd = { "Content-Type": "application/json" }; if (key) hd["Authorization"] = "Bearer " + key; var r = await fetch(url, { method: "POST", headers: hd, body: JSON.stringify({ model: jQuery("#sl_aux_model").val() || "default", messages: [{ role: "user", content: "hi" }], max_tokens: 3, stream: false }) }); if (r.ok) { s.css({ color: CAT.green }).text("连接成功喵~ ✨"); toast("success", "AI助理连接成功~"); } else { var t = await r.text().catch(function () { return ""; }); s.css({ color: CAT.red }).text("HTTP " + r.status); toast("error", "连接失败: " + r.status); } } catch (e) { s.css({ color: CAT.red }).text(e.message); toast("error", "连不上喵…"); } b.prop("disabled", false).text("🔌 测试连接"); });
   } else if (type === "comfy") {
     var h = '<div style="margin-bottom:8px;"><div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:2px;">🎨 ComfyUI 地址</div><input id="sl_comfy_url" type="text" value="' + escAttr(settings.cUrl || "http://localhost:8181") + '" style="' + f + '"></div>';

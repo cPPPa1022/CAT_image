@@ -3,29 +3,18 @@ import { slLog, slErr } from '../log.js';
 import { settings } from '../settings.js';
 
 // ══════════════════════════════════════════════════════════════
-// ── v1.12.0 思考档位（协议依据：deepseek-harness 的 dsh-llm-deepseek 适配器）──
-//   off          → thinking:{type:'disabled'}（**不发** reasoning_effort）
-//   low/high/max → thinking:{type:'enabled'} + reasoning_effort:<档位>
-// ⚠️ 关键：DeepSeek 服务端默认 thinking=enabled + effort=high。
-//    所以「把 thinking 参数删掉」= 开到 high，**不是**关掉 —— 旧实现遇到 400 就 delete，
-//    于是"降级"反而把思考打开，reasoning 吃光 max_tokens → content 为空（v1.12.0 修）。
+// ── v1.13.5 思考强度选项已删除：辅助 AI 一律「关闭思考」 ──
+//   实测（同一套破限 + 明确成人内容，每档 n=10）：
+//     off → 拒绝 0/10 ｜ low → 拒绝 4/10 ｜ high → 拒绝 9/10
+//   档位越高越容易被拒，画面质量却没有肉眼可见的提升 —— 性价比为负，直接砍掉选项。
+// ⚠️ 协议：DeepSeek 服务端默认 thinking=enabled + effort=high，
+//    所以「把 thinking 参数删掉」= 开到 high，**不是**关掉 —— 必须显式 disabled。
 // ══════════════════════════════════════════════════════════════
-export var THINKING_LEVELS = ['off', 'low', 'high', 'max'];
-var THINKING_MAXTOKENS = { off: 16384, low: 32768, high: 65536, max: 98304 };
+var OUT_MAXTOKENS = 16384;
 
-export function currentThinkingLevel() {
-    var lv = String(settings.auxThinking || 'off').toLowerCase();
-    return THINKING_LEVELS.indexOf(lv) >= 0 ? lv : 'off';
-}
-
-function applyThinking(body, level) {
-    if (level === 'off') {
-        body.thinking = { type: 'disabled' };
-        delete body.reasoning_effort;
-    } else {
-        body.thinking = { type: 'enabled' };
-        body.reasoning_effort = level;
-    }
+function applyThinking(body) {
+    body.thinking = { type: 'disabled' };
+    delete body.reasoning_effort;
     return body;
 }
 
@@ -57,8 +46,7 @@ async function _post(endpoint, headers, body, timeoutMs) {
     } finally { clearTimeout(timer); }
 }
 
-// forceThinking：仅重试时用 —— 换一套解码条件，避免"同一条件下反复被拒"
-export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperature, forceModel, forceThinking) {
+export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperature, forceModel) {
     var model = forceModel || settings.auxModel;
     if (!settings.auxUrl || !model) {
         slLog('auxApiCall: auxUrl或model未配置');
@@ -66,16 +54,14 @@ export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperatu
     }
     var endpoint = settings.auxUrl.replace(/\/+$/, '');
     if (!/\/chat\/completions$/.test(endpoint)) endpoint += '/chat/completions';
-    var level = (forceThinking && THINKING_LEVELS.indexOf(String(forceThinking)) >= 0) ? String(forceThinking) : currentThinkingLevel();
-    slLog('auxApiCall →', endpoint, 'model:', model, '| thinking:', level);
+    slLog('auxApiCall →', endpoint, 'model:', model);
 
     var headers = { 'Content-Type': 'application/json' };
     if (settings.auxKey) headers['Authorization'] = 'Bearer ' + settings.auxKey;
 
     var messages = Array.isArray(systemPrompt) ? systemPrompt : [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
 
-    // 开思考时自动抬高 max_tokens（思考也算输出 token；DS V4 Flash 单次上限 256k，放心抬）
-    var mt = Math.max(Number(maxTokens) || 0, THINKING_MAXTOKENS[level] || 0) || 8192;
+    var mt = Math.max(Number(maxTokens) || 0, OUT_MAXTOKENS);
     var body = {
         messages: messages,
         max_tokens: mt,
@@ -83,20 +69,21 @@ export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperatu
         stream: false,
         model: model
     };
-    applyThinking(body, level);
+    applyThinking(body);
 
     var timeoutMs = (settings.cTimeout || 180) * 1000;
     var response = await _post(endpoint, headers, body, timeoutMs);
-    slLog('auxApiCall 响应状态:', response.status, '| thinking=' + level + ' max_tokens=' + mt);
+    slLog('auxApiCall 响应状态:', response.status, '| max_tokens=' + mt);
 
     if (!response.ok) {
         var errorText = await response.text().catch(function () { return ''; });
-        // [Fix v1.12.0] 旧实现这里是 delete body.thinking —— 在 DeepSeek 上等于「打开 high 思考」。
-        // 现在明确降级为「关闭思考」再重试，绝不落到服务端默认。
-        if (/thinking|reasoning|parameter|invalid|unknown|max_tokens/i.test(errorText)) {
-            slErr('辅助API拒绝参数, 降级为「关闭思考」重试:', errorText.slice(0, 200));
-            applyThinking(body, 'off');
-            body.max_tokens = Math.max(Number(maxTokens) || 0, THINKING_MAXTOKENS.off);
+        // 网关不认 thinking 字段时的兜底：去掉该字段重试一次。
+        // ⚠️ 只有「不接受 thinking 参数的网关」会走到这里；对 DeepSeek 官方来说去掉参数 = 开到 high，
+        //    所以日志里必须标出来，不能让这件事悄悄发生。
+        if (/thinking|reasoning|parameter|invalid|unknown/i.test(errorText)) {
+            slErr('辅助API拒绝参数, 去掉 thinking 字段重试（⚠️ 若对端是 DeepSeek 官方，这等于开到 high）:', errorText.slice(0, 200));
+            delete body.thinking;
+            delete body.reasoning_effort;
             response = await _post(endpoint, headers, body, timeoutMs);
             slLog('auxApiCall 降级重试响应状态:', response.status);
             if (!response.ok) {
@@ -116,28 +103,10 @@ export async function auxApiCall(systemPrompt, userMessage, maxTokens, temperatu
     var reasoning = (msg.reasoning_content || msg.reasoning || '');
     var finish = (choice && choice.finish_reason) || '';
     var content = stripCoT(msg.content || '');
-    slLog('auxApiCall 返回: finish=' + finish + ', content_len=' + content.length + ', reasoning_len=' + reasoning.length + ', thinking=' + level);
-
-    // [Fix v1.12.0] 开了思考但正文为空 → 自动关思考重试一次。
-    // 不重试的话这一轮就是 0 条提示词 → 走中文兜底 → 出烂图（历史上"偶发中文提示词"的入口）。
-    if (!content && level !== 'off') {
-        slErr('⚠️ 开了思考但正文为空（reasoning ' + reasoning.length + ' 字）→ 自动关思考重试一次');
-        applyThinking(body, 'off');
-        body.max_tokens = Math.max(Number(maxTokens) || 0, THINKING_MAXTOKENS.off);
-        var res2 = await _post(endpoint, headers, body, timeoutMs);
-        if (res2.ok) {
-            var d2 = await res2.json();
-            var c2 = (d2 && d2.choices && d2.choices[0]) || {};
-            var m2 = c2.message || {};
-            content = stripCoT(m2.content || '');
-            slLog('auxApiCall 关思考重试: content_len=' + content.length + ', finish=' + (c2.finish_reason || ''));
-        } else {
-            slErr('auxApiCall 关思考重试失败:', res2.status);
-        }
-    }
+    slLog('auxApiCall 返回: finish=' + finish + ', content_len=' + content.length + ', reasoning_len=' + reasoning.length);
 
     if (!content && finish === 'length') {
-        slErr('⚠️ 输出被max_tokens截断: reasoning耗尽了token, content为空');
+        slErr('⚠️ 输出被max_tokens截断: content为空');
     }
     if (!content && !reasoning && finish === 'stop') {
         slErr('⚠️ 模型主动输出空内容 (finish=stop, 无reasoning), 响应前300字: ' + JSON.stringify(data).slice(0, 300));

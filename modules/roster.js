@@ -214,6 +214,19 @@ export function applyPersonSegments(segments, source) {
     return n;
 }
 
+// ── v1.11.2：主模型漏了哪些外貌维度 ──
+// 主模型只写体型时（例如"娇小，平胸，细腰"），辅助AI 会静默按"通用亚洲脸"先验补齐 →
+// 卡里写「雪白发/灰白瞳」的角色被画成「深棕发/深棕瞳」。这里把"缺哪些"明确告诉辅助AI。
+function _missingFaceDims(t) {
+    var s = String(t || '');
+    var miss = [];
+    if (!/发|辫|髻|寸头|刘海|马尾|束发|盘发|短发|长发/.test(s)) miss.push('发色/发型');
+    if (!/脸型|瓜子脸|鹅蛋脸|方脸|圆脸|长脸|心形脸|棱角脸|V脸|小V/.test(s)) miss.push('脸型');
+    if (!/瞳/.test(s)) miss.push('瞳色');
+    if (!/肤|白化|苍白|白皙|冷白|暖白|雪白|古铜|蜜色|偏黄|薄透|哑光|通透|小麦|油亮/.test(s)) miss.push('肤色');
+    return miss;
+}
+
 // ── 外貌文本相似度（Dice 2-gram）—— 用于区分"同一人换身份" vs "真·同名不同人" ──
 function _appearanceSimilarity(a, b) {
     try {
@@ -513,6 +526,9 @@ export function rosterDataTextFor(nameList) {
                     } else {
                         nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
                     }
+                    // v1.11.2：主模型漏维度时明确告知（否则辅助AI 会按"通用亚洲脸"静默补，画出来不是这个角色）
+                    var _miss = _missingFaceDims(e.base || e.appearance || '');
+                    if (_miss.length) nmLines.push('   ⚠️ 主模型没给：' + _miss.join(' / ') + ' —— 你必须按种子方向推断出具体值（推断值一旦定下就冻结复用，别每轮换）');
                     // v1.11.1：种子单独下发（四个分支都要带上 —— 它是"取词方向"，不是外貌）
                     if (e.seed) nmLines.push('   🌱 种子（主模型给的**取词方向**：气质/调性/重心/反差 —— 按「种子 → 锚点反推」执行，⛔ 禁止把这行原文放进提示词）：' + e.seed);
                     nmCount++;

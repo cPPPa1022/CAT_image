@@ -23,6 +23,7 @@ export function buildCoopCardText() {
     var lines = [];
     lines.push('【生图协作卡·sillycat】');
     lines.push('· 正文中适合配图的瞬间写 1-3 个占位符 [img:…]，占位符位置就是图片显示位置；占位数量 = 本轮图片数。');
+    lines.push('· 只有正文内的占位符会被配图；占位符里**不要写画风术语**（画风是插件的事），写"画什么"就行。');
     lines.push('· 【占位符语法·必须严格】（写错格式插件解析会漏人/错位）：');
     lines.push('    [img:场景描述|人物:名字（身份标签）：静态外貌特征|种子:气质=…；调性=…；重心=…；反差=…|要点1，要点2]');
     lines.push('  ① 必须半角 [img: 开头；② 用 | 分隔四段：场景 / 人物 / 种子 / 要点（种子与要点都可省略）；③ 人物段必须以「人物:」开头，多人用分号分隔；');
@@ -89,7 +90,7 @@ export function buildCoopCardText() {
     }
     if (withAnchor.length) lines.push('· 已有静态锚点：' + withAnchor.join('、'));
     if (withAnchor.length) lines.push('  （〔〕里是这个人已定的种子。新建/更新人物时**看得见就别再撞**——不是硬扣配额，是别把两个人写成同一幅画）');
-    if (noAnchor.length) lines.push('· ⚠️ 尚无锚点（人物段必须写全 7 项硬需求 + 角色卡外貌）：' + noAnchor.join('、'));
+    if (noAnchor.length) lines.push('· ⚠️ 尚无锚点（人物段必须写全「外貌骨架 10 维」，一个都不许空）：' + noAnchor.join('、'));
     if (!withAnchor.length && !noAnchor.length) lines.push('（暂无记录；出现的所有人物都按上面的硬需求写。）');
     lines.push('· 【不管在不在索引里，人物段的静态锚点都要照写】写重复没有任何代价（插件按"来源优先级+更长者胜"合并，不会被写短顶掉）；写漏了才会永久丢长相。');
     lines.push('· 身份标签必须与索引一致（同名人物靠标签区分）。');

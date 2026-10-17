@@ -261,6 +261,7 @@ export function findImagePlaceholders(text) {
         if (!content) continue;
         var segs = content.split('|');
         var scene = '';
+        var place = '';
         var topicParts = [];
         var personSegments = [];
         var styleGroups = [];
@@ -271,6 +272,12 @@ export function findImagePlaceholders(text) {
             if (!seg) continue;
             if (i === 0) {
                 scene = stripSeedText(seg);
+                continue;
+            }
+            // v1.14.2：地点段（可选，以「地点:/位置:/环境:」开头）—— 场景锚点，必须进提示词
+            // 为什么单列一段：插件不读角色卡/世界观，地点只能由主模型给；写在场景句里容易被当成修辞扔掉
+            if (/^(?:地点|位置|环境)\s*[：:]/.test(seg)) {
+                place = seg.replace(/^(?:地点|位置|环境)\s*[：:]\s*/, '').trim();
                 continue;
             }
             // v1.11.1：种子段（可选，以「种子:/印象:」开头）—— 只给插件看，绝不进提示词
@@ -321,6 +328,7 @@ export function findImagePlaceholders(text) {
         }
         result.push({
             scene: scene,
+            place: place,
             personSegments: personSegments,
             styleGroups: styleGroups,
             statusOps: statusOps,

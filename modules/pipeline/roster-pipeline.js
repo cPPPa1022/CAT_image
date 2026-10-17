@@ -65,6 +65,25 @@ export function findLostNumbersInPrompts(placeholders, prompts) {
 }
 
 
+// ── v1.14.2 地点保真：主模型给了地点，提示词里却找不到它的痕迹 → 只报警，不重试 ──
+// 判据很粗：地点串的 2-gram 至少命中 1 个（地点通常短而具体，如「东北农村土炕」）
+export function findLostPlaces(placeholders, prompts) {
+    var out = [];
+    if (!placeholders || !prompts) return out;
+    var n = Math.min(placeholders.length, prompts.length);
+    for (var i = 0; i < n; i++) {
+        var ph = placeholders[i] || {};
+        var place = String(ph.place || '').trim();
+        if (!place) continue;
+        var txt = String(prompts[i] || '');
+        var hit = false;
+        for (var k = 0; k + 2 <= place.length && !hit; k++) {
+            if (txt.indexOf(place.slice(k, k + 2)) >= 0) hit = true;
+        }
+        if (!hit) out.push({ i: i, place: place });
+    }
+    return out;
+}
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
     var parts = [];
@@ -148,6 +167,8 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
         for (var i = 0; i < placeholders.length; i++) {
             var ph = placeholders[i];
             lines.push((i + 1) + '. 场景：' + ph.scene);
+            // v1.14.2：地点是**硬约束** —— 插件不给世界观，地点只能靠主模型这段字
+            if (ph.place) lines.push('   地点（**硬约束，必须体现**）：' + ph.place + ' —— 提示词里要写出这个地点的地域感：墙/地面材质、家具形制、光线来源、温感（干湿冷暖）。⛔ 不许替换成通用「室内/房间」或纯色背景');
             if (ph.personSegments && ph.personSegments.length) {
                 var ps = [];
                 for (var j = 0; j < ph.personSegments.length; j++) ps.push(ph.personSegments[j].name + (ph.personSegments[j].identity ? '（' + ph.personSegments[j].identity + '）' : ''));
@@ -709,6 +730,13 @@ export async function runRosterPipeline(bodyText, mesId) {
 
         // 4. 解析提示词并填充
         var prompts = parseRosterImages(output);
+        // v1.14.2 地点保真：不阻断、不重试，只点名（场景对不上就是这里漏的）
+        try {
+            var _lostPlace = findLostPlaces(placeholders, prompts);
+            for (var _lp = 0; _lp < _lostPlace.length; _lp++) {
+                slErr('⚠️ 地点丢失：第' + (_lostPlace[_lp].i + 1) + '条提示词里找不到「' + _lostPlace[_lp].place + '」的痕迹（场景/背景可能被写成通用室内）');
+            }
+        } catch (eLP) { slLog('地点体检跳过: ' + eLP.message); }
         var enhanced = fillPlaceholders(bodyText, placeholders, prompts);
         return { ok: true, enhanced: enhanced };
     } catch (e) {

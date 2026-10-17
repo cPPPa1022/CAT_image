@@ -326,7 +326,12 @@ function buildPortraitPrompt(ent, view, bm) {
     if (!/全身|full body/i.test(body)) body += (bm === 'zit' ? '，全身（含脚）' : ', full body including feet');
     // v1.14：AI 那条只写了「左侧面/右侧面」这种歧义词 → 补一句无歧义方向（左右两张画成一样就是这么来的）
     var _dirOK = /相机在她的(左|右)侧|camera on her (left|right) side|背面，背对镜头|back view|正面，正对镜头|front view/i.test(body);
-    if (!_dirOK) body += (bm === 'zit' ? '，' + PORTRAIT_VIEW_SPEC_CN[v] : ', ' + PORTRAIT_VIEW_SPEC_EN[v]);
+    if (!_dirOK) {
+      // v1.14.1：先看结尾标点 —— AI 那条常以「。」收尾，直接用「，」接会变成「全身含脚。，正面，」
+      var _sep = /[。！？!?]$/.test(body.trim()) ? '' : (bm === 'zit' ? '，' : ', ');
+      var _clause = (bm === 'zit' ? PORTRAIT_VIEW_SPEC_CN[v] : PORTRAIT_VIEW_SPEC_EN[v]);
+      body = body.trim() + (_sep === '' ? (bm === 'zit' ? '' : ' ') : _sep) + _clause;
+    }
   } else {
     var anchor = getAtomAnchor(ent, bm);
     if (!anchor) return '';

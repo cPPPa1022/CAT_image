@@ -647,3 +647,79 @@ export function rosterEntries() {
         return out;
     } catch (e) { return []; }
 }
+
+// ══════════════════════════════════════════════════════════════
+// ── v1.13.8 立绘提示词（辅助 AI 建档时一并产出，插件不再拼装）──
+// 原来立绘是「atomValues(锚点) + 固定尾巴」拼出来的：锚点里没有的东西（骨相/体态/发丝走向）
+// 永远出不来，四个视角也只能靠"正面/背面"两个词硬顶。让写锚点的那个人顺手写四条，
+// 记忆点更完整、四个视角也更自洽。
+export var PORTRAIT_VIEWS = ['front', 'left', 'right', 'back'];
+
+export function setPortraitPrompts(name, identity, obj) {
+    try {
+        if (!obj || typeof obj !== 'object') return false;
+        var key = personKey(name, identity);
+        var r = ensureRoster();
+        var e = r && r.list && r.list[key];
+        if (!e) return false;
+        var cur = e.portraitPrompts || {};
+        var n = 0;
+        for (var i = 0; i < PORTRAIT_VIEWS.length; i++) {
+            var v = PORTRAIT_VIEWS[i];
+            var t = String(obj[v] || '').trim();
+            if (!t) continue;
+            cur[v] = t;
+            n++;
+        }
+        if (!n) return false;
+        cur.mode = getActiveMode() || 'zit';   // 记住是哪套模式语言写的（中文/英文不许混用）
+        e.portraitPrompts = cur;
+        return true;
+    } catch (e2) { return false; }
+}
+
+export function getPortraitPrompt(entry, view) {
+    try {
+        var pp = entry && entry.portraitPrompts;
+        if (!pp) return '';
+        return String((view && pp[view]) || pp.front || '').trim();
+    } catch (e) { return ''; }
+}
+
+export function portraitPromptsMode(entry) {
+    try { return (entry && entry.portraitPrompts && entry.portraitPrompts.mode) || ''; } catch (e) { return ''; }
+}
+
+// ── v1.13.8 年龄闸门（只用于立绘）──
+// 立绘默认是"无衣物遮挡"的体型对照图。**未成年角色一律改用素色紧身打底衣** ——
+// 代码硬拦，不依赖模型自觉，也不管提示词是谁写的。
+var _AGE_NUM_RE = /(\d{1,2})\s*(?:岁|周岁)/g;
+var _AGE_CN_RE = /(十[一二三四五六七八九]?|[一二三四五六七八九])\s*岁/g;
+var _AGE_CN_VAL = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10 };
+export function isUnderageEntry(entry) {
+    try {
+        var t = [
+            String((entry && (entry.base || entry.appearance)) || ''),
+            String((entry && entry.anchor) || ''),
+            String((entry && (entry.anchor_zh || (entry.atoms && entry.atoms.zit))) || ''),
+            String((entry && entry.seed) || '')
+        ].join(' ');
+        if (!t) return false;
+        var m, i, n;
+        _AGE_NUM_RE.lastIndex = 0;
+        while ((m = _AGE_NUM_RE.exec(t)) !== null) {
+            n = parseInt(m[1], 10);
+            if (n > 0 && n < 18) return true;
+        }
+        _AGE_CN_RE.lastIndex = 0;
+        while ((m = _AGE_CN_RE.exec(t)) !== null) {
+            var s = m[1];
+            n = _AGE_CN_VAL[s] || 0;
+            if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
+            if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
+            if (n > 0 && n < 18) return true;
+        }
+        if (/(少女|萝莉|幼女|幼童|儿童|女童|teenage girl|young girl|child|loli|elementary|underage)/i.test(t)) return true;
+        return false;
+    } catch (e) { return false; }
+}

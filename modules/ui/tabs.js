@@ -9,7 +9,7 @@ import { getProfiles, getCharacterName } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
 import { getQueueLength, enqueueTask } from '../queue.js';
 import { cleanAnimePrompt } from '../text-utils.js';
-import { rosterEntries, atomValues, atomCount, getAtomAnchor } from '../roster.js';
+import { rosterEntries, atomValues, atomCount, getAtomAnchor, getPortraitPrompt, portraitPromptsMode, isUnderageEntry } from '../roster.js';
 import { composeFinalPrompt } from '../comfyui.js';
 import { activeStatuses, setStatusActive } from '../statuses.js';
 import { openSubPanel } from './sub-panels.js';
@@ -191,8 +191,26 @@ export function renderArchivePage() {
   pushPage(function (body) { renderArchiveInto(body); }, '角色档案', { key: '角色档案' });
 }
 // ── 立绘地址：直接存在人物表条目上（档案跟着聊天走 → 删聊天立绘一起走）──
-function getPortraitUrl(ent) { try { return (ent && ent.portrait) || ''; } catch (e) { return ''; } }
-function setPortraitUrl(ent, url) { try { if (ent) ent.portrait = url; } catch (e) {} }
+// v1.13.8：四个视角各存一张（front/left/right/back）；ent.portrait 保留为"正面"的别名（向后兼容）
+function getPortraitUrl(ent, view) {
+  try {
+    var v = view || 'front';
+    var views = (ent && ent.portraitViews) || {};
+    if (v === 'front') return views.front || (ent && ent.portrait) || '';
+    return views[v] || '';
+  } catch (e) { return ''; }
+}
+function setPortraitUrl(ent, url, view) {
+  try {
+    if (!ent) return;
+    var v = view || 'front';
+    if (v === 'front') ent.portrait = url;
+    ent.portraitViews = ent.portraitViews || {};
+    ent.portraitViews[v] = url;
+  } catch (e) {}
+}
+var PORTRAIT_VIEW_CN = { front: '正面', left: '左侧面', right: '右侧面', back: '背面' };
+var PORTRAIT_VIEW_EN = { front: 'front view', left: 'side view facing left', right: 'side view facing right', back: 'back view' };
 
 // ── 人物列表 = 本聊天的人物表（档案跟着聊天走）──
 // 主模型每轮 [img:] 里写到的人物：有则沿用、无则建档，全都记在这次聊天的人物表里
@@ -240,7 +258,7 @@ function renderArchiveInto(body) {
     h += '<div style="font-weight:700;font-size:13px;color:' + CAT.text + ';margin-bottom:3px;">' + esc(ppl.name || ck) + '</div>';
     h += '<div style="font-size:10.5px;color:' + CAT.sub + ';">' + esc(ppl.identity || '（无标签）') + '</div>';
     // [v2.0] 立绘按钮上移到列表卡片（第2层）——不用点进详情页就能出图
-    h += '<button class="sl_port_btn" data-char="' + escAttr(ck) + '" style="' + btnSm() + 'font-size:10px;padding:5px 11px;margin-top:8px;">生成立绘</button>';
+    h += '<button class="sl_port_btn" data-char="' + escAttr(ck) + '" data-view="front" style="' + btnSm() + 'font-size:10px;padding:5px 11px;margin-top:8px;">生成立绘</button>';
     h += '</div>';
     h += '<div style="color:' + CAT.mute + ';font-size:15px;padding-right:2px;">›</div>';
     h += '</div></div>';
@@ -262,18 +280,44 @@ function renderArchiveInto(body) {
   body.html(h); bindArchiveEvents(body);
 }
 
-// 立绘提示词（生成立绘用的完整提示词，供复制去 ComfyUI 实测）
-function buildPortraitPrompt(anchor, bm) {
-  if (!anchor) return '';
-  var vals = atomValues(anchor, bm);   // 结构化锚点 → 生图语言（英文锚点 ', ' 分隔；中文锚点 '，'）
-  // 立绘 = 对照图：明确"全裸无遮挡"，否则模型会自己脑补一层薄纱/滤镜，胸腹细节糊成一团（像伪人）
-  var frame = (bm === 'zit')
-    ? '，全裸，无衣物遮挡，站立，正面，全身，简洁纯色背景，表情平静'
-    : ', completely nude, no clothes, uncensored, standing, front view, full body, simple background, neutral expression';
-  var pr = vals + frame;
-  if (isEnglishMode(bm)) pr = cleanAnimePrompt(pr);   // [Fix v2.0] 原实现漏了 anima
-  // v1.8.3：走与 generateImage 完全同源的组装（画风预设 / anime质量前缀 / 前置提示词 / 艺术家标签）
-  return composeFinalPrompt(pr);
+// ── v1.13.8 立绘提示词 ──
+// 首选：辅助 AI 建档时写好的那一条（每视角一条，已润色过）；
+// 兜底：老档案没有 AI 提示词时，才退回「锚点 → 生图语言」拼装。
+// 视角固定四套：正面（第2层默认）/ 左侧 / 右侧 / 背面（第3层手动点）。
+function _portraitTail(view, bm, underage) {
+  var v = PORTRAIT_VIEW_CN[view] ? view : 'front';
+  if (bm === 'zit') {
+    var cloth = underage ? '，素色紧身连体打底衣' : '，全裸，无衣物遮挡';
+    return cloth + '，站立，' + PORTRAIT_VIEW_CN[v] + '，全身（含脚），简洁纯色背景，表情平静';
+  }
+  var c2 = underage ? ', plain tight bodysuit' : ', completely nude, no clothes, uncensored';
+  return c2 + ', standing, ' + PORTRAIT_VIEW_EN[v] + ', full body including feet, simple background, neutral expression';
+}
+function buildPortraitPrompt(ent, view, bm) {
+  if (!ent) return '';
+  var v = PORTRAIT_VIEW_CN[view] ? view : 'front';
+  var underage = false;
+  try { underage = isUnderageEntry(ent); } catch (e0) {}
+  var body = '';
+  try {
+    var pp = getPortraitPrompt(ent, v);
+    var pm = portraitPromptsMode(ent);
+    // 语言桶必须对得上（中文提示词喂英文模型 = 会被清洗逻辑整段删空）
+    if (pp && (!pm || !bm || isEnglishMode(pm) === isEnglishMode(bm))) body = pp;
+  } catch (e1) {}
+  if (body) {
+    // 视角/全身/遮挡由代码兜住 —— AI 那一条可能只写了外貌
+    if (underage) body = body.replace(/全裸|裸体|赤裸|一丝不挂|无衣物(遮挡)?|completely nude|nude|no clothes|uncensored|topless|naked/gi, '').replace(/[，,]\s*[，,]/g, '，').trim();
+    if (!/站立|standing/i.test(body)) body += _portraitTail(v, bm, underage);
+    if (!/全身|full body/i.test(body)) body += (bm === 'zit' ? '，全身（含脚）' : ', full body including feet');
+  } else {
+    var anchor = getAtomAnchor(ent, bm);
+    if (!anchor) return '';
+    body = atomValues(anchor, bm) + _portraitTail(v, bm, underage);
+  }
+  if (isEnglishMode(bm)) body = cleanAnimePrompt(body);
+  // v1.8.3：走与 generateImage 完全同源的组装（画风预设 / 质量前缀 / 前置提示词 / 艺术家标签）
+  return composeFinalPrompt(body);
 }
 
 // ── 人物详情页（第3层）：完整档案（锚点）+ 提示词 ──
@@ -301,13 +345,26 @@ function renderPersonDetail(body, key) {
   h += '<div style="font-size:10px;color:' + CAT.mute + ';line-height:1.75;max-height:190px;overflow:auto;">' + (atom ? esc(atom) : (bm === 'zit'
      ? '（还没有锚点 —— 先正常聊一轮、出一次图，插件就会按 38 维建档）'
      : '（还没有【英文锚点】—— 英文三模式只读英文锚点（中文会被清洗逻辑删空、立绘画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点）')) + '</div>';
+  // v1.13.8：立绘四视角（正面在第2层就能出；左/右/背面在这里手动点）
+  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin:11px 0 5px;">立绘视角（都需手动点；正面在第2层列表里直接出）</div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  var _vlist = [['front', '🖼 正面'], ['left', '◀ 左侧面'], ['right', '▶ 右侧面'], ['back', '⬅ 背面']];
+  for (var _vi = 0; _vi < _vlist.length; _vi++) {
+    var _vv = _vlist[_vi][0];
+    var _vurl = getPortraitUrl(ppl.ent, _vv);
+    h += '<div style="text-align:center;">';
+    h += '<div id="sl_portv_' + safe + '_' + _vv + '" style="width:58px;height:94px;border-radius:8px;background:' + CAT.bg + ';border:1.5px ' + (_vurl ? 'solid ' + CAT.accent : 'dashed ' + CAT.line) + ';background-size:cover;background-position:top center;display:flex;align-items:center;justify-content:center;font-size:9px;color:' + CAT.sub + ';' + (_vurl ? 'background-image:url(' + _vurl + ');color:transparent;' : '') + '">' + (_vurl ? '' : '—') + '</div>';
+    h += '<button class="sl_port_btn" data-char="' + escAttr(ppl.key) + '" data-view="' + _vv + '" style="' + btnSm() + 'font-size:9.5px;padding:4px 8px;margin-top:4px;">' + _vlist[_vi][1] + '</button>';
+    h += '</div>';
+  }
+  h += '</div>';
   // [v2.0] 立绘按钮在列表卡片上（第2层）；「编辑锚点」已移除 —— 锚点只由辅助 AI 产出，手工改的口子关掉
   h += '<div style="display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;">';
   h += '<button class="sl_prompt_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnGhost() + 'font-size:10.5px;padding:6px 13px;">提示词</button>';
   h += '</div>';
   h += '<div class="sl_prompt_box" data-char="' + escAttr(ppl.key) + '" style="display:none;margin-top:10px;">';
   h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:4px;">下方就是**实际发给 ComfyUI 的那一条**（含画风预设 / 质量前缀 / 前置提示词 / 艺术家标签）</div>';
-  h += '<textarea class="sl_prompt_ta" data-char="' + escAttr(ppl.key) + '" readonly style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(buildPortraitPrompt(atom, bm)) + '</textarea>';
+  h += '<textarea class="sl_prompt_ta" data-char="' + escAttr(ppl.key) + '" readonly style="width:100%;min-height:110px;' + fi() + 'font-size:10.5px;resize:vertical;">' + esc(buildPortraitPrompt(ppl.ent, 'front', bm)) + '</textarea>';
   h += '<div style="margin-top:6px;display:flex;gap:6px;align-items:center;"><button class="sl_copy_btn" data-char="' + escAttr(ppl.key) + '" style="' + btnSm() + 'font-size:10px;">复制提示词</button><span style="font-size:9.5px;color:' + CAT.mute + ';">负向：' + (settings.neg ? esc(String(settings.neg).slice(0, 60)) : '（未设置）') + '</span></div></div>';
   h += '</div></div></div>';
   body.html(h); bindArchiveEvents(body);
@@ -335,7 +392,7 @@ export function bindArchiveEvents(b) {
     for (var i2 = 0; i2 < people2.length; i2++) { if (people2[i2].key === cn2) { p2 = people2[i2]; break; } }
     var bm3 = getActiveMode() || 'zit';
     var atom2 = p2 ? getAtomAnchor(p2.ent, bm3) : '';
-    box.find('.sl_prompt_ta').val(buildPortraitPrompt(atom2, bm3));
+    box.find('.sl_prompt_ta').val(buildPortraitPrompt(p2 && p2.ent, 'front', bm3));
     box.show();
   });
   b.off('click', '.sl_copy_btn').on('click', '.sl_copy_btn', function () {
@@ -350,46 +407,47 @@ export function bindArchiveEvents(b) {
       } else { ta[0].select(); document.execCommand('copy'); done(); }
     } catch (e9) { toast('error', '复制失败，请手动选中'); }
   });
-  // ── 立绘：只用人物锚点，不带场景/其它人物（展示型全身立绘）──
-  // 按钮挂在列表卡片（第2层）→ 必须阻止冒泡，否则会顺带触发"进详情页"
+  // ── 立绘：四个视角（正面/左/右/背）──
+  // 提示词由辅助 AI 建档时写好（每视角一条）；老档案没有才退回锚点拼装。
+  // 按钮挂在列表卡片（第2层）与详情页（第3层）→ 必须阻止冒泡，否则会顺带触发"进详情页"
   b.off('click', '.sl_port_btn').on('click', '.sl_port_btn', function (e) {
     if (e && e.stopPropagation) e.stopPropagation();
     var cn = jQuery(this).data('char'), btn = jQuery(this);
+    var view = String(jQuery(this).data('view') || 'front');
+    if (!PORTRAIT_VIEW_CN[view]) view = 'front';
     var ent = null;
     try { var re2 = rosterEntries(); for (var i2 = 0; i2 < re2.length; i2++) { if (re2[i2] && re2[i2].key === cn) { ent = re2[i2]; break; } } } catch (e9) {}
     if (!ent) { toast('error', '找不到该人物档案'); return; }
     var bm = getActiveMode() || 'zit';
-    // [v2.0] 立绘只吃锚点库：英文三模式读【英文权威锚点】——**绝不退回中文**
-    // （中文锚点会被 cleanAnimePrompt 整段删空，只剩框架词 → 画出与角色无关的路人）；
-    // zit 读中文呈现缓存。base（主模型原文）永不进立绘。
+    var aiP = '', aiM = '';
+    try { aiP = getPortraitPrompt(ent, view); aiM = portraitPromptsMode(ent); } catch (e8) {}
+    var aiOk = !!(aiP && (!aiM || isEnglishMode(aiM) === isEnglishMode(bm)));
+    // [v2.0] 英文三模式读【英文权威锚点】，zit 读中文呈现缓存；base 永不进立绘
     var anchor = getAtomAnchor(ent, bm);
-    if (!anchor) {
+    if (!anchor && !aiOk) {
       toast('warning', bm === 'zit'
         ? '还没有锚点 —— 先正常聊一轮（出一次图）让插件按 38 维建档，之后立绘才是干净的对照图'
-        : '还没有【英文锚点】—— ' + bm + ' 模式只读英文锚点（中文会被清洗逻辑删空、画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点');
+        : '还没有【英文锚点】—— ' + bm + ' 模式只读英文锚点（中文会被清洗逻辑删空、画出路人）。先正常聊一轮出一次图');
       return;
     }
     var wf2 = JSON.parse(settings.cWf || '{}');
     if (!Object.keys(wf2).length) { toast('error', '工作流未配置'); return; }
-    var _runPortrait = function (anchorText) {
-      var frame = (bm === 'zit') ? '，站立，正面，全身，简洁纯色背景，表情平静' : ', standing, front view, full body, simple background, neutral expression';
-      // [Fix v2.0] 必须走 atomValues 还原成生图语言：原实现把 `维度:值 | …` 原样拼进去，
-      // 维度前缀和 | 都进了提示词（2026-10-16 12:26 的真实成图里能看到 `种族:亚洲人 | 脸型:…`）
-      var prompt = atomValues(anchorText, bm) + frame;
-      if (isEnglishMode(bm)) prompt = cleanAnimePrompt(prompt);   // [Fix v2.0] 原实现漏了 anima
-      btn.prop('disabled', true).text('排队中…');
-      enqueueTask('portrait_' + Date.now() + '_' + cn, prompt, function (result) {
-        if (result && result.url) {
-          setPortraitUrl(ent, result.url);
-          saveSettings();
-          var safe = String(cn).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
-          b.find('#sl_port_' + safe).css({ backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' }).html('');
-          toast('success', cn + ' 立绘生成完毕');
-        }
-        btn.prop('disabled', false).text('生成立绘');
-      }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text('生成立绘'); });
-    };
-    _runPortrait(anchor);
+    var prompt = buildPortraitPrompt(ent, view, bm);
+    if (!prompt) { toast('warning', '这条立绘还没有提示词'); return; }
+    var oldTxt = btn.text();
+    btn.prop('disabled', true).text('排队中…');
+    enqueueTask('portrait_' + view + '_' + Date.now() + '_' + cn, prompt, function (result) {
+      if (result && result.url) {
+        setPortraitUrl(ent, result.url, view);
+        saveSettings();
+        var safe = String(cn).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
+        var bgCss = { backgroundImage: 'url(' + result.url + ')', backgroundSize: 'cover', backgroundPosition: 'top center', border: '1.5px solid ' + CAT.accent, color: 'transparent' };
+        b.find('#sl_port_' + safe).css(bgCss).html('');
+        b.find('#sl_portv_' + safe + '_' + view).css(bgCss).html('');
+        toast('success', cn + ' · ' + (PORTRAIT_VIEW_CN[view] || view) + ' 立绘生成完毕');
+      }
+      btn.prop('disabled', false).text(oldTxt || '生成立绘');
+    }, function () { toast('error', '立绘生成失败'); btn.prop('disabled', false).text(oldTxt || '生成立绘'); });
   });
   b.off('click', '.sl_edit_btn').on('click', '.sl_edit_btn', function () { b.find('.sl_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });

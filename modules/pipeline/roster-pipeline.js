@@ -7,7 +7,7 @@ import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
 import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch, findLostNumbers } from '../text-utils.js';
-import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues } from '../roster.js';
+import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues, setPortraitPrompts } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
 import { statusesDataTextFor, upsertStatus, setStatusActive } from '../statuses.js';
@@ -608,7 +608,7 @@ export async function runRosterPipeline(bodyText, mesId) {
         // 3. 解析 PROFILE（人物表更新）
         var profileData = parseRosterProfile(output);
         if (profileData && profileData.persons) {
-            var ups = 0, nAnchors = 0, nZh = 0, nRej = 0;
+            var ups = 0, nAnchors = 0, nZh = 0, nRej = 0, nPort = 0;
             for (var k in profileData.persons) {
                 var pe = profileData.persons[k];
                 var upName = (pe && pe.name) || k.replace(/（[^）]*）$/, '');
@@ -629,10 +629,15 @@ export async function runRosterPipeline(bodyText, mesId) {
                     } else nRej++;
                 }
                 if (pe && pe.anchor_zh) { if (setZitAnchor(upName, upIdm, pe.anchor_zh)) nZh++; }
+                // v1.13.8 立绘提示词：建档时一并产出（四视角），之后"生成立绘"直接用，不再由插件拼装
+                if (pe && (pe.portrait || pe.portraits)) {
+                    if (setPortraitPrompts(upName, upIdm, pe.portrait || pe.portraits)) nPort++;
+                }
             }
             if (ups) slLog('协作PROFILE档案更新: ' + ups + ' 人');
             if (nAnchors) slLog('英文锚点更新: ' + nAnchors + ' 条');
             if (nZh) slLog('中文呈现锚点更新: ' + nZh + ' 条');
+            if (nPort) slLog('立绘提示词更新: ' + nPort + ' 人（正面/左/右/背）');
             if (nRej) slErr('⛔ PROFILE.anchor 被拒（含中文，英文槽位只收英文）: ' + nRej + ' 条 —— 详见上方锚点日志');
         }
 

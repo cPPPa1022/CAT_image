@@ -682,7 +682,10 @@ export function getPortraitPrompt(entry, view) {
     try {
         var pp = entry && entry.portraitPrompts;
         if (!pp) return '';
-        return String((view && pp[view]) || pp.front || '').trim();
+        // v1.14：非正面视角**不回退到正面** —— 旧写法 pp[view] || pp.front，某个视角没写就用正面那条，
+        // 结果四个视角共用一条提示词（实测左右两张几乎一样）。缺就是缺，让上层去补方向/重写。
+        if (view && view !== 'front') return String(pp[view] || '').trim();
+        return String(pp.front || '').trim();
     } catch (e) { return ''; }
 }
 

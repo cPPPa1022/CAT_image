@@ -134,25 +134,30 @@ export function parsePersonString(pStr) {
 //    「，反差=看着懒散邋遢，白色棉质背心…」这种垃圾。所以所有兜底路径必须先剥种子。
 export var SEED_FIELDS = ['气质', '调性', '重心', '反差'];
 
-// 从一段文本里抽出种子字段 → { 气质, 调性, 重心, 反差 }
+// 从一段文本里抽出种子 → { 印象 } 或老的 { 气质, 调性, 重心, 反差 }
+// v1.14：种子改成「一段白描」（气质定向）→ 没有字段标记时，整段就是印象
 export function parseSeedSegment(text) {
-    var body = String(text || '').replace(/^s*(?:种子|印象)s*[：:]?s*/, '');
+    var body = String(text || '').replace(/^\s*(?:种子|印象)\s*[：:]?\s*/, '');
     var out = {};
     if (!body.trim()) return out;
-    var re = /(气质|调性|重心|反差|第一印象)s*[=＝]s*([^；;|]*)/g;
-    var m;
+    var re = /(气质|调性|重心|反差|第一印象)\s*[=＝]\s*([^；;|]*)/g;
+    var m, _hasField = false;
     while ((m = re.exec(body)) !== null) {
+        _hasField = true;
         var k = (m[1] === '第一印象') ? '气质' : m[1];
         var v = String(m[2] || '').trim();
         if (!v) continue;
         out[k] = out[k] ? (out[k] + '；' + v) : v;
     }
+    if (!_hasField) out['印象'] = body.trim();
     return out;
 }
 
-// 种子对象 → 标准写法（气质=…；调性=…；重心=…；反差=…）
+// 种子对象 → 标准写法（新版：一段白描；老版：气质=…；调性=…）
 export function formatSeed(obj) {
     if (!obj) return '';
+    if (obj['印象']) return String(obj['印象']);
+    if (obj['气质'] && !obj['调性'] && !obj['重心'] && !obj['反差']) return String(obj['气质']);
     var out = [];
     for (var i = 0; i < SEED_FIELDS.length; i++) {
         var k = SEED_FIELDS[i];
@@ -165,17 +170,21 @@ export function formatSeed(obj) {
 export function stripSeedText(text) {
     var t = String(text || '');
     if (!t) return t;
-    // ① 「种子：」之后到段尾（种子习惯写在最后）
-    t = t.replace(/(?:^|[。；;|])s*种子s*[：:][sS]*$/, '');
+    // ① 「种子：/印象：」之后到段尾（种子习惯写在最后）
+    //    [Fix v1.14] 旧正则写成了 [sS]* —— 只能吃掉字母 s/S，中文种子根本没被剥掉；
+    //    字段式种子靠 ② 侥幸兜住了，但改成「一段白描」后会整段漏进提示词，所以必须修正。
+    t = t.replace(/(?:^|[。；;|])\s*(?:种子|印象)\s*[：:][\s\S]*$/, '');
     // ② 散落的 气质=/调性=/重心=/反差= 字段，各自到下一个分号/竖线
-    t = t.replace(/(?:气质|调性|重心|反差|第一印象)s*[=＝]s*[^；;|]*/g, '');
+    t = t.replace(/(?:气质|调性|重心|反差|第一印象)\s*[=＝]\s*[^；;|]*/g, '');
     // ③ 收尾清理
     return t.replace(/[；;，,]{2,}/g, '，').replace(/^[；;，,。\s]+/, '').replace(/[；;，,。\s]+$/, '').trim();
 }
 
-// 文本里是否含种子字段
+// 文本里是否含种子（新版：种子：一段白描；老版：气质=/调性= 字段）
 export function hasSeedField(text) {
-    return /(?:气质|调性|重心|反差)s*[=＝]/.test(String(text || ''));
+    var t = String(text || '');
+    if (/(?:气质|调性|重心|反差)\s*[=＝]/.test(t)) return true;
+    return /(?:^|[。；;|])\s*(?:种子|印象)\s*[：:]/.test(t);
 }
 
 // ══════════════════════════════

@@ -86,7 +86,7 @@
     ❌ `almond eyes, double eyelids, brown eyes, long eyelashes`
     ✅ `her eyes are long almond-shaped with softly downturned outer corners; the upper lids are a narrow double fold that creases lightly when open; the irises are dark brown with a warm amber layer that catches a ring of gold at the edge; lashes are long and curve naturally`
 **永久标记每张必写**（`beauty mark under left eye` 之类），用词逐字一致。
-**单张 ≤1000 字**（2 主体 800-1000 到顶），预计超了就拆单人图；⛔ 禁止角色名。
+**不设字数上限**（维度写全优先于写短）；只有 3 人以上同框才拆单人图；⛔ 禁止角色名。
 
 ## 场景约束
 每个场景描述只能从本轮【当前正文】提取，不能使用历史数据。

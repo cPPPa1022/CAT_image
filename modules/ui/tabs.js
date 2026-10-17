@@ -209,8 +209,22 @@ function setPortraitUrl(ent, url, view) {
     ent.portraitViews[v] = url;
   } catch (e) {}
 }
+// 短标签：只给 UI（toast / 按钮）用
 var PORTRAIT_VIEW_CN = { front: '正面', left: '左侧面', right: '右侧面', back: '背面' };
-var PORTRAIT_VIEW_EN = { front: 'front view', left: 'side view facing left', right: 'side view facing right', back: 'back view' };
+// v1.14：写进提示词的方向词必须**无歧义** —— 「左侧面」模型分不清是「从左边拍」还是「人朝左边」，
+// 实测左右两版都画成朝左的侧脸（两张几乎一样）。改成「相机在她的左侧 + 鼻尖朝向画面右边」。
+var PORTRAIT_VIEW_SPEC_CN = {
+  front: '正面，正对镜头',
+  left: '相机在她的左侧，画面里是她的左半身，她的鼻尖朝向画面右边',
+  right: '相机在她的右侧，画面里是她的右半身，她的鼻尖朝向画面左边',
+  back: '背面，背对镜头，看不到脸'
+};
+var PORTRAIT_VIEW_SPEC_EN = {
+  front: 'front view, facing the camera',
+  left: 'camera on her left side, her left half toward the camera, nose pointing to the right of the frame',
+  right: 'camera on her right side, her right half toward the camera, nose pointing to the left of the frame',
+  back: 'back view, facing away from the camera, face not visible'
+};
 
 // ── 人物列表 = 本聊天的人物表（档案跟着聊天走）──
 // 主模型每轮 [img:] 里写到的人物：有则沿用、无则建档，全都记在这次聊天的人物表里
@@ -288,10 +302,10 @@ function _portraitTail(view, bm, underage) {
   var v = PORTRAIT_VIEW_CN[view] ? view : 'front';
   if (bm === 'zit') {
     var cloth = underage ? '，素色紧身连体打底衣' : '，全裸，无衣物遮挡';
-    return cloth + '，站立，' + PORTRAIT_VIEW_CN[v] + '，全身（含脚），简洁纯色背景，表情平静';
+    return cloth + '，站立，全身（含脚），简洁纯色背景，' + (PORTRAIT_VIEW_SPEC_CN[v] || PORTRAIT_VIEW_SPEC_CN.front) + '，表情平静';
   }
   var c2 = underage ? ', plain tight bodysuit' : ', completely nude, no clothes, uncensored';
-  return c2 + ', standing, ' + PORTRAIT_VIEW_EN[v] + ', full body including feet, simple background, neutral expression';
+  return c2 + ', standing, full body including feet, simple background, ' + (PORTRAIT_VIEW_SPEC_EN[v] || PORTRAIT_VIEW_SPEC_EN.front) + ', neutral expression';
 }
 function buildPortraitPrompt(ent, view, bm) {
   if (!ent) return '';
@@ -310,6 +324,9 @@ function buildPortraitPrompt(ent, view, bm) {
     if (underage) body = body.replace(/全裸|裸体|赤裸|一丝不挂|无衣物(遮挡)?|completely nude|nude|no clothes|uncensored|topless|naked/gi, '').replace(/[，,]\s*[，,]/g, '，').trim();
     if (!/站立|standing/i.test(body)) body += _portraitTail(v, bm, underage);
     if (!/全身|full body/i.test(body)) body += (bm === 'zit' ? '，全身（含脚）' : ', full body including feet');
+    // v1.14：AI 那条只写了「左侧面/右侧面」这种歧义词 → 补一句无歧义方向（左右两张画成一样就是这么来的）
+    var _dirOK = /相机在她的(左|右)侧|camera on her (left|right) side|背面，背对镜头|back view|正面，正对镜头|front view/i.test(body);
+    if (!_dirOK) body += (bm === 'zit' ? '，' + PORTRAIT_VIEW_SPEC_CN[v] : ', ' + PORTRAIT_VIEW_SPEC_EN[v]);
   } else {
     var anchor = getAtomAnchor(ent, bm);
     if (!anchor) return '';
@@ -453,7 +470,8 @@ export function bindArchiveEvents(b) {
   b.off('click', '.sl_dyn_edit_btn').on('click', '.sl_dyn_edit_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').toggle(); });
   b.off('click', '.sl_dyn_cancel_btn').on('click', '.sl_dyn_cancel_btn', function () { b.find('.sl_dyn_edit_box[data-char="' + jQuery(this).data('char') + '"]').hide(); });
   b.off('click', '.sl_dyn_save_btn').on('click', '.sl_dyn_save_btn', function () { var cn = jQuery(this).data('char'), nt = b.find('.sl_dyn_edit_ta[data-char="' + cn + '"]').val(), pf = getProfiles(); if (pf && pf.chat && pf.chat.dynamics) { pf.chat.dynamics[cn] = nt; saveSettings(); toast('success', cn + ' 动态已保存'); renderArchiveInto(b); } });
-  b.off('click', '[id^=sl_port_]').on('click', '[id^=sl_port_]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var bg = jQuery(this).css('background-image'); if (!bg || bg === 'none') return; var url = bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');
+  // v1.14：id 前缀改成 [id^=sl_port] —— 旧写法 [id^=sl_port_] 匹配不到四视角缩略位（sl_portv_…），点不开放大
+  b.off('click', '[id^=sl_port]').on('click', '[id^=sl_port]', function (e) { if (e && e.stopPropagation) e.stopPropagation(); var bg = jQuery(this).css('background-image'); if (!bg || bg === 'none') return; var url = bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');
         jQuery('<div style="position:fixed;z-index:30001;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:pointer;"><img src="' + url + '" style="max-width:90vw;max-height:90vh;border-radius:16px;box-shadow:0 4px 30px rgba(0,0,0,0.5);"></div>').appendTo('body').on('click', function () { jQuery(this).remove(); }); });
 }
 function cardTypeSelectHTML(selected) {

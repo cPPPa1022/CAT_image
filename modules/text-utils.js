@@ -367,3 +367,42 @@ export function buildImageBlock(scene, prompt, styleHint) {
     if ((styleHint || '').trim()) p = styleHint.trim() + ', ' + p;
     return head + '\n【提示词】' + p + '【/提示词】';
 }
+
+// ══════════════════════════════════════════════════════════════
+// ── v1.13.6 数字保真（数值不许在管线里"蒸发"）──
+// 主模型写下的数字是硬事实：年龄 14岁 / 身高 168cm / 体重 52kg。
+// 它也是最容易被"润色"掉的一类信息 —— 实测链路：
+//   主模型「14岁女性」→ 辅助AI 具象化成英文锚点 age:teenage girl
+//   → 之后每张图逐字复用锚点 → 提示词里只剩「少女」→ 数字彻底消失，且**没有任何环节报警**。
+// 这里只做一件事：把"源文本里有的数字"和"目标文本里已经没有的数字"对出来。
+var NUM_TOKEN_RE = /(\d+(?:\.\d+)?)\s*(岁|周岁|cm|CM|厘米|kg|KG|公斤)/g;
+
+function _cnNum(v) {
+    var n = Number(v);
+    if (!isFinite(n) || n !== Math.floor(n) || n < 0 || n > 99) return '';
+    var d = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    if (n < 10) return d[n];
+    if (n === 10) return '十';
+    if (n < 20) return '十' + d[n % 10];
+    var t = Math.floor(n / 10), o = n % 10;
+    return d[t] + '十' + (o ? d[o] : '');
+}
+
+// 返回 ['14岁', '168cm'] —— 源里有、目标里没有的数字（中文数字也算"在"：十四岁左右）
+export function findLostNumbers(source, target) {
+    var src = String(source || ''), tgt = String(target || '');
+    if (!src || !tgt) return [];
+    var out = [], seen = {};
+    NUM_TOKEN_RE.lastIndex = 0;
+    var m;
+    while ((m = NUM_TOKEN_RE.exec(src)) !== null) {
+        var num = m[1], key = num + m[2];
+        if (seen[key]) continue;
+        seen[key] = 1;
+        if (tgt.indexOf(num) >= 0) continue;       // 数字原样在
+        var cn = _cnNum(num);
+        if (cn && tgt.indexOf(cn) >= 0) continue;  // 中文数字在（十四岁左右）
+        out.push(key);
+    }
+    return out;
+}

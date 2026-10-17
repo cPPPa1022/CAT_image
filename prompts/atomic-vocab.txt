@@ -67,6 +67,10 @@
   男：🟡 young man（青年男性）✅已用 · 🟡 middle-aged man（中年男性）· 🟢 old man（老年男性）
   通用：🟢 child（儿童）· 🟢 elderly（老人）
 
+  ⛔ **数字保真**：主模型给了具体数字（`14岁` / `168cm`）→ **数字必须原样留在锚点里**（`age:14`，可再加档位一并写 `age:14 teenage girl`）
+     —— 提示词里写成「十四岁左右」这类自然说法可以，但**数字本身不许消失**，更不许只留 `teenage girl` 把数字吃掉。
+     数字是硬事实，档位词是修辞；数字一丢就没人能发现（实测：主模型给了年龄，锚点只剩 teenage girl，提示词只剩「少女」）。
+
 【3 脸型轮廓】
   🟡 round face（圆脸）✅已用 · 🟡 oval face（鹅蛋脸）✅已用 · 🟡 heart-shaped face（瓜子脸/心形脸）
   🟡 angular face（骨感棱角脸）· 🟡 square face（方脸）· 🟡 long face（长脸）

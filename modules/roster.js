@@ -7,7 +7,7 @@ import { slLog } from './log.js';
 import { settings, saveSettings, getSTContext, getActiveMode } from './settings.js';
 import { getCharacterName, getChatId } from './pipeline/profile.js';
 import { refreshCoopCards } from './sync-cards.js';  // [Fix] 人物表变化时刷新导演模式协作卡索引
-import { stripSeedText, parseSeedSegment, formatSeed, hasSeedField } from './text-utils.js';  // v1.11.1 种子剥离
+import { stripSeedText, parseSeedSegment, formatSeed, hasSeedField, findLostNumbers } from './text-utils.js';  // v1.11.1 种子剥离（+ v1.13.6 数字保真）
 
 // ── key 归一化 ──
 export function personKey(name, identity) {
@@ -529,6 +529,9 @@ export function rosterDataTextFor(nameList) {
                     // v1.11.2：主模型漏维度时明确告知（否则辅助AI 会按"通用亚洲脸"静默补，画出来不是这个角色）
                     var _miss = _missingFaceDims(e.base || e.appearance || '');
                     if (_miss.length) nmLines.push('   ⚠️ 主模型没给：' + _miss.join(' / ') + ' —— 你必须按种子方向推断出具体值（推断值一旦定下就冻结复用，别每轮换）');
+                    // v1.13.6 数字保真：主模型原文里的数字若在锚点里蒸发了 → 点名要回来
+                    var _lostN = findLostNumbers((e.base || e.appearance || ''), _atom || '');
+                    if (_lostN.length) nmLines.push('   🚨 数字保真：锚点里丢了主模型给的 ' + _lostN.join('、') + ' —— 数字（年龄/身高/体重）是硬事实，不会被润色掉。① 提示词里**必须写出来**（写成「十四岁左右」这类自然说法可以，但信息不许消失，⛔ 不许用「少女/女性」这种泛词顶掉）；② 锚点里该维度若只剩档位词，本轮请把它改成带数字的值（如 `age:14`），**其余维度照旧逐字复用**');
                     // v1.11.1：种子单独下发（四个分支都要带上 —— 它是"取词方向"，不是外貌）
                     if (e.seed) nmLines.push('   🌱 种子（主模型给的**取词方向**：气质/调性/重心/反差 —— 按「种子 → 锚点反推」执行，⛔ 禁止把这行原文放进提示词）：' + e.seed);
                     nmCount++;

@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch, findLostNumbers } from '../text-utils.js';
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
@@ -43,6 +43,24 @@ function _missingHint(expectCount, gotCount) {
     for (var i = gotCount; i < expectCount; i++) miss.push('第' + (i + 1) + '条');
     return miss.length ? ('还缺 ' + miss.join('、') + '（共需 ' + expectCount + ' 条）') : ('共需 ' + expectCount + ' 条');
 }
+
+// ── v1.13.6 数字保真：逐条对比"主模型给的数字"与"输出提示词里剩下的数字" ──
+// 返回 [{ i: 0, items: ['14岁'] }]（i = 占位符下标，0-based）
+export function findLostNumbersInPrompts(placeholders, prompts) {
+    var misses = [];
+    if (!placeholders || !prompts) return misses;
+    var n = Math.min(placeholders.length, prompts.length);
+    for (var i = 0; i < n; i++) {
+        var ph = placeholders[i] || {};
+        var segs = ph.personSegments || [];
+        var src = [ph.scene || '', ph.topic || ''];
+        for (var j = 0; j < segs.length; j++) src.push(segs[j].appearance || '');
+        var lost = findLostNumbers(src.join(' '), prompts[i] || '');
+        if (lost.length) misses.push({ i: i, items: lost });
+    }
+    return misses;
+}
+
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
@@ -480,6 +498,15 @@ export async function runRosterPipeline(bodyText, mesId) {
         //   拒绝/空回/格式崩 → **不带上次输出**重发（带着拒绝语重试会让它锚定在"我刚拒绝了"上）
         //   条数不足       → **带上上次输出** + 点名缺第几条（让它接着补，而不是整轮重写又漏）
         var _fail = classifyPipelineFailure(output, expectN);
+        // v1.13.6 数字保真闸门：条数对了，但主模型给的数字在提示词里蒸发了 → 同样算不合格
+        var _lostNum = [];
+        if (!_fail) {
+            try { _lostNum = findLostNumbersInPrompts(placeholders, parseRosterImages(output)); } catch (eLN) { _lostNum = []; }
+            if (_lostNum.length) {
+                _fail = 'lostnum';
+                slErr('⚠️ 数字保真：主模型给的数字在提示词里丢了 → 重试 · ' + _lostNum.map(function (x) { return '第' + (x.i + 1) + '条 ' + x.items.join('、'); }).join(' / '));
+            }
+        }
         var _beforeRetry = output;
         if (_fail) {
             slErr('⚠️ 管线输出不合格(' + _fail + ', ' + (output ? output.length : 0) + ' 字, 需要 ' + expectN + ' 条) → 重试');
@@ -504,6 +531,13 @@ export async function runRosterPipeline(bodyText, mesId) {
                     _retryNote = '【系统重试】你上一轮的内容方向是对的，但**没有按格式输出**（缺少 ---PROFILE--- / ---IMAGES--- 的分段标记）。\n'
                         + '请保留你上一轮的画面内容，**改成规定的两段式格式重新输出**：---PROFILE--- 段 + ---IMAGES--- 段'
                         + '（IMAGES 正好 ' + expectN + ' 条，一条一行，按占位符顺序）。';
+                }
+                if (_fail === 'lostnum') {
+                    var _lostDesc = _lostNum.map(function (x) { return '第' + (x.i + 1) + '条漏了 ' + x.items.join('、'); }).join('；');
+                    _retryNote = '【系统重试】条数是对的，但你**把主模型写下的数字丢了**：' + _lostDesc + '。\n'
+                        + '数字（年龄 14岁 / 身高 168cm 这类）是硬事实，不是修辞 —— 不许省略，也不许用「少女/青年女性」这种泛词顶掉。\n'
+                        + '请保留你上一轮其余内容，只把这些数字补回去（可以写成「十四岁左右的少女」这种自然说法），'
+                        + '然后重新完整输出 ---PROFILE--- 与 ---IMAGES--- 两段（IMAGES 正好 ' + expectN + ' 条，按占位符顺序）。';
                 }
                 var _msgs = [
                     { role: 'system', content: systemPrompt },

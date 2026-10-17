@@ -24,6 +24,9 @@ export function classifyPipelineFailure(out, expectCount) {
     var hasPro = /---\s*PROFILE\s*---/.test(t);
     var hasImg = /---\s*IMAGES\s*---/.test(t);
     if (!hasPro && !hasImg) return REFUSAL_RE.test(t.slice(0, 200)) ? 'refusal' : 'format';
+    // v1.13.7：---PROFILE--- 是**必做段**（锚点/档案全靠它）。原来只有 IMAGES 也算合格 →
+    // 实测出现过「图出了、3 个人一个锚点都没建」，而管线判定合格，谁也不会发现。
+    if (!hasPro) return 'noprofile';
     // 结构标记在 → 再看 IMAGES 段实际回了几条
     if (expectCount && expectCount > 0) {
         var lines = [];
@@ -166,20 +169,44 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
 }
 
 // ── 输出解析 ──
+// ── v1.13.7 宽容 JSON：LLM 的 PROFILE 段经常不是合法 JSON ──
+// 实测最常见的三种坏法：① 字符串里带**裸换行**（没转义）② 尾逗号 ③ ```json 围栏。
+// 旧实现只处理了①的一种形态，一旦 JSON.parse 失败就**静默返回 null** →
+// PROFILE 整段被丢掉 → 人物档案只建了主模型原文那层、**锚点永远空着**，而且没人发现。
+function _looseJson(raw) {
+    var t = String(raw || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+    var i = t.indexOf('{'), j = t.lastIndexOf('}');
+    if (i >= 0 && j > i) t = t.slice(i, j + 1);
+    t = t.replace(/,\s*([}\]])/g, '$1');
+    var out = '', inStr = false, esc = false;
+    for (var k = 0; k < t.length; k++) {
+        var ch = t[k];
+        if (inStr) {
+            if (esc) { out += ch; esc = false; continue; }
+            if (ch === '\\') { out += ch; esc = true; continue; }
+            if (ch === '"') { inStr = false; out += ch; continue; }
+            if (ch === '\n') { out += '\\n'; continue; }
+            if (ch === '\r') { continue; }
+            if (ch === '\t') { out += '\\t'; continue; }
+            out += ch;
+            continue;
+        }
+        if (ch === '"') { inStr = true; out += ch; continue; }
+        out += ch;
+    }
+    return JSON.parse(out);
+}
+
 export function parseRosterProfile(output) {
     // [Fix] 容错：END 缺失/用其它分隔符时，PROFILE 段截至 ---IMAGES--- 或文尾
     var m = output.match(/---\s*PROFILE\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
-    if (!m) return null;
+    if (!m) { slErr('⛔ 模型没输出 ---PROFILE--- 段（本轮锚点/档案不会更新）'); return null; }
     try {
-        var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
-        var outerI = fixed.indexOf('{');
-        var outerEnd = fixed.lastIndexOf('}');
-        if (outerI >= 0 && outerEnd > outerI) {
-            var data = JSON.parse(fixed.substring(outerI, outerEnd + 1));
-            return data;
-        }
-    } catch (e) { slLog('协作PROFILE JSON解析失败: ' + e.message); }
-    return null;
+        return _looseJson(m[1]);
+    } catch (e) {
+        slErr('⛔ PROFILE JSON 解析失败: ' + e.message + ' | 原文前 200 字: ' + String(m[1]).slice(0, 200).replace(/\s+/g, ' '));
+        return null;
+    }
 }
 
 // v1.5.0：解析可选的 ---WARDROBE--- 段（key → detail）
@@ -527,6 +554,11 @@ export async function runRosterPipeline(bodyText, mesId) {
                 } else if (_fail === 'noimage') {
                     _retryNote = '【系统重试】你上一轮把 ---IMAGES--- 段写成了空的/（无），但本轮有 ' + expectN + ' 个占位符，必须对应 ' + expectN + ' 条提示词。\n'
                         + '请按占位符顺序重新输出 ---PROFILE--- 与 ---IMAGES--- 两段（IMAGES 正好 ' + expectN + ' 条）。';
+                } else if (_fail === 'noprofile') {
+                    _retryNote = '【系统重试】你这一轮**漏了 ---PROFILE--- 段**（只给了 IMAGES）。锚点与人物档案全靠这一段；'
+                        + '漏了它 = 这些人物之后每张图都要重新编一次脸。\n'
+                        + '请保留你上一轮的 ---IMAGES--- 内容，补出 ---PROFILE--- 段（{"persons":{…}}；每人必须带 anchor，zit 模式另带 anchor_zh），'
+                        + '然后重新完整输出 ---PROFILE--- 与 ---IMAGES--- 两段。';
                 } else {   // format
                     _retryNote = '【系统重试】你上一轮的内容方向是对的，但**没有按格式输出**（缺少 ---PROFILE--- / ---IMAGES--- 的分段标记）。\n'
                         + '请保留你上一轮的画面内容，**改成规定的两段式格式重新输出**：---PROFILE--- 段 + ---IMAGES--- 段'
@@ -604,6 +636,32 @@ export async function runRosterPipeline(bodyText, mesId) {
             if (nRej) slErr('⛔ PROFILE.anchor 被拒（含中文，英文槽位只收英文）: ' + nRej + ' 条 —— 详见上方锚点日志');
         }
 
+
+        // v1.13.7：PROFILE 没覆盖到的人 → 明确报警（否则锚点永远空着，没人发现）
+        try {
+            var _ents = rosterEntries();
+            var _seenName = {};
+            var _noAnchor = [];
+            for (var _pi = 0; _pi < placeholders.length; _pi++) {
+                var _pl = placeholders[_pi] || {};
+                var _segs = _pl.personSegments || [];
+                for (var _sj = 0; _sj < _segs.length; _sj++) {
+                    var _nm2 = _segs[_sj].name;
+                    if (!_nm2 || _seenName[_nm2]) continue;
+                    _seenName[_nm2] = 1;
+                    var _hit = null;
+                    for (var _ei = 0; _ei < _ents.length; _ei++) {
+                        var _ek = String(_ents[_ei].key || '');
+                        if (_ek === _nm2 || _ek.indexOf(_nm2 + '（') === 0 || _ents[_ei].name === _nm2) { _hit = _ents[_ei]; break; }
+                    }
+                    if (!_hit) continue;
+                    var _hasAtom = false;
+                    try { _hasAtom = !!getAtomAnchor(_hit, getActiveMode()); } catch (eAT) { _hasAtom = false; }
+                    if (!_hasAtom) _noAnchor.push(_ek);
+                }
+            }
+            if (_noAnchor.length) slErr('⛔ 本轮结束仍没有锚点（下轮起每张图都会重新编脸）: ' + _noAnchor.join('、'));
+        } catch (eMA) { slLog('锚点体检跳过: ' + eMA.message); }
         // 3.5 解析 ---WARDROBE--- → 回写造型库（下次即可原样复用，零漂移）
         var wdData = parseRosterWardrobe(output);
         if (wdData && wardrobeInfo.pending.length) {

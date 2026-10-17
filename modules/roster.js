@@ -523,6 +523,9 @@ export function rosterDataTextFor(nameList) {
                     } else if (_m === 'zit' && e.base) {
                         nmLines.push('■ ' + e.key + '：' + e.base);
                         nmLines.push('   （以上是静态锚点；本轮衣着/状态/动作一律以【占位符】为准，**不要沿用上一轮**）');
+                        // v1.13.7：zit 模式下「有原文但还没锚点」时，原来**从来没有要求过回传 anchor**
+                        // （只有英文模式那条分支要求了）→ 锚点会一直空着，每轮重新编脸。
+                        nmLines.push('   ⭐ 这位**还没有锚点** —— 本轮必须通过 ---PROFILE--- 回传 anchor（「维度:值 | …」这种格式，zit 模式收中文锚点）+ anchor_zh，之后每轮逐字复用；漏了它 = 之后每张图都要重新编脸。');
                     } else {
                         nmLines.push('■ ' + e.key + '：' + (e.appearance || '（仅有名字，无外貌信息）'));
                     }

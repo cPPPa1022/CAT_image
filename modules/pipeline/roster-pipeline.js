@@ -485,16 +485,30 @@ export async function runRosterPipeline(bodyText, mesId) {
             var _gotN = 0;
             try { _gotN = (_fail === 'short') ? (parseRosterImages(output) || []).length : 0; } catch (eG) { _gotN = 0; }
             var _need = _missingHint(expectN, _gotN);
-            if (_fail === 'short' && output && output.trim()) {
-                // 带上上次输出，让它补齐
+            // v1.13.2：**除了 refusal，其余一律带上上次输出**。
+            // 理由：模型每次调用都是无状态的，任务素材（档案/种子/占位符）全在 userContent 里，
+            // 所以"不带上次输出"它照样知道要干嘛 —— 但 short/format/noimage 这三种失败里，
+            // 上次的内容往往是**有价值的**（short 的 1 条成品 / format 的散装提示词 / noimage 的（无）），
+            // 丢掉等于白烧一次 token。只有 refusal 不能带（带着拒绝语重试会让它锚定在"我刚拒绝了"）。
+            if (_fail !== 'refusal' && output && output.trim()) {
+                var _retryNote;
+                if (_fail === 'short') {
+                    _retryNote = '【系统重试】你上一轮只输出了 ' + _gotN + ' 条提示词，' + _need + '。\n'
+                        + '请**只补齐缺失的那几条**（已给出的保持原样，不要改动），然后重新完整输出 ---PROFILE--- 与 ---IMAGES--- 两段'
+                        + '（IMAGES 必须正好 ' + expectN + ' 条，按占位符顺序）。';
+                } else if (_fail === 'noimage') {
+                    _retryNote = '【系统重试】你上一轮把 ---IMAGES--- 段写成了空的/（无），但本轮有 ' + expectN + ' 个占位符，必须对应 ' + expectN + ' 条提示词。\n'
+                        + '请按占位符顺序重新输出 ---PROFILE--- 与 ---IMAGES--- 两段（IMAGES 正好 ' + expectN + ' 条）。';
+                } else {   // format
+                    _retryNote = '【系统重试】你上一轮的内容方向是对的，但**没有按格式输出**（缺少 ---PROFILE--- / ---IMAGES--- 的分段标记）。\n'
+                        + '请保留你上一轮的画面内容，**改成规定的两段式格式重新输出**：---PROFILE--- 段 + ---IMAGES--- 段'
+                        + '（IMAGES 正好 ' + expectN + ' 条，一条一行，按占位符顺序）。';
+                }
                 var _msgs = [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userContent },
                     { role: 'assistant', content: output },
-                    { role: 'user', content: '【系统重试】你上一轮只输出了 ' + _gotN + ' 条提示词，' + _need + '。\n'
-                        + '请**只补齐缺失的那几条**（同一画面的提示词保持一致，不要改动已给出的），\n'
-                        + '并重新完整输出 ---PROFILE--- 与 ---IMAGES--- 两段（IMAGES 必须正好 ' + expectN + ' 条，按占位符顺序）。\n'
-                        + '禁止输出拒绝、道歉、警告、元评论。' }
+                    { role: 'user', content: _retryNote + '\n禁止输出拒绝、道歉、警告、元评论。' }
                 ];
                 output = await auxApiCall(_msgs, null, 16384, 0.25);
             } else {

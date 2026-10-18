@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, isEnglishMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractDynamicBits, findLostNumbers, wrapFactSpan } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits, findLostNumbers, wrapFactSpan, parseCheckSection } from '../text-utils.js';
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues, setPortraitPrompts } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
@@ -540,6 +540,22 @@ export async function runRosterPipeline(bodyText, mesId) {
         // [Fix] 打印原始输出（首尾各200字）：提示词解析失败时凭日志定位 AI 的实际输出格式
         slLog('协作管线LLM返回, 长度=' + output.length + ' 前200: ' + output.slice(0, 200).replace(/\n/g, '⏎'));
         slLog('协作管线LLM返回, 尾200: ' + output.slice(-200).replace(/\n/g, '⏎'));
+
+        // 3.0 v1.25 自校记录（---CHECK---）：模型自己写的校对结果，只记录、不判分、不进生图
+        try {
+            var _check = parseCheckSection(output);
+            if (_check.length) {
+                for (var _ci = 0; _ci < _check.length; _ci++) slLog('自校 #' + (_ci + 1) + ': ' + _check[_ci]);
+                var _bad = [];
+                for (var _bj = 0; _bj < _check.length; _bj++) {
+                    // 只盯"事实=无"这一类自报缺失；"角色名=无" 是好事，不能误报
+                    if (/事实\s*[:：]\s*无|事实\s*[:：][^｜|]*?=\s*无/.test(_check[_bj])) _bad.push(_check[_bj]);
+                }
+                if (_bad.length) slErr('⚠️ 模型自校报"事实=无"：' + _bad.join(' / ') + '（它自己知道没写进去，却还是交了）');
+            } else {
+                slLog('本轮没有 ---CHECK--- 段：模型跳过了自校');
+            }
+        } catch (eCK) { slLog('自校段解析跳过: ' + eCK.message); }
 
         // 3. 解析 PROFILE（人物表更新）
         var profileData = parseRosterProfile(output);

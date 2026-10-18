@@ -475,3 +475,21 @@ export function findLostNumbers(source, target) {
     }
     return out;
 }
+
+// ══════════════════════════════
+// ── v1.25 自校段解析（---CHECK---）──
+// 模型写完提示词后，自己逐条核对：事实是否原词出现、可见维度是否写全、有没有角色名、数字是否保留。
+// 插件只解析并记录（谁也没法替它判断"同义是否到位"），不进生图模型。
+export function parseCheckSection(text) {
+    var m = String(text || '').match(/---\s*CHECK\s*---([\s\S]*?)(?:---\s*END\s*---|$)/);
+    if (!m) return [];
+    var out = [];
+    var lines = m[1].split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+        var l = String(lines[i] || '').trim();
+        if (!l) continue;
+        if (/^-+$/.test(l)) continue;
+        out.push(l);
+    }
+    return out;
+}

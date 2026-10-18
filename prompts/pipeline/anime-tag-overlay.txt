@@ -25,24 +25,36 @@
    ⚠️ 缺体型标签时动漫模型**默认偏幼态（萝莉化）**；禁止只写 `slender` 了事
 10. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 的值 → 逐字融进标签链**最前面**
     ⛔ 禁止 `rough skin` / `sun spots` / `red knuckles` / `tired eyes` 这类缺陷标签（除非角色卡/正文明确要求）
-    ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light`（只限光学）
+    ✅ 允许并鼓励 `natural supple skin` / `healthy complexion` / `soft even skin`（只限皮肤本体）
+    ⛔ 禁用高反射词（v1.18 塑料感元凶）：`luminous` `glowing` `lit from within` `glass skin` —— 画出来是硅胶娃娃
     ⛔ `refined features` / `delicate features` / `perfect face` **禁止使用**（骨相美化词 = 五官偏移）
     ⛔ `beautiful` 可以和维度**并存**，不能**替代**维度
     ⛔ **锚点值逐字落地**：`low bridge` 不许写 `straight nose bridge`，`thin upper lip` 不许写 `full lips`，`short wide face` 不许省
 11. 所有持久性规则跟 ZIT 一样
 
-## 示例（标签**写全**入镜维度，通常 30-50 个；**不是只写十几个**）
+## 示例（两组对照：脸型/年龄/气质/景别全都相反 —— 示范结构，⛔ 不是模板）
 
-    luminous skin, healthy glow, soft bright light, gentle sheen,
-    asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
-    almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
-    aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip, narrow
-    nostrils, full lips, pale pink lips, fair skin, smooth skin, very long wavy hair, side part,
-    no bangs, dark brown hair, slender neck, visible collarbone, tall, narrow shoulders, narrow waist,
-    large breasts, wide hips, long legs, curvy, light blue cotton shirt, buttoned up, beige knit
-    cardigan, cardigan slipping off shoulder, dark pencil skirt, standing, holding bag, leaning
-    forward, looking at viewer, smile, closed mouth, indoor, entryway, warm lighting, ceiling light,
-    close-up, eye level, shallow depth of field
+**示例 A · close-up · 22 岁清瘦冷感**（近景**不写胸/腰/臀/腿**）
+
+    girl, 22 years old, southwest chinese han, slender build, oval face, cleaned jawline, small chin,
+    low brow bone, monolid, thin eyelids, elongated eyes, level eye corners, light brown eyes,
+    short straight eyelashes, low nose bridge, small nose tip, thin upper lip, small flat mouth,
+    pale lips, cool pale translucent skin, tiny mole at outer right eye corner,
+    long straight black hair past waist, center part, forehead exposed, grey cotton smock,
+    paint stain on cuff, turning back over shoulder, brush in hand, faint smile, cold blue dawn light
+    from high window, half face lit half in shadow, sketch studio, backlight, close-up, eye level,
+    shallow depth of field
+
+**示例 B · waist-up · 38 岁丰润风韵**（中景**不写腿/臀/脚**）
+
+    woman, 38 years old, north chinese han, full-figured figure, visible waist, round face,
+    short wide face, soft jawline, round fleshy chin, flat brow bone, shallow eye socket,
+    inner double eyelids, downturned eyes, dark brown eyes, low nose bridge, wide ala,
+    thin upper lip, full lower lip, rose lips, warm fair skin, healthy flush on cheeks,
+    natural supple skin, dark brown wavy hair, low loose bun, stray strands at temples,
+    deep blue cotton work jacket, unbuttoned collar, sleeves rolled to forearm, dishcloth in hand,
+    leaning against sink, looking up at viewer, relaxed shoulders, single warm bulb overhead,
+    steam in the air, old restaurant kitchen, warm dim tone, shallow depth of field
 
 ## 动态字段转标签
 - `发型:黑色低发髻，斜刘海` → `black hair, low bun, side bangs`
@@ -62,7 +74,7 @@
   并通过 `---PROFILE---` 的 `anchor` 字段回传**英文**锚点（维度名与值全英文）。
 按 `atomic-vocab.txt` 取词（**参考库不是白名单**：表里没有、或你有更贴切的写法 → 自己写一个同风格的短标签）。
 ⚠️ **跨轮复用同一个标签**：同一个人的同一个特征，这轮 `large breasts`，下轮还是 `large breasts` —— 换说法 = 长相漂移。
-老档案（base）里若还是量化比例：**比例禁止进提示词**，按 `ratio-to-atom.txt` 换算成标签：
+老档案（base）里若还是量化比例：**比例禁止进提示词**，按下面换算成标签：
 
     眼裂≈2.8:1      → almond eyes
     眼尾下垂5°       → tareme

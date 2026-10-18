@@ -213,17 +213,19 @@ function setPortraitUrl(ent, url, view) {
 var PORTRAIT_VIEW_CN = { front: '正面', left: '左侧面', right: '右侧面', back: '背面' };
 // v1.14：写进提示词的方向词必须**无歧义** —— 「左侧面」模型分不清是「从左边拍」还是「人朝左边」，
 // 实测左右两版都画成朝左的侧脸（两张几乎一样）。改成「相机在她的左侧 + 鼻尖朝向画面右边」。
+// v1.18：正面提示词里不许出现否定式（'看不到脸' / 'face not visible'）——
+// 扩散模型会把 face / 脸 这个 token 直接激活，实测会画出「诡异扭头回眸」甚至后脑勺长脸。
 var PORTRAIT_VIEW_SPEC_CN = {
   front: '正面，正对镜头',
   left: '相机在她的左侧，画面里是她的左半身，她的鼻尖朝向画面右边',
   right: '相机在她的右侧，画面里是她的右半身，她的鼻尖朝向画面左边',
-  back: '背面，背对镜头，看不到脸'
+  back: '背面视角，身体完全背对镜头，画面呈现后脑的发丝、后颈与背部线条'
 };
 var PORTRAIT_VIEW_SPEC_EN = {
   front: 'front view, facing the camera',
   left: 'camera on her left side, her left half toward the camera, nose pointing to the right of the frame',
   right: 'camera on her right side, her right half toward the camera, nose pointing to the left of the frame',
-  back: 'back view, facing away from the camera, face not visible'
+  back: 'from behind, back view, showing back of head, nape and back line'
 };
 
 // ── 人物列表 = 本聊天的人物表（档案跟着聊天走）──
@@ -300,12 +302,17 @@ function renderArchiveInto(body) {
 // 视角固定四套：正面（第2层默认）/ 左侧 / 右侧 / 背面（第3层手动点）。
 function _portraitTail(view, bm, underage) {
   var v = PORTRAIT_VIEW_CN[view] ? view : 'front';
+  var isBack = (v === 'back');
+  // v1.18：去掉 '无衣物遮挡' / 'no clothes' 这类否定式（会反向激活 clothes/衣物 这个 token），
+  // 改成纯正向的「全裸，赤裸肌肤」；背面视角不写表情（写了会把脸拽回来）
   if (bm === 'zit') {
-    var cloth = underage ? '，素色紧身连体打底衣' : '，全裸，无衣物遮挡';
-    return cloth + '，站立，全身（含脚），简洁纯色背景，' + (PORTRAIT_VIEW_SPEC_CN[v] || PORTRAIT_VIEW_SPEC_CN.front) + '，表情平静';
+    var cloth = underage ? '，素色紧身连体打底衣' : '，全裸，赤裸肌肤';
+    var expr = isBack ? '' : '，神态自然平静';
+    return cloth + '，自然站立，全身完整入镜（含双脚），简洁纯色背景，' + (PORTRAIT_VIEW_SPEC_CN[v] || PORTRAIT_VIEW_SPEC_CN.front) + expr;
   }
-  var c2 = underage ? ', plain tight bodysuit' : ', completely nude, no clothes, uncensored';
-  return c2 + ', standing, full body including feet, simple background, ' + (PORTRAIT_VIEW_SPEC_EN[v] || PORTRAIT_VIEW_SPEC_EN.front) + ', neutral expression';
+  var c2 = underage ? ', wearing plain tight bodysuit' : ', completely nude, bare skin, uncensored';
+  var exprEn = isBack ? '' : ', neutral calm expression';
+  return c2 + ', standing, full body including feet, simple plain background, ' + (PORTRAIT_VIEW_SPEC_EN[v] || PORTRAIT_VIEW_SPEC_EN.front) + exprEn;
 }
 function buildPortraitPrompt(ent, view, bm) {
   if (!ent) return '';

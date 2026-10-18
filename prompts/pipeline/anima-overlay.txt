@@ -14,16 +14,28 @@ Anima 系模型由两类语料共同训练：
     ② 氛围段（自然语言一句）   —— 光影 / 氛围 / 情绪，一句英文（不设字数上限，但只写光影氛围，不复述结构）
     ③ 构图段（标签）          —— 景别 / 机位 / 景深，3 个起，够用即可（不凑数）
 
-示例（结构段要**写全**：脸的全部细节 + 体型 + 衣着；**维度写全优先于写短**，不是只写十几个）：
-    luminous skin, healthy glow, soft bright light, gentle sheen,
-    asian, 1girl, solo, young woman, mature female, oval face, soft jawline, small chin, high brow bone,
-    almond eyes, downturned eyes, narrow double eyelids, long eyelashes, brown eyes, amber eyes,
-    aegyo-sal, straight eyebrows, dark brown eyebrows, straight nose bridge, small nose tip,
-    narrow nostrils, full lips, pale pink lips, fair skin, smooth skin, very long wavy hair, side part,
-    no bangs, dark brown hair, slender neck, visible collarbone, tall, narrow shoulders, narrow waist,
-    large breasts, wide hips, long legs, curvy, light blue cotton shirt, buttoned up, beige knit
-    cardigan. A warm ceiling lamp spills honey-colored light over her shoulders while the hallway
-    behind her stays dim, the air quiet and still. close-up, eye level, shallow depth of field
+⚠️ 下面是两组结构示范，两个角色脸型/年龄/气质/景别全都相反。示范的是「结构」，⛔ **不是模板** ——
+照抄任何一个 = 把所有人都画成同一个人。
+
+**示例 A · close-up · 22 岁清瘦冷感**（近景**不写胸/腰/臀/腿**）
+    girl, 22 years old, southwest chinese han, slender build, oval face, clean narrowed jawline,
+    small chin, low brow bone, monolid, thin eyelids, slightly elongated eyes, level eye corners,
+    light brown eyes, short straight eyelashes, low nose bridge, small nose tip, thin upper lip,
+    small flat mouth, pale lips, cool pale translucent skin, faint vein at temple, tiny mole at
+    outer right eye corner, long straight black hair past waist, center part, forehead exposed,
+    grey cotton smock, paint stain on cuff. A cold blue dawn light cuts through the high studio
+    window and lights only the left half of her face, the right side still in shadow. close-up,
+    eye level, shallow depth of field
+
+**示例 B · waist-up · 38 岁丰润风韵**（中景**不写腿/臀/脚**）
+    woman, 38 years old, north chinese han, full-figured figure, visible waist, round face,
+    short wide face, soft jawline, round fleshy chin, flat brow bone, shallow eye socket,
+    inner double eyelids, downturned eyes, dark brown eyes, low nose bridge, wide ala,
+    thin upper lip, full lower lip, rose lips, warm fair skin, healthy flush on cheeks,
+    natural supple skin, dark brown wavy hair in a low loose bun, stray strands at temples,
+    deep blue cotton work jacket, unbuttoned collar, sleeves rolled to forearm. A single warm
+    bulb hangs overhead in a steamy old kitchen, smoke still hanging in the air, and the room
+    goes dark outside its reach. waist-up shot, warm dim tone, shallow depth of field
 
 ## 分工表（关键，别用错）
 
@@ -55,7 +67,8 @@ Anima 系模型由两类语料共同训练：
    表里没有、或你有更贴切的写法 → **自己写一个同风格的短标签**，但**不要生造带下划线的标签**
 8. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 那一项的值 → 逐字融进结构段**最前面**。
    ⛔ 禁止写 `rough skin` / `sun spots` / `red knuckles` / `tired eyes` 这类缺陷标签（除非角色卡/正文明确要求）
-   ✅ 允许并鼓励 `luminous skin` / `glowing complexion` / `translucent` / `soft light`（只限光学）
+   ✅ 允许并鼓励 `natural supple skin` / `healthy complexion` / `soft even skin`（只限皮肤本体）
+   ⛔ 禁用高反射词（v1.18 塑料感元凶）：`luminous` `glowing` `lit from within` `glass skin` —— 画出来是硅胶娃娃
    ⛔ `refined features` / `delicate features` / `perfect face` **禁止使用** —— 那是骨相美化词，会让五官偏移
    ⛔ 别用 `beautiful` 单独顶掉肤质/五官维度 —— 它可以和维度**并存**，不能**替代**
    ⛔ **锚点里的值必须逐字出现**：`low bridge` 不许写 `straight nose bridge`；`thin upper lip` 不许写 `full lips`；
@@ -74,7 +87,7 @@ Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成�
 - 臀 / 胯：`wide hips` / `thick thighs` / `round ass` ｜ 胸肌：`pectorals` / `muscular chest` / `visible pectorals`
 - 体毛 / 生殖器：`pubic hair` / `shaved` ｜ `penis` / `pussy` / `clitoris` / `uncensored`（**只写该角色实际有的部位**，拿不准就不写）
 - 年龄：`teenage girl` / `young woman` / `mature female` / `middle-aged` / `young man`
-- ⚠️ **看不见就不写（只删 L3/L4）**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 可省睫毛/肤质等细节层
+- ⚠️ **看不见就不写**：穿着衣服且无凸显 → 不写乳头/乳晕/乳沟；远景 → 可省睫毛/肤质等细节层
   （硬写会让模型脑补出"衣服穿得好好的却莫名凸点"）
 - ⚠️ **L1 身份锚 + L2 形体锚每张必写，不受景别影响**（中景/远景也要写全，砍了就每张换脸）
 - ⛔ 结构段禁止出现角色名，全部用标签替代
@@ -93,7 +106,7 @@ Anima 系模型在缺少体型标签时**默认偏幼态（萝莉化）**。成�
 **身份锚（瞳色/痣/疤痕/罕见发色）每张必写且逐字一致** —— 这是"像不像同一个人"的核心。
 ⚠️ **跨轮复用同一个标签**：同一个人的同一个特征，这轮 `large breasts`，下轮还是 `large breasts` —— 换说法 = 长相漂移。
 
-老档案里若还是量化比例：**比例禁止进提示词**（生图模型没有对应表示，写了只是噪音），按 `ratio-to-atom.txt` 换算：
+老档案里若还是量化比例：**比例禁止进提示词**（生图模型没有对应表示，写了只是噪音），按下面换算：
     眼裂≈2.8:1 → almond eyes ｜ 眼尾下垂5° → tareme ｜ 腰宽≈0.72胸宽 → narrow waist
     C罩杯 → medium breasts ｜ 168cm/7头身 → tall, long legs ｜ 眼距≈一眼宽 →（不写）
 

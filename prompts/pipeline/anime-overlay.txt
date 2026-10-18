@@ -25,26 +25,46 @@
 7. **皮相由 aura 承载**（v1.15）：锚点里 `aura:` 的值 → 用自然语言**写在外貌描写的最前面**，润色进句子。
    ⛔ 禁止写 `her skin is rough / sun-spotted / her knuckles are red / tired eyes` 这类缺陷描述
       （除非角色卡/正文明确要求）
-   ✅ 允许并鼓励 `her skin is warm and luminous, lit from within` / `translucent` / `soft light`（只限光学）
+   ✅ 允许并鼓励 `her skin is warm and naturally supple` / `healthy complexion` / `soft even skin`（只限皮肤本体）
+   ⛔ 禁用高反射词（v1.18 塑料感元凶）：`luminous` `lit from within` `glowing` `glass skin` —— 画出来是硅胶娃娃
    ⛔ `refined features` / `delicate features` / `perfect face` **禁止使用**（骨相美化词 = 五官偏移）
    ⛔ `beautiful` 可以和维度**并存**，但不能**替代**维度
    ⛔ **锚点值逐字落地**：`low bridge` 不许写成 `a straight nose bridge`，`thin upper lip` 不许写成 `full lips`，`short wide face` 不许省
 
 ## 示例（**写成句子，不是堆词**）
 
-    A twenty-nine-year-old East Asian woman stands in the entryway. Her face is a soft oval with a full
-    forehead and a jawline that narrows gently into a small round chin. Her brow bone is flat and her
-    eyes sit shallow; her eyebrows are softly arched in dark brown and taper off naturally. Her eyes are
-    long almond-shaped with softly downturned outer corners, the upper lids a narrow double fold that
-    creases lightly when open; the irises are dark brown with a warm amber layer that catches a ring of
-    gold in the light, her lashes long and naturally curved with a faint aegyo-sal beneath. Her nose
-    bridge is straight with a small tip and narrow nostrils; her lips are full, the lower slightly
-    heavier, in pale pink. Her skin is fair with a warm undertone and a smooth, lightly glowing texture.
-    Her hair is shoulder-length and wavy, loosely curled at the ends, side-parted with no bangs, dark
-    brown and thick. She wears a light cotton shirt buttoned to the second button with a beige knit
-    cardigan draped loose over her shoulders, and a dark pencil skirt that hugs her hips. She stands in
-    the entryway holding a bag in both hands, leaning slightly forward, smiling toward the door. A warm
-    ceiling lamp casts honey light down over her shoulders. close-up, eye level, shallow depth of field.
+**⚠️ 两组对照：脸型 / 年龄 / 气质 / 景别全都相反。示范的是结构，⛔ 不是模板 ——
+照抄任何一个 = 把所有人都画成同一个人。**
+
+**示例 A · close-up · 22 岁清瘦冷感**（近景**不写胸 / 腰 / 臀 / 腿**）
+
+    It is before dawn in a bare art studio, and a cold blue light cuts in through the high window,
+    lighting only one half of her face while the other stays in shadow. She is twenty-two, a Han woman
+    from the southwest, with a clean oval face whose jawline narrows to a small chin. Her brow bone is
+    low and her lids are thin and single-folded; her eyes are long with level corners, and the irises
+    are light brown beneath short, straight lashes. Her nose bridge is low with a small tip, and her
+    upper lip is thin, the mouth small and flat, the lips pale. Her skin is cool and pale, translucent
+    enough to show a faint vein at the temple, and there is a tiny mole a little outside the corner of
+    her right eye. Her hair is long, straight and black, falling past her waist, center-parted with the
+    forehead exposed, strands clinging to her neck. She wears a grey cotton smock worn thin, with a
+    smudge of paint on the cuff; she turns back over her shoulder from the easel with a brush still in
+    her hand, her shoulders dropped, her head tilted slightly away from the viewer. near the easel,
+    paint tins on the floor, the window still dark outside. close-up, shallow depth of field, cold and
+    quiet tone.
+
+**示例 B · waist-up · 38 岁丰润风韵**（中景**不写腿 / 臀 / 脚**）
+
+    It is early evening in the kitchen of an old restaurant, one warm bulb hanging overhead and the
+    cooking smoke still hanging in the air; she leans against the sink and looks up. She is
+    thirty-eight, a Han woman from the north, with a round face that is short and wide, a soft jawline
+    and a fleshy round chin. Her brow bone is flat and her eye sockets are shallow; her lids are a faint
+    inner double fold and the outer corners of her eyes droop slightly, the irises dark brown. Her nose
+    bridge is low with a wide ala, her upper lip thin and her lower lip full, the lips a natural rose
+    red. Her skin is warm and fair with a healthy flush across the cheeks. Her dark brown hair is
+    wavy, gathered low and loose at the back of her head with a few strands escaping at the temples.
+    She wears a deep blue cotton work jacket with the collar left open, sleeves rolled up to the
+    forearm, a dishcloth still in one hand; her figure is full with the waist still in evidence, and
+    her shoulders are soft. waist-up shot, warm dim tone, shallow depth of field.
 
 ## 动态字段转英文
 - `发型:黑色低发髻，斜刘海` → `black hair in a low bun with side bangs`
@@ -72,7 +92,7 @@
   并通过 `---PROFILE---` 的 `anchor` 字段回传**英文**锚点（维度名与值全英文）。
 按 `atomic-vocab.txt` 取词（**参考库不是白名单**：表里没有、或你有更贴切的写法 → 自己写一个同风格的原子词）。
 ⚠️ **跨轮复用同一个词**：同一个人的同一个特征，这轮写 `large breasts`，下轮还得是 `large breasts` —— 换说法 = 长相漂移。
-老档案（base）里若还是量化比例：**比例禁止进提示词**，按 `ratio-to-atom.txt` 换算成英文档位词：
+老档案（base）里若还是量化比例：**比例禁止进提示词**，按下面换算成英文档位词：
 
     眼裂≈2.8:1      → almond eyes
     眼尾下垂5°       → downturned eyes（动漫专有词：tareme）

@@ -64,10 +64,17 @@ export function extractImagePrompt(rawText, imageTag, fromIndex) {
 export function cleanAnimePrompt(prompt) {
     if (!prompt) return prompt;
     return prompt
-        .replace(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+[：:]\s*[^,\n]+/g, '')
-        .replace(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+/g, '')
-        .replace(/\s*,\s*,+/g, ',')
-        .replace(/,\s*$/, '')
+        // [Fix v1.18] 旧版把全角标点连同汉字一起删掉：'asian，1girl，solo' → 'asian1girlsolo'（粘连）
+        // 现在先把全角分隔符归一化成半角，再删残留中文
+        .replace(/[\u4e00-\u9fff]+\s*[：:]\s*[\u4e00-\u9fff]+/g, '')
+        .replace(/[，、；]/g, ', ')
+        .replace(/[。]/g, '. ')
+        .replace(/[（]/g, '(').replace(/[）]/g, ')').replace(/[：]/g, ': ')
+        .replace(/[\u2e80-\u2eff\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/(?:\s*,\s*)+/g, ', ')
+        .replace(/\.\s*,/g, '.')
+        .replace(/^[,.\s]+|[,.\s]+$/g, '')
         .trim();
 }
 

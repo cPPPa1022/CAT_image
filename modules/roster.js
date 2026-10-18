@@ -677,16 +677,8 @@ export function rosterEntries() {
 // 记忆点更完整、四个视角也更自洽。
 export var PORTRAIT_VIEWS = ['front', 'left', 'right', 'back'];
 
-// v1.26.2：立绘指纹。立绘是"锚点的派生缓存"，不是每轮重写的东西 ——
-// 实测同一角色 6 次立绘：身高 168→163→中等、肩线 柔和→平顺→略厚、乳晕 浅粉→浅褐→浅粉，
-// 而场景提示词用冻结锚点、一直是同一套值 → 立绘和文中人物越走越远。
-function _portraitSig(e) {
-    var t = String((e && e.anchor) || '') + '|' + String((e && e.anchor_zh) || '') + '|' + String((e && e.base) || '');
-    var h = 0;
-    for (var i = 0; i < t.length; i++) { h = ((h << 5) - h + t.charCodeAt(i)) | 0; }
-    return String(h) + ':' + t.length;
-}
-
+// v1.26.4：立绘是「首次出场」的一次性基准（给用户看的人物初始状态），不是每轮状态。
+// 首次写入后**永不覆盖** —— 后续轮次/后续重写都不许替换基准。
 export function setPortraitPrompts(name, identity, obj) {
     try {
         if (!obj || typeof obj !== 'object') return false;
@@ -696,9 +688,9 @@ export function setPortraitPrompts(name, identity, obj) {
         if (!e) return false;
         var cur = e.portraitPrompts || {};
         var modeNow = getActiveMode() || 'zit';
-        var sig = _portraitSig(e);
         // 冻结：已有立绘 + 同一语言模式 + 锚点/档案没变 → 保留旧的，不被新一轮的改写覆盖
-        if (cur.front && cur.mode === modeNow && cur.sig === sig) return false;
+        // 已有立绘 = 已定基准 → 直接忽略本轮回传（首次写入后永不覆盖）
+        if (cur.front) return false;
         var n = 0;
         for (var i = 0; i < PORTRAIT_VIEWS.length; i++) {
             var v = PORTRAIT_VIEWS[i];
@@ -709,7 +701,6 @@ export function setPortraitPrompts(name, identity, obj) {
         }
         if (!n) return false;
         cur.mode = modeNow;   // 记住是哪套模式语言写的（中文/英文不许混用）
-        cur.sig = sig;        // 记住生成时的锚点指纹（锚点变了才允许重写）
         e.portraitPrompts = cur;
         return true;
     } catch (e2) { return false; }

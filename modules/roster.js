@@ -514,7 +514,8 @@ export function rosterDataTextFor(nameList) {
                         // 没有 aura 的后果：皮相只能按模型先验补 = 画出来是"真实路人脸"（丑的根源）
                         if (!/(^|\|\s*)(aura|气质)\s*[:：]/i.test(String(_atom))) {
                             nmLines.push('   ⭐ 这位的锚点里还缺【美学基调 aura】（v1.15 新增 · 必须是锚点第一个维度）—— 本轮请按种子补上：'
-                                + '取「她美在哪 / 皮相往哪个方向」，用光学质感词写（如 aura:warm luminous skin, healthy glow, refined features），'
+                                + '取「她美在哪 / 皮相往哪个方向」，**只用光学与肤质词**（如 aura:natural supple skin, healthy complexion, soft even skin），'
+                                + '⛔ 严禁 refined features / delicate features / 骨相精致 这类骨相词（会让五官偏移），'
                                 + '并以「**旧文原样 + aura:…**」的形式回传 anchor，**其余维度一个字不许改**。'
                                 + '没有 aura = 皮相交给模型先验 = 画出来是真实路人脸。');
                         }
@@ -734,7 +735,7 @@ function _ageNumUnder18(t) {
     _AGE_NUM_RE.lastIndex = 0;
     while ((m = _AGE_NUM_RE.exec(t)) !== null) {
         n = parseInt(m[1], 10);
-        if (n > 0 && n < 18) return false;
+        if (n > 0 && n < 18) return true;   // [Fix v1.17.1] 原为 false —— 命中未成年却返回"不是未成年"，闸门永久失效
     }
     _AGE_CN_RE.lastIndex = 0;
     while ((m = _AGE_CN_RE.exec(t)) !== null) {
@@ -742,7 +743,7 @@ function _ageNumUnder18(t) {
         n = _AGE_CN_VAL[s] || 0;
         if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
         if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
-        if (n > 0 && n < 18) return false;
+        if (n > 0 && n < 18) return true;   // [Fix v1.17.1] 同上
     }
     return false;
 }
@@ -762,7 +763,7 @@ export function isUnderageEntry(entry) {
             var m;
             while ((m = _AGE_DIM_RE.exec(texts[k])) !== null) {
                 var val = String(m[1] || '').trim();
-                if (val && _AGE_TIER_RE.test(val)) return false;
+                if (val && _AGE_TIER_RE.test(val)) return true;   // [Fix v1.17.1] 原为 false —— age:teenage girl 被判成"成年"
             }
         }
         return false;

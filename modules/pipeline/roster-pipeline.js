@@ -406,14 +406,22 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
             prompt = String(prompt).replace(/[，,]?\s*要点\s*[:：]/g, '，').replace(/，{2,}/g, '，');
             var _nm = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (n) { return n.length >= 2; });
             if (_nm.length) {
-                var _segs = prompt.split('，');
-                var _kept = [];
-                for (var _si2 = 0; _si2 < _segs.length; _si2++) {
-                    var _sg = _segs[_si2]; var _hasName = false;
-                    for (var _ni = 0; _ni < _nm.length; _ni++) { if (_sg.indexOf(_nm[_ni]) >= 0) { _hasName = true; break; } }
-                    if (!_hasName) _kept.push(_sg);
+                // [Fix v1.17.1] 原实现按 '，' 切分后把含人名的**整段**丢弃，有两个致命后果：
+                //   ① 英文模式（anima/anime/anime_tag）提示词用半角逗号 → split 只得到 1 段
+                //      → 只要整条里出现人名，**整条提示词被清空**，ComfyUI 画出随机图
+                //   ② 中文模式会连带删掉同一分句里的外貌/动作描写（"白璐穿白衬衫站在门口" 整句蒸发）
+                // 现改为：只剔除人名自身与其后的括号身份标签，其余文字一个不删。
+                for (var _ni = 0; _ni < _nm.length; _ni++) {
+                    var _p2 = _nm[_ni].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    prompt = prompt
+                        .replace(new RegExp(_p2 + '\\s*[（(][^）)]*[）)]', 'g'), '')
+                        .replace(new RegExp(_p2, 'g'), '');
                 }
-                prompt = _kept.join('，').replace(/，{2,}/g, '，').replace(/[，,、\s]+$/, '');
+                prompt = prompt
+                    .replace(/[，,]\s*[，,]+/g, '，')
+                    .replace(/^\s*[，,、。.\s]+/, '')
+                    .replace(/[，,、\s]+$/, '')
+                    .trim();
             }
         } catch (eTail) {}
         // v1.9.0：状态兜底 —— 本轮激活的状态详情必须出现在提示词里，缺了就补

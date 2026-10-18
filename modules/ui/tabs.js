@@ -12,6 +12,7 @@ import { cleanAnimePrompt } from '../text-utils.js';
 import { rosterEntries, atomValues, atomCount, getAtomAnchor, getPortraitPrompt, portraitPromptsMode, isUnderageEntry } from '../roster.js';
 import { composeFinalPrompt } from '../comfyui.js';
 import { activeStatuses, setStatusActive } from '../statuses.js';
+import { galleryList, galleryCount, galleryRemove, galleryClearChat, galleryPrune } from '../gallery.js';
 import { openSubPanel } from './sub-panels.js';
 import * as panel from './panel.js';
 var pushPage = panel.pushPage;
@@ -55,6 +56,7 @@ export function renderHomeTab() {
   h += groupTitle('角色与世界');
   h += '<div style="' + card() + ';padding:4px 8px;">';
   h += cell('🐾', '角色档案', '人物外貌锚点 · 生成立绘', (_pn ? '已建档 ' + _pn + ' 人' : '暂无档案'), 'data-nav="archive"');
+  h += cell('🖼️', '图库', '所有出过的图 · 按聊天归档 · 可逐张删', (galleryCount() ? galleryCount() + ' 张' : '空'), 'data-nav="gallery"');
   h += cell('🧶', '剧情库', '每轮正文自动存档 · 标签 · 总结', storyCountText(), 'data-nav="story"');
   h += '</div>';
   h += groupTitle('生图与设置');
@@ -79,6 +81,7 @@ export function renderHomeTab() {
   body.off('click', '.sl-cell[data-nav]').on('click', '.sl-cell[data-nav]', function () {
     var nav = jQuery(this).data('nav');
     if (nav === 'archive') renderArchivePage();
+    else if (nav === 'gallery') renderGalleryPage();
     else if (nav === 'story') renderStoryPage();
     else if (nav === 'comfy') openSubPanel('comfy');
     else if (nav === 'aux') openSubPanel('aux');
@@ -587,3 +590,74 @@ export function renderLogPage() {
 }
 
 export function showLogViewer() { renderLogPage(); }
+
+// ═══════════ 子页：图库（v1.21） ═══════════
+// 所有产出过的图（聊天配图 + 立绘）都记在这里，按【角色卡 × 聊天】归档。
+// 删这里只是删账本，png 文件仍在 /user/images/ 下（浏览器删不了服务器文件）。
+export function renderGalleryPage() {
+  pushPage(function (body) { renderGalleryInto(body); }, '图库', { key: '图库' });
+}
+
+function renderGalleryInto(body) {
+  var list = [], total = 0;
+  try { list = galleryList(); } catch (e) {}
+  for (var i = 0; i < list.length; i++) total += list[i].items.length;
+  var h = '<div style="' + card() + ';padding:12px 14px;">';
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+  h += '<span style="flex:1;font-size:11px;color:' + CAT.sub + ';">' + total + ' 张 · ' + list.length + ' 场聊天</span>';
+  h += '<button id="sl_gal_prune" style="' + btnSm() + 'font-size:10px;padding:6px 12px;">清理已删聊天</button>';
+  h += '</div>';
+  h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-top:4px;line-height:1.5;">按聊天归档：删掉聊天文件后点「清理已删聊天」，那场聊天的图账与消息图缓存会一起清掉（png 文件本身不删）</div>';
+  if (!total) {
+    h += empty('还没有出过图，出图后会自动进这里', '🖼️');
+  } else {
+    for (var g = 0; g < list.length; g++) {
+      var grp = list[g];
+      h += '<div style="margin-top:14px;">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">';
+      h += '<span style="font-size:11px;font-weight:700;color:' + CAT.text + ';">' + esc(grp.label) + '</span>';
+      h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + grp.items.length + ' 张</span>';
+      if (grp.current) h += '<span style="' + chip(CAT.accent + '1F', CAT.accent) + '">当前</span>';
+      h += '<span style="flex:1;"></span><button class="sl_gal_clear" data-chat="' + escAttr(grp.chatKey) + '" style="font-size:9.5px;border:none;background:none;color:' + CAT.red + ';cursor:pointer;padding:2px 4px;">清空</button>';
+      h += '</div>';
+      h += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+      for (var j = 0; j < grp.items.length; j++) {
+        var it = grp.items[j];
+        var title = it.scene || (it.kind === 'portrait' ? '立绘' : it.file);
+        h += '<div style="position:relative;">';
+        h += '<img class="sl_gal_img" data-url="' + escAttr(it.url || '') + '" src="' + escAttr(it.url || '') + '" title="' + escAttr(title) + '" style="width:92px;height:124px;object-fit:cover;border-radius:10px;border:1px solid ' + CAT.line + ';cursor:zoom-in;display:block;background:' + CAT.card + ';">';
+        h += '<button class="sl_gal_del" data-chat="' + escAttr(grp.chatKey) + '" data-file="' + escAttr(it.file) + '" style="position:absolute;top:3px;right:3px;width:18px;height:18px;border:none;border-radius:9px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;line-height:18px;padding:0;cursor:pointer;">✕</button>';
+        h += '</div>';
+      }
+      h += '</div></div>';
+    }
+  }
+  h += '</div>';
+  body.html(h);
+  body.off('click', '.sl_gal_img').on('click', '.sl_gal_img', function () {
+    var u = jQuery(this).data('url'); if (u) window.open(u, '_blank');
+  });
+  body.off('click', '.sl_gal_del').on('click', '.sl_gal_del', function () {
+    var b = jQuery(this);
+    if (galleryRemove(b.data('chat'), b.data('file'))) { saveSettings(); toast('success', '已从图库移除'); }
+    renderGalleryInto(body);
+  });
+  body.off('click', '.sl_gal_clear').on('click', '.sl_gal_clear', function () {
+    var ck = jQuery(this).data('chat');
+    if (!confirm('清空这场聊天的图库记录？（png 文件不会删）')) return;
+    var n = galleryClearChat(ck); saveSettings();
+    toast('success', '已清空 ' + n + ' 张记录'); renderGalleryInto(body);
+  });
+  body.off('click', '#sl_gal_prune').on('click', '#sl_gal_prune', async function () {
+    var b = jQuery(this); b.prop('disabled', true).text('清理中…');
+    try {
+      var r = await galleryPrune();
+      if (!r.ok) toast('warning', '拿不到聊天列表（酒馆接口不可用），本次没动');
+      else if (!r.removedChats) toast('success', '没有已删除的聊天，图账是干净的');
+      else toast('success', '清掉 ' + r.removedChats + ' 场 / ' + r.removedImages + ' 张图 / ' + r.removedCaches + ' 条缓存');
+      saveSettings();
+    } catch (e) { toast('error', '清理失败'); }
+    b.prop('disabled', false).text('清理已删聊天');
+    renderGalleryInto(body);
+  });
+}

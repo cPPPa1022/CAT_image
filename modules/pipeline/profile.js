@@ -2,6 +2,7 @@
 // 职责：角色卡扫描、档案增删查、NPC 生命周期、[FACE] 占位符解析
 import { slLog, slErr } from '../log.js';
 import { settings, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
+import { imgStoreDeletePrefix } from '../imgstore.js';
 import { imgCacheSet } from '../cache.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
@@ -469,6 +470,8 @@ export function deleteCharacterProfile(fullDelete) {
         for (var k in msgMap) {
             if (k.indexOf(prefix) === 0) { delete msgMap[k]; }
         }
+        // v1.22：图片缓存已搬到 IndexedDB，这里同步清（否则刷新后又被装回来）
+        try { imgStoreDeletePrefix(prefix); } catch (eIM) {}
         // 清理 img 缓存
         try { localStorage.removeItem('slimg_cache'); } catch(e) {}
         // 清理 DOM 里的 img 卡片

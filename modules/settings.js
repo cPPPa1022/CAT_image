@@ -59,6 +59,9 @@ export function getDefaults() {
     directorCastImport: false,
     // v1.9.0 状态库（时效性状态：晒黑/吻痕/淤青/染发…）—— 按 [角色卡][聊天ID] 存，和造型库同构
     statuses: {},
+    // v1.21.0 图库：所有产出过的图都记一份账 → settings.gallery[角色卡][聊天ID][文件名] = { ts, url, kind }
+    // 独立于 msgMap（v1.22 起 msgMap 住 IndexedDB、不再随设置落盘；图库是"这张图属于哪场聊天"的账本）
+    gallery: {},
         // ── v1.1.2 前端卡桥（重前端卡支持）──
         // feBridge: 接管"前端卡"（酒馆助手 iframe 应用）配图。这类卡的叙事正文由卡自己调
         //   TavernHelper.generate 生成、画在自己的 UI 里，从不进聊天消息 → 插件扫描永远扫不到。
@@ -117,10 +120,19 @@ export function escapeHtml(text) {
 // ── 设置持久化（localStorage + extension_settings 双存） ──
 export function saveSettings() {
     try {
-        localStorage.setItem('sillab_settings', JSON.stringify(settings));
+        // v1.22：msgMap / msgMapTs **不再随设置落盘**——它们现在住 IndexedDB（modules/imgstore.js）。
+        // 原因：saveSettings 写的是整份 settings，localStorage 只有几 MB，
+        // 图片缓存只能被压到 50 条（还是全库共享）→ 几十轮后历史图消失。
+        var _blob = settings;
+        if (settings.msgMap || settings.msgMapTs) {
+            _blob = Object.assign({}, settings);
+            delete _blob.msgMap;
+            delete _blob.msgMapTs;
+        }
+        localStorage.setItem('sillab_settings', JSON.stringify(_blob));
         if (_extensionSettings) {
             if (!_extensionSettings.sillab) _extensionSettings.sillab = {};
-            _extensionSettings.sillab = JSON.parse(JSON.stringify(settings));
+            _extensionSettings.sillab = JSON.parse(JSON.stringify(_blob));
         }
     } catch (e) { console.log('[sillab] saveSettings异常: ' + e.message); }
 }

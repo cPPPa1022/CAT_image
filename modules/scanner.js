@@ -5,6 +5,8 @@ import { extractBodyText, extractBodyContent, imgBlockHead } from './text-utils.
 import { getProfiles, getChatId } from './pipeline/profile.js';
 import { runRosterPipeline } from './pipeline/roster-pipeline.js';
 import { refreshCoopCards } from './sync-cards.js';
+import { galleryPrune } from './gallery.js';
+import { imgStorePut, imgStoreDeletePrefix } from './imgstore.js';
 import { renderEnhancedLite, setRestoreDeps, restoreImageBlocks } from './render.js';
 
 // 注入 render 模块需要的依赖
@@ -202,20 +204,12 @@ export async function runAuxImageScan(messageElement) {
         }
         var key = getMsgKey(chatId, mesId, freshMsg.text());
         // 导演模式：只替换 [img:] 占位符为图卡，正文/状态栏原文保留（不重建）
-        settings.msgMap[key] = enhanced;
-        if (!settings.msgMapTs) settings.msgMapTs = {};
-        settings.msgMapTs[key] = Date.now();
+        // v1.22：图片缓存改走 IndexedDB（imgstore）→ 不再有"全库 50 条"的硬上限，
+        //        一轮 1-3 张图也不会在几十轮之后把老图挤掉。
+        imgStorePut(key, enhanced, Date.now());
         renderEnhancedLite(freshMsg, enhanced, key);
-        var keys = Object.keys(settings.msgMap);
-        if (keys.length > 50) {
-            var tsMap = settings.msgMapTs || {};
-            var oldestK = keys[0], oldestT = tsMap[oldestK] || 0;
-            for (var i = 1; i < keys.length; i++) { var t = tsMap[keys[i]] || 0; if (t && t < oldestT) { oldestK = keys[i]; oldestT = t; } }
-            delete settings.msgMap[oldestK];
-            delete tsMap[oldestK];
-        }
         saveSettings();
-        slLog('增强文本已缓存, key=' + key + ' (共' + keys.length + '条缓存)');
+        slLog('增强文本已缓存, key=' + key + ' (共' + Object.keys(settings.msgMap || {}).length + '条缓存)');
         slLog('管线完成, img块:' + (enhanced.match(/\[image:/g) || []).length);
         if (scanSession) scanSession.phase = 'completed';
         scanAllMsgs();
@@ -283,6 +277,8 @@ export function clearMsgCache(chid, mesid) {
     for (var k in (settings.msgMap || {})) {
         if (k.indexOf(prefix) === 0) { delete settings.msgMap[k]; slLog('清理旧缓存: ' + k); }
     }
+    // v1.22：IndexedDB 里同前缀的一起清（否则刷新后又被装回来）
+    imgStoreDeletePrefix(prefix);
 }
 
 // ── 轮询 + 事件钩子注册 ──
@@ -433,6 +429,13 @@ export function startPolling() {
             slLog('检测到聊天切换喵~ 清理旧会话中… ✨');
             if (scanSession) { clearTimeout(scanSession.timer); scanSession = null; }
             try { refreshCoopCards(); } catch (e) { slLog('协作卡刷新异常: ' + e.message); }
+            // v1.21 图库级联：切聊天时顺手清掉"聊天文件已不存在"的图账与消息图缓存（60s 节流）
+            try {
+                if (!startPolling._galPruneTs || Date.now() - startPolling._galPruneTs > 60000) {
+                    startPolling._galPruneTs = Date.now();
+                    galleryPrune().catch(function () {});
+                }
+            } catch (eGP) { slLog('图库清理跳过: ' + eGP.message); }
             var last = jQuery('.mes_text').last();
             setTimeout(function() { restoreImageBlocks(); scanAllMsgs(); }, 2000);
         };

@@ -145,11 +145,54 @@ export function upsertEntry(slot, key, detail, src) {
 }
 
 // 解析一批造型段 → { resolved:[{slot,key,detail,level}], pending:[{slot,key}], unmatched:[] }
+// v1.21 跨聊天兜底：造型库仍按聊天存（换聊天换衣柜），但**同一张卡在别的聊天里已经具象化过的同一套造型**可以直接复用。
+//   ① 只做 exact / norm 两级（不做 charset —— 跨聊天用模糊匹配容易把 A 套装认成 B 套装）
+//   ② 命中后把条目复制进当前聊天，之后就是原生命中（下一轮不再依赖兜底）
+//   ③ 多条命中取 ts 最新的那条
+function _strictHit(list, query) {
+    if (!list) return null;
+    if (list[query] && list[query].detail) return list[query];
+    var nq = normKey(query);
+    if (!nq) return null;
+    var keys = Object.keys(list), best = null;
+    for (var i = 0; i < keys.length; i++) {
+        if (normKey(keys[i]) !== nq) continue;
+        var e = list[keys[i]];
+        if (!e || !e.detail) continue;
+        if (!best || (e.ts || 0) > (best.ts || 0)) best = e;
+    }
+    return best;
+}
+
 export function resolveSlots(styleGroups) {
     try {
         var w = ensureWardrobe();
         if (!w) return { resolved: [], pending: [] };
-        return resolveAgainstList(w.list, styleGroups);
+        var r = resolveAgainstList(w.list, styleGroups);
+        if (r.pending.length) {
+            var _bag = (settings.wardrobe || {})[w.charName] || {};
+            var _others = [];
+            for (var _id in _bag) {
+                if (_id === w.chatId) continue;
+                if (_bag[_id] && Object.keys(_bag[_id]).length) _others.push({ id: _id, list: _bag[_id] });
+            }
+            if (_others.length) {
+                var _still = [];
+                for (var _pi = 0; _pi < r.pending.length; _pi++) {
+                    var _p = r.pending[_pi], _hit = null, _from = '';
+                    for (var _oi = 0; _oi < _others.length; _oi++) {
+                        var _h = _strictHit(_others[_oi].list, _p.key);
+                        if (_h && (!_hit || (_h.ts || 0) > (_hit.ts || 0))) { _hit = _h; _from = _others[_oi].id; }
+                    }
+                    if (!_hit) { _still.push(_p); continue; }
+                    w.list[_hit.key] = { key: _hit.key, slot: _hit.slot || _p.slot, detail: _hit.detail, src: _hit.src || 'expanded', ts: _hit.ts || Date.now() };
+                    r.resolved.push({ slot: _p.slot, query: _p.key, key: _hit.key, detail: _hit.detail, level: 'cross-chat', fromChat: _from });
+                    slLog('造型跨聊天复用: ' + _p.key + ' ← ' + _from);
+                }
+                r.pending = _still;
+            }
+        }
+        return r;
     } catch (e) { slLog('造型解析异常: ' + e.message); return { resolved: [], pending: [] }; }
 }
 

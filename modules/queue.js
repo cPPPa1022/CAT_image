@@ -4,7 +4,16 @@ import { settings, COLORS, getSTContext, getActiveMode, isEnglishMode, escapeHtm
 import { imgCacheSet, imgCacheSetById } from './cache.js';
 import { generateImage } from './comfyui.js';
 import { cleanAnimePrompt } from './text-utils.js';
-import { resolveFacePrompt } from './pipeline/profile.js';
+import { resolveFacePrompt, getCharacterName, getChatId } from './pipeline/profile.js';
+import { galleryAdd } from './gallery.js';
+
+// v1.21：生成时刻的归属（图库按【角色卡 × 聊天】归档）。入队时抓一次，避免排队期间切聊天串台。
+function _genOwner() {
+    var o = { charName: '', chatKey: '' };
+    try { o.charName = getCharacterName() || ''; } catch (e) {}
+    try { o.chatKey = getChatId() || ''; } catch (e) {}
+    return o;
+}
 
 var imageQueue = [];
 var queueRunning = false;
@@ -21,6 +30,15 @@ async function processImageQueue() {
         if (isEnglishMode()) { var _clean = cleanAnimePrompt(prompt); if (_clean) prompt = _clean; }
         var result = await generateImage(workflow, prompt);
         imgCacheSet(task.prompt, result.url);
+        // v1.21 图库：每张产出的图都记一笔（独立账本，不受 msgMap 50 条上限影响）
+        try {
+            galleryAdd(result.url, {
+                kind: task.custom ? 'portrait' : 'chat',
+                scene: task.scene || (task.custom ? String(task.id || '').replace(/^portrait_/, '立绘_') : ''),
+                charName: task.charName,
+                chatKey: task.chatKey
+            });
+        } catch (eG) { slLog('图库记录跳过: ' + eG.message); }
         // [Fix] 图块精确缓存：按块标识（消息key#序号）记录，同一提示词内容不再互相覆盖
         var _slid = task.btn && task.btn.data ? task.btn.data('slid') : '';
         if (_slid) imgCacheSetById(_slid, result.url);
@@ -69,14 +87,17 @@ async function processImageQueue() {
 export function enqueueGen(btn, prompt) {
     var id = 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
     btn.text('排队中\u2026').css({ background: COLORS.orange, color: '#fff' }).off('click');
-    imageQueue.push({ id: id, btn: btn, prompt: prompt });
+    var _own = _genOwner(), _scene = '';
+    try { _scene = String(btn.closest('.sl_img_block').find('div').first().text() || '').replace(/^🖼️\s*/, '').slice(0, 60); } catch (eS) {}
+    imageQueue.push({ id: id, btn: btn, prompt: prompt, scene: _scene, charName: _own.charName, chatKey: _own.chatKey });
     slLog('入队:', id, '队列长度:', imageQueue.length);
     processImageQueue();
 }
 
 // [Fix] 通用排队任务（立绘等非聊天图按钮的生成）：与聊天图共用同一队列，串行打 ComfyUI
 export function enqueueTask(id, prompt, onSuccess, onFail) {
-    imageQueue.push({ id: id, prompt: prompt, custom: { onSuccess: onSuccess, onFail: onFail } });
+    var _own = _genOwner();
+    imageQueue.push({ id: id, prompt: prompt, custom: { onSuccess: onSuccess, onFail: onFail }, charName: _own.charName, chatKey: _own.chatKey });
     slLog('入队(任务):', id, '队列长度:', imageQueue.length);
     processImageQueue();
 }

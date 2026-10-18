@@ -3,10 +3,10 @@
 // v1.2 起为唯一管线（旧画师管线 runAuxPipeline 已移除）
 
 import { slLog, slErr } from '../log.js';
-import { settings, getActiveMode, saveSettings } from '../settings.js';
+import { settings, getActiveMode, isEnglishMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch, findLostNumbers } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch, findLostNumbers, factsToPromptPrefix, wrapFactSpan } from '../text-utils.js';
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues, setPortraitPrompts } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
@@ -84,6 +84,10 @@ export function findLostPlaces(placeholders, prompts) {
     }
     return out;
 }
+
+// ── v1.23 事实通道（无词表）：`事实:` 段原样拼进提示词，校验用归一化逐字包含 ──
+import { missingFacts } from '../facts.js';
+
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
     var parts = [];
@@ -122,6 +126,12 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
     lines.push('【输出格式·必须严格遵守·PROFILE 与 IMAGES 漏一段整轮作废】');
     lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n[---WARDROBE---\n{造型具象化 JSON}---END---  ← **仅当【造型库】有「待具象化」条目时才输出这一段；没有就整段省略**]\n\n[---STATUSES---\n{状态具象化 JSON}---END---  ← **仅当【状态库】有「待具象化」条目时才输出；没有就整段省略**]\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
     lines.push('只输出以上段落，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
+    lines.push('');
+    lines.push('【事实段·逐字通道】有些信息是**事实**不是描写（怀孕16周 / 左臂截肢 / 化疗第三期 / 戴金丝细框眼镜 / 怀双胞胎 …）。');
+    lines.push('  · 插件会把这些事实**原样拼在每条提示词的最前面**（权重最高处），你**不需要复述它们**；');
+    lines.push('  · ⛔ 但你**不许在提示词里改写、软化或否认它们**：把「截肢」写成「手臂有伤」、把「怀孕16周」写成「小腹微隆」、把「化疗」写成「气色不好」都算错；');
+    lines.push('  · ✅ 你该做的是写事实的**可见后果**：孕肚的隆起弧度与位置、空袖管怎么别进腰带、头巾的包法、义眼的反光 —— 让描写与事实不冲突；');
+    lines.push('  · 提示词最前面那串事实是既定前提，你的描写必须能跟它同时成立。');
     lines.push('');
     lines.push('【人物档案】（按本轮占位符注明的人物名字过滤，插件自动匹配——同名不同身份全部给出，由你按场景选用；写提示词必须引用外貌锚点，禁止只写名字）');
     var _phNames = [];
@@ -176,6 +186,8 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
             }
             if (ph.seed) lines.push('   种子：' + ph.seed);
             if (ph.topic) lines.push('   要点：' + ph.topic.replace(/\n/g, '；'));
+            // v1.21：这一条占位符里的状态事实（怀孕/绷带/纹身…）→ 点名要求出现事实词
+            if (ph.facts && ph.facts.length) lines.push('   事实（插件会逐字放在提示词最前，不用复述；⛔ 你的描写不许与它冲突）：' + ph.facts.join('；'));
             // [Fix] 动态要素保真：酒馆AI写的本轮可变内容（衣着/发型/表情/光线/氛围/动作）逐项列出，
             // 插件AI 必须逐项润色进提示词（这是评分重点）
             var _dyn = extractDynamicBits((ph.scene || '') + ' ' + (ph.topic || '') + ' ' + (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join(' '));
@@ -439,6 +451,18 @@ export function fillPlaceholders(bodyText, placeholders, prompts) {
                         slLog('⚠️ 状态 detail 未逐字命中（仅告警不补入，交给自检清单）: ' + ph._statuses[_sk2].key);
                     }
                 }
+            }
+        }
+        // ── v1.23 事实通道：`事实:` 段原样放在提示词最前面（cond 权重最高处），任何环节不许改写 ──
+        // 位置的约定替代了词表：不问"这是什么事实"，只保证"写进事实段的字符串一定出现在提示词里"。
+        if (ph.facts && ph.facts.length) {
+            var _factPrefix = factsToPromptPrefix(ph.facts);
+            if (_factPrefix) {
+                var _fpWrap = isEnglishMode() ? wrapFactSpan(_factPrefix) : _factPrefix;
+                prompt = prompt ? (_fpWrap + '，' + prompt) : _fpWrap;
+                var _missFact = missingFacts(ph.facts, prompt);
+                if (_missFact.length) slErr('⛔ 事实通道异常（拼入后仍找不到，可能被改写/清洗吃掉）: ' + _missFact.join('、'));
+                else slLog('事实通道: ' + ph.facts.join('；'));
             }
         }
         return buildImageBlock(ph.scene, prompt);

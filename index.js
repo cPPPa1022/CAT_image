@@ -7,8 +7,9 @@ import { loadPrompts } from './prompts/loader.js';
 import { slLog, slErr, slLogDump, getLogCount } from './modules/log.js';
 import { initSettings, settings, getDefaults, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings } from './modules/settings.js';
 import { buildUI } from './modules/ui.js';
-import { setEnqueueGen } from './modules/render.js';
+import { setEnqueueGen, restoreImageBlocks } from './modules/render.js';
 import { enqueueGen } from './modules/queue.js';
+import { imgStoreInit } from './modules/imgstore.js';
 import { startPolling, stopPolling, getScannerStatus, hasCastCache } from './modules/scanner.js';
 import { refreshCoopCards } from './modules/sync-cards.js';
 import { cleanLegacyAnchors } from './modules/roster.js';
@@ -16,8 +17,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.20.0';
-slLog('LOADED v1.20.0');
+window.SILLYLAB_VERSION = 'v1.23.0';
+slLog('LOADED v1.23.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -36,6 +37,14 @@ try {
     Object.assign(settings, getDefaults());
     slLog('设置加载失败，使用默认值: ' + e.message);
 }
+
+// ── v1.22：图片缓存仓（IndexedDB）──
+// 历史图缓存不再随设置进 localStorage（那里只够放 50 条、还是全库共享）。
+// 这里把 IDB 里的缓存装回内存，装完立刻恢复一次历史消息里的图。
+imgStoreInit().then(function (r) {
+    try { restoreImageBlocks(); } catch (e) { slLog('历史图恢复跳过: ' + e.message); }
+    slLog('图片仓装填完成：' + ((r && r.loaded) || 0) + ' 条（本会话历史图上限已解除）');
+});
 
 // [Fix] 配图策略旧默认迁移：上一版默认 encourage（允许零图轮），用户要求默认强制 → 一次性升级为 always。
 // 用哨兵键保证只执行一次：之后用户在设置页主动选择的 encourage/关键场景 不会被再次覆盖。

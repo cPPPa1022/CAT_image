@@ -60,10 +60,22 @@ export function extractImagePrompt(rawText, imageTag, fromIndex) {
     return '';
 }
 
+// v1.23：事实段的保护标记。英文模式会清洗中文，而事实必须原样留下 ——
+// 用一对不在清洗范围内的符号把事实包住，cleanAnimePrompt 清洗完再把内容还回去。
+export var FACT_SPAN_OPEN = '⟦F⟧';
+export var FACT_SPAN_CLOSE = '⟦/F⟧';
+export function wrapFactSpan(text) { return FACT_SPAN_OPEN + String(text || '') + FACT_SPAN_CLOSE; }
+
 // Anime 模式下清除 prompt 中的中文字符
 export function cleanAnimePrompt(prompt) {
     if (!prompt) return prompt;
-    return prompt
+    // ① 先把事实段摘出来占位（不参与清洗）
+    var spans = [];
+    var t = String(prompt).replace(/⟦F⟧([\s\S]*?)⟦\/F⟧/g, function (_, inner) {
+        spans.push(inner);
+        return ' ⟦S' + (spans.length - 1) + '⟧ ';
+    });
+    t = t
         // [Fix v1.18] 旧版把全角标点连同汉字一起删掉：'asian，1girl，solo' → 'asian1girlsolo'（粘连）
         // 现在先把全角分隔符归一化成半角，再删残留中文
         .replace(/[\u4e00-\u9fff]+\s*[：:]\s*[\u4e00-\u9fff]+/g, '')
@@ -76,6 +88,12 @@ export function cleanAnimePrompt(prompt) {
         .replace(/\.\s*,/g, '.')
         .replace(/^[,.\s]+|[,.\s]+$/g, '')
         .trim();
+    // ② 事实段放回原处
+    t = t.replace(/⟦S(\d+)⟧/g, function (_, i) {
+        var v = spans[+i];
+        return v == null ? '' : v;
+    });
+    return t;
 }
 
 // ══════════════════════════════
@@ -234,6 +252,33 @@ export function parseStyleSegment(text) {
 }
 
 // ══════════════════════════════
+// ── v1.23 事实段解析（原样通道）──
+// 语法：事实:怀孕16周；左臂截肢；戴金丝细框眼镜
+//   · 这些是"关于角色/处境的既成事实"，不是描写 → 由插件**逐字**拼进提示词最前面
+//   · 不做任何词表判断：写什么就是什么，新维度（义眼/化疗/义肢…）不需要改代码
+export function parseFactSegment(text) {
+    var body = String(text || '').replace(/^(?:事实|硬事实)\s*[：:]\s*/, '');
+    if (!body.trim()) return [];
+    var parts = body.split(/[；;]/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+        var p = String(parts[i] || '').trim().replace(/^[，,、\s]+/, '').replace(/[，,、\s]+$/, '');
+        if (p) out.push(p);
+    }
+    return out;
+}
+
+// 合并事实段 → 写进提示词的前缀（纯字符串，不含任何标记）
+export function factsToPromptPrefix(facts) {
+    var arr = [];
+    for (var i = 0; i < (facts || []).length; i++) {
+        var f = String(facts[i] || '').trim();
+        if (f) arr.push(f);
+    }
+    return arr.length ? arr.join('；') : '';
+}
+
+// ══════════════════════════════
 // ── v1.9.0 状态段解析（时效性状态：半永久 / 跨轮暂时）──
 // 语法：状态:+晒黑；+左颈吻痕；-淤青
 //   +key = 激活（库里命中 → 复用 detail；未命中 → 辅助AI 具象化建档）
@@ -273,12 +318,21 @@ export function findImagePlaceholders(text) {
         var personSegments = [];
         var styleGroups = [];
         var statusOps = [];
+        var factParts = [];
         var seedObj = {};
         for (var i = 0; i < segs.length; i++) {
             var seg = segs[i].trim();
             if (!seg) continue;
             if (i === 0) {
                 scene = stripSeedText(seg);
+                continue;
+            }
+            // v1.23：事实段（可选，以「事实:/硬事实:」开头）—— **原样通道**：逐字进提示词，任何环节不许改写
+            // 为什么单列一段：怀孕/截肢/化疗这类是"事实"，不是"描写"。
+            // 写成自由文本会按"改写成画面"的规则被翻译成体征（怀孕→小腹隆起），词就没了。
+            if (/^(?:事实|硬事实)\s*[：:]/.test(seg)) {
+                var _fp = parseFactSegment(seg);
+                for (var _fpi = 0; _fpi < _fp.length; _fpi++) factParts.push(_fp[_fpi]);
                 continue;
             }
             // v1.14.2：地点段（可选，以「地点:/位置:/环境:」开头）—— 场景锚点，必须进提示词
@@ -339,6 +393,7 @@ export function findImagePlaceholders(text) {
             personSegments: personSegments,
             styleGroups: styleGroups,
             statusOps: statusOps,
+            facts: factParts,
             topic: topicParts.join('\n'),
             seed: _seedText,
             seedObj: seedObj,

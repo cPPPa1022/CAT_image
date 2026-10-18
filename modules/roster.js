@@ -74,11 +74,43 @@ export function composePersonAppearance(e) {
     if (base.indexOf(live) >= 0) return base;   // base 已包含 live → 只发 base
     return base + '，' + live;
 }
+// v1.26.5：主模型会把身份标签写成注释（「同上，不重复外貌」），personKey 一变就建出第二个空档案。
+function _isPlaceholderIdentity(id) {
+    var t = String(id || "").trim();
+    if (!t) return true;
+    if (/同上|不重复|同前|如上|略/.test(t)) return true;
+    if (/^(无|—|-|－)$/.test(t)) return true;
+    return false;
+}
+// 同名条目：优先有锚点/有 base 的那条（避免把锚点写进空档案）
+function _findKeyByName(name) {
+    try {
+        var r = ensureRoster();
+        if (!r || !name) return "";
+        var best = "", bestScore = -1;
+        for (var k in r.list) {
+            var e = r.list[k];
+            if (!e) continue;
+            var n = String(e.name || "").trim();
+            if (!(k === name || n === name || k.indexOf(name + "（") === 0)) continue;
+            var score = (e.anchor ? 2 : 0) + (e.base ? 1 : 0);
+            if (score > bestScore) { bestScore = score; best = k; }
+        }
+        return best;
+    } catch (e2) { return ""; }
+}
+
 export function upsertPerson(name, identity, appearance, source, seed) {
     try {
         var r = ensureRoster();
         if (!r) return null;
         var key = personKey(name, identity);
+        // v1.26.5：身份标签是占位注释（同上/不重复外貌…）或该 key 不存在时，复用同名条目
+        var _existingProbe = (ensureRoster() || {}).list || {};
+        if (!_existingProbe[key] || _isPlaceholderIdentity(identity)) {
+            var _altKey = _findKeyByName(name);
+            if (_altKey) key = _altKey;
+        }
         if (!key) return null;
         // [Fix v1.11.1] 种子不是外貌：从 appearance 里剥出来单独存（entry.seed）
         // 留在 base 里会被当成"静态锚点"喂给辅助AI、还会被动态要素兜底抄进提示词
@@ -391,8 +423,9 @@ function _findAnchorEntry(name, identity) {
     if (!r) return null;
     var key = personKey(name, identity);
     var e = r.list[key];
-    if (!e) {   // 容错：按名字找同名条目（裸名 ↔ 带标签）
-        for (var sk in r.list) { if (sk === name || sk.indexOf(name + '（') === 0) { e = r.list[sk]; break; } }
+    if (!e || _isPlaceholderIdentity(identity)) {
+        var alt = _findKeyByName(name);
+        if (alt) { key = alt; e = r.list[alt]; }
     }
     return e || null;
 }

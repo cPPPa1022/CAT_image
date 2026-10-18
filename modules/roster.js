@@ -677,6 +677,16 @@ export function rosterEntries() {
 // 记忆点更完整、四个视角也更自洽。
 export var PORTRAIT_VIEWS = ['front', 'left', 'right', 'back'];
 
+// v1.26.2：立绘指纹。立绘是"锚点的派生缓存"，不是每轮重写的东西 ——
+// 实测同一角色 6 次立绘：身高 168→163→中等、肩线 柔和→平顺→略厚、乳晕 浅粉→浅褐→浅粉，
+// 而场景提示词用冻结锚点、一直是同一套值 → 立绘和文中人物越走越远。
+function _portraitSig(e) {
+    var t = String((e && e.anchor) || '') + '|' + String((e && e.anchor_zh) || '') + '|' + String((e && e.base) || '');
+    var h = 0;
+    for (var i = 0; i < t.length; i++) { h = ((h << 5) - h + t.charCodeAt(i)) | 0; }
+    return String(h) + ':' + t.length;
+}
+
 export function setPortraitPrompts(name, identity, obj) {
     try {
         if (!obj || typeof obj !== 'object') return false;
@@ -685,6 +695,10 @@ export function setPortraitPrompts(name, identity, obj) {
         var e = r && r.list && r.list[key];
         if (!e) return false;
         var cur = e.portraitPrompts || {};
+        var modeNow = getActiveMode() || 'zit';
+        var sig = _portraitSig(e);
+        // 冻结：已有立绘 + 同一语言模式 + 锚点/档案没变 → 保留旧的，不被新一轮的改写覆盖
+        if (cur.front && cur.mode === modeNow && cur.sig === sig) return false;
         var n = 0;
         for (var i = 0; i < PORTRAIT_VIEWS.length; i++) {
             var v = PORTRAIT_VIEWS[i];
@@ -694,7 +708,8 @@ export function setPortraitPrompts(name, identity, obj) {
             n++;
         }
         if (!n) return false;
-        cur.mode = getActiveMode() || 'zit';   // 记住是哪套模式语言写的（中文/英文不许混用）
+        cur.mode = modeNow;   // 记住是哪套模式语言写的（中文/英文不许混用）
+        cur.sig = sig;        // 记住生成时的锚点指纹（锚点变了才允许重写）
         e.portraitPrompts = cur;
         return true;
     } catch (e2) { return false; }
@@ -735,7 +750,7 @@ function _ageNumUnder18(t) {
     _AGE_NUM_RE.lastIndex = 0;
     while ((m = _AGE_NUM_RE.exec(t)) !== null) {
         n = parseInt(m[1], 10);
-        if (n > 0 && n < 18) return false;   // [Fix v1.17.1] 原为 false —— 命中未成年却返回"不是未成年"，闸门永久失效
+        if (n > 0 && n < 18) return true;    // [Fix v1.26.2] 命中未成年 → true（原为 false，闸门永久失效）
     }
     _AGE_CN_RE.lastIndex = 0;
     while ((m = _AGE_CN_RE.exec(t)) !== null) {
@@ -743,7 +758,7 @@ function _ageNumUnder18(t) {
         n = _AGE_CN_VAL[s] || 0;
         if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
         if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
-        if (n > 0 && n < 18) return false;   // [Fix v1.17.1] 同上
+        if (n > 0 && n < 18) return true;    // [Fix v1.26.2] 同上
     }
     return false;
 }
@@ -763,7 +778,7 @@ export function isUnderageEntry(entry) {
             var m;
             while ((m = _AGE_DIM_RE.exec(texts[k])) !== null) {
                 var val = String(m[1] || '').trim();
-                if (val && _AGE_TIER_RE.test(val)) return false;   // [Fix v1.17.1] 原为 false —— age:teenage girl 被判成"成年"
+                if (val && _AGE_TIER_RE.test(val)) return true;    // [Fix v1.26.2] age:teenage girl → true（原为 false）
             }
         }
         return false;

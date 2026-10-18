@@ -268,16 +268,6 @@ export function parseFactSegment(text) {
     return out;
 }
 
-// 合并事实段 → 写进提示词的前缀（纯字符串，不含任何标记）
-export function factsToPromptPrefix(facts) {
-    var arr = [];
-    for (var i = 0; i < (facts || []).length; i++) {
-        var f = String(facts[i] || '').trim();
-        if (f) arr.push(f);
-    }
-    return arr.length ? arr.join('；') : '';
-}
-
 // ══════════════════════════════
 // ── v1.9.0 状态段解析（时效性状态：半永久 / 跨轮暂时）──
 // 语法：状态:+晒黑；+左颈吻痕；-淤青

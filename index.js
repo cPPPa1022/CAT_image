@@ -17,8 +17,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.23.0';
-slLog('LOADED v1.23.0');
+window.SILLYLAB_VERSION = 'v1.24.0';
+slLog('LOADED v1.24.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);

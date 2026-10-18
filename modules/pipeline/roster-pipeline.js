@@ -6,7 +6,7 @@ import { slLog, slErr } from '../log.js';
 import { settings, getActiveMode, isEnglishMode, saveSettings } from '../settings.js';
 import { auxApiCall } from './api.js';
 import { isPromptsLoaded, getPrompt } from '../../prompts/loader.js';
-import { findImagePlaceholders, buildImageBlock, extractDynamicBits, normForMatch, findLostNumbers, factsToPromptPrefix, wrapFactSpan } from '../text-utils.js';
+import { findImagePlaceholders, buildImageBlock, extractDynamicBits, findLostNumbers, wrapFactSpan } from '../text-utils.js';
 import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, importFromCast, splitKnownPersonSegments, setEnglishAnchor, setZitAnchor, getAtomAnchor, atomValues, setPortraitPrompts } from '../roster.js';
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
@@ -86,7 +86,7 @@ export function findLostPlaces(placeholders, prompts) {
 }
 
 // ── v1.23 事实通道（无词表）：`事实:` 段原样拼进提示词，校验用归一化逐字包含 ──
-import { missingFacts } from '../facts.js';
+// facts.js 不再参与管线判断（事实由指令约束、日志审计）
 
 // ── system prompt：roster/system.txt（核心）+ 模式 overlay（复用现有文件） ──
 function buildRosterSystemPrompt() {
@@ -101,6 +101,12 @@ function buildRosterSystemPrompt() {
     var vocab = isPromptsLoaded() ? (getPrompt('atomic-vocab.txt') || '') : '';
     if (vocab) parts.push(vocab);
     // v1.9.0：状态库规则（时效性状态：晒黑/吻痕/淤青/染发…）
+    // v1.24：造型词表以前只加载不下发，而 userContent 里又写着"规则见 wardrobe-vocab.txt"
+    // —— 等于叫模型遵守一份它看不到的规则。现在补上下发。
+    var wdV = isPromptsLoaded() ? (getPrompt('wardrobe-vocab.txt') || '') : '';
+    if (wdV) parts.push(wdV);
+    var wdE = isPromptsLoaded() ? (getPrompt('wardrobe-expand.txt') || '') : '';
+    if (wdE) parts.push(wdE);
     var stVocab = isPromptsLoaded() ? (getPrompt('statuses-vocab.txt') || '') : '';
     if (stVocab) parts.push(stVocab);
     var stExpand = isPromptsLoaded() ? (getPrompt('statuses-expand.txt') || '') : '';
@@ -305,174 +311,53 @@ export function parseRosterImages(output) {
 }
 
 // ── 占位符替换：原文 [img:…] → [image:场景]【提示词】…【/提示词】 ──
-// ── v1.12.0「标准档」兜底策略 ──
-// 这些兜底用的是"字面包含"判断，模型一润色（多一个逗号/换语序）就误判成"缺失"，
-// 然后把场景原文 / 造型 detail 原样塞回提示词（实测污染：`，索菲亚蹲在池边抱膝`、`，白色棉质背心，细肩带，圆领`）。
-// 现在默认只报警、不改模型输出；保真改由辅助AI 的「交稿前自检清单」负责（roster/system.txt）。
-// 想恢复旧行为：设置 fallbackMode = 'patch'。
-function _fallbackPatch() { return String(settings.fallbackMode || 'warn') === 'patch'; }
-
 export function fillPlaceholders(bodyText, placeholders, prompts) {
-    var phIdx = 0;
-    var pIdx = 0;
+    var phIdx = 0, pIdx = 0, missing = 0;
     var out = bodyText.replace(/\[img:\s*[\s\S]*?\]/g, function(m) {
         var ph = placeholders[phIdx];
         phIdx++;
-        if (!ph) return m;   // 意外错位：保留原文
+        if (!ph) return m;                    // 意外错位：保留原文
         var prompt = '';
         if (pIdx < prompts.length) { prompt = prompts[pIdx]; pIdx++; }
-        if (prompt && ph.topic) {
-            // 要点已被插件AI用于写提示词，无需重复；若提示词似乎太短（<12字）则拼接场景兜底
-            if (prompt.length < 12) prompt = (ph.scene + '，' + prompt);
-        }
         if (!prompt) {
-            // [Fix v1.13.1] 辅助AI 这一条没交稿（漏行/被拒）时的最后兜底：
-            // 旧版直接拿中文场景原文顶上 → 英文模式下等于画一个随机的人。
-            // 现在优先拼上**该人物的锚点值**（正确语言），至少脸是对的。
-            slErr('⛔ 本条占位符没有提示词（辅助AI漏回/被拒）→ 用【人物锚点 + 场景】兜底');
-            var _fbAnchor = '';
-            try {
-                var _fbMode = getActiveMode();
-                var _fbList = rosterEntries();
-                var _fbSegs = ph.personSegments || [];
-                for (var _fbi = 0; _fbi < _fbSegs.length && !_fbAnchor; _fbi++) {
-                    var _fbName = String(_fbSegs[_fbi].name || '').trim();
-                    if (!_fbName) continue;
-                    for (var _fbj = 0; _fbj < _fbList.length; _fbj++) {
-                        var _fbE = _fbList[_fbj];
-                        if (!_fbE) continue;
-                        if (_fbE.key === _fbName || String(_fbE.key).indexOf(_fbName + '（') === 0) {
-                            var _fbA = getAtomAnchor(_fbE, _fbMode);
-                            if (_fbA) { _fbAnchor = atomValues(_fbA, _fbMode); break; }
-                        }
-                    }
-                }
-            } catch (eFB) {}
-            prompt = _fbAnchor ? (_fbAnchor + '，' + (ph.scene || '')) : ph.scene;
-            if (_fbAnchor) slLog('兜底已拼上人物锚点（' + _fbAnchor.length + ' 字）');
+            // v1.24：代码不编造内容 —— 缺条就保留占位符原文，交给重试/人工
+            missing++;
+            slErr('⛔ 第' + phIdx + '个占位符没有提示词（模型漏回）→ 保留 [img:] 原文，不补写');
+            return m;
         }
-        if (!prompt && ph.topic) prompt = (ph.scene ? ph.scene + '，' : '') + ph.topic;  // [Fix] 场景+要点兜底，比只场景更完整
-        // [Fix] 动态要素保真兜底1：占位符里的可变片段（衣着/发型/表情/光线/动作…），
-        // 若提示词没有对应内容则补入（用前6字核心匹配，AI 润色加词也认）
-        // 各源分开提取再合并去重：场景+要点拼串会把跨界两段合成一段（示例：场景末句+要点），归一化失配 → 重复补入
-        var _dynSrcs = [(ph.scene || ''), (ph.topic || ''), (ph.personSegments || []).map(function (s) { return s.appearance || ''; }).join('、')];
-        var _dynBits = [];
-        for (var _si = 0; _si < _dynSrcs.length; _si++) {
-            if (!_dynSrcs[_si]) continue;
-            var _partBits = extractDynamicBits(_dynSrcs[_si]);
-            for (var _bi = 0; _bi < _partBits.length; _bi++) { if (_dynBits.indexOf(_partBits[_bi]) < 0) _dynBits.push(_partBits[_bi]); }
-        }
-        // 比较前剥离已知人名：插件AI 会把"温若兰端着瓜盘"润色成"双手端着瓜盘"（去名），
-        // 不带人名剥离会误判"缺失"而重复补入
-        var _namesHere = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (p) { return p.length >= 2; });
-        function _stripNames(t) { for (var i = 0; i < _namesHere.length; i++) t = t.split(_namesHere[i]).join(''); return t; }
-        var _pNorm = normForMatch(_stripNames(prompt));
-        for (var _di = 0; _di < _dynBits.length; _di++) {
-            var _db = _dynBits[_di];
-            var _dbNorm = normForMatch(_stripNames(_db));
-            if (_pNorm.indexOf(_dbNorm) < 0) {
-                if (_fallbackPatch()) {
-                    prompt = prompt + '，' + _db;
-                    slLog('动态要素兜底补入: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
-                } else {
-                    slLog('⚠️ 动态要素未被逐字包含（仅告警不补入，交给自检清单）: ' + _db.slice(0, 30) + (_db.length > 30 ? '…' : ''));
-                }
-            }
-            _pNorm = normForMatch(_stripNames(prompt));
-        }
-        // [Fix] 动态要素保真兜底2：场景/要点整体覆盖检查——润色后通常会保留部分连续词，
-        // 若提示词连场景/要点的任意 4 字连续片段都没有 → 说明画面要素整体被丢，补场景+要点原文（保真优先）
-        if (prompt.length < (ph.scene || '').length) {
-            var _scene4 = (ph.scene || '').replace(/[\s，。、；,;]/g, '');
-            var _topic4 = (ph.topic || '').replace(/[\s，。、；,;]/g, '');
-            var _cov = false;
-            for (var _ci = 0; _ci + 4 <= _scene4.length && !_cov; _ci++) { if (normForMatch(prompt).indexOf(normForMatch(_scene4.slice(_ci, _ci + 4))) >= 0) _cov = true; }
-            for (var _ci2 = 0; _ci2 + 4 <= _topic4.length && !_cov; _ci2++) { if (normForMatch(prompt).indexOf(normForMatch(_topic4.slice(_ci2, _ci2 + 4))) >= 0) _cov = true; }
-            if (!_cov) {
-                if (_fallbackPatch()) prompt = prompt + '，' + (ph.scene || '') + (ph.topic ? '，' + ph.topic : '');
-                else slLog('⚠️ 场景/要点覆盖不足（仅告警不补入原文）: ' + (ph.scene || '').slice(0, 30));
-            }
-        }
-        // v1.5.0：造型兜底 —— 已解析的造型详情必须出现在提示词里，缺了就补（防漂移的最后一道闸）
-        // 存档的 detail 本身就是生图语言，所以原样拼接即可，不需要再经 LLM 措辞
-        if (ph._wardrobe && ph._wardrobe.length) {
-            for (var _wk2 = 0; _wk2 < ph._wardrobe.length; _wk2++) {
-                var _wd = ph._wardrobe[_wk2];
-                var _det = String(_wd.detail || '');
-                if (!_det) continue;
-                var _dn = normForMatch(_stripNames(_det));
-                var _probe = _dn.slice(0, Math.min(24, _dn.length));
-                if (_probe && normForMatch(_stripNames(prompt)).indexOf(_probe) < 0) {
-                    if (_fallbackPatch()) {
-                        prompt = prompt ? (prompt + '，' + _det) : _det;
-                        slLog('造型兜底补入[' + _wd.slot + ']: ' + _wd.key);
-                    } else {
-                        slLog('⚠️ 造型 detail 未逐字命中（仅告警不补入，交给自检清单）[' + _wd.slot + ']: ' + _wd.key);
-                    }
-                }
-            }
-        }
-        // [Fix v1.6.4] 提示词里**禁止出现角色名**（既有铁律）——
-        // 尾部若混进"白璐坐在沙发上歪头看向赵子珺"这种场景原文（兜底拼接/AI 复述），整段删掉
+        // v1.24 事实审计：只记录，不拦截 —— 「同义同指」代码判断不了（怀孕16周 → 身孕四个月 是合法的）
+        try { _auditFacts(ph, prompt, phIdx); } catch (eAudit) {}
+        // 英文模式：字面出现的事实原样保护，避免被中文清洗吃掉（机械替换，不做语义判断）
         try {
-            prompt = String(prompt).replace(/[，,]?\s*要点\s*[:：]/g, '，').replace(/，{2,}/g, '，');
-            var _nm = (ph.personSegments || []).map(function (s) { return String(s.name || '').trim(); }).filter(function (n) { return n.length >= 2; });
-            if (_nm.length) {
-                // [Fix v1.17.1] 原实现按 '，' 切分后把含人名的**整段**丢弃，有两个致命后果：
-                //   ① 英文模式（anima/anime/anime_tag）提示词用半角逗号 → split 只得到 1 段
-                //      → 只要整条里出现人名，**整条提示词被清空**，ComfyUI 画出随机图
-                //   ② 中文模式会连带删掉同一分句里的外貌/动作描写（"白璐穿白衬衫站在门口" 整句蒸发）
-                // 现改为：只剔除人名自身与其后的括号身份标签，其余文字一个不删。
-                for (var _ni = 0; _ni < _nm.length; _ni++) {
-                    var _p2 = _nm[_ni].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    prompt = prompt
-                        .replace(new RegExp(_p2 + '\\s*[（(][^）)]*[）)]', 'g'), '')
-                        .replace(new RegExp(_p2, 'g'), '');
-                }
-                prompt = prompt
-                    .replace(/[，,]\s*[，,]+/g, '，')
-                    .replace(/^\s*[，,、。.\s]+/, '')
-                    .replace(/[，,、\s]+$/, '')
-                    .trim();
-            }
-        } catch (eTail) {}
-        // v1.9.0：状态兜底 —— 本轮激活的状态详情必须出现在提示词里，缺了就补
-        if (ph._statuses && ph._statuses.length) {
-            for (var _sk2 = 0; _sk2 < ph._statuses.length; _sk2++) {
-                var _sd = String(ph._statuses[_sk2].detail || '');
-                if (!_sd) continue;
-                var _sdn = normForMatch(_stripNames(_sd));
-                var _sprobe = _sdn.slice(0, Math.min(20, _sdn.length));
-                if (_sprobe && normForMatch(_stripNames(prompt)).indexOf(_sprobe) < 0) {
-                    if (_fallbackPatch()) {
-                        prompt = prompt ? (prompt + '，' + _sd) : _sd;
-                        slLog('状态兜底补入: ' + ph._statuses[_sk2].key);
-                    } else {
-                        slLog('⚠️ 状态 detail 未逐字命中（仅告警不补入，交给自检清单）: ' + ph._statuses[_sk2].key);
-                    }
+            if (isEnglishMode()) {
+                var _fs2 = ph.facts || [];
+                for (var _fi = 0; _fi < _fs2.length; _fi++) {
+                    var _f = String(_fs2[_fi] || '');
+                    if (_f && prompt.indexOf(_f) >= 0) prompt = prompt.split(_f).join(wrapFactSpan(_f));
                 }
             }
-        }
-        // ── v1.23 事实通道：`事实:` 段原样放在提示词最前面（cond 权重最高处），任何环节不许改写 ──
-        // 位置的约定替代了词表：不问"这是什么事实"，只保证"写进事实段的字符串一定出现在提示词里"。
-        if (ph.facts && ph.facts.length) {
-            var _factPrefix = factsToPromptPrefix(ph.facts);
-            if (_factPrefix) {
-                var _fpWrap = isEnglishMode() ? wrapFactSpan(_factPrefix) : _factPrefix;
-                prompt = prompt ? (_fpWrap + '，' + prompt) : _fpWrap;
-                var _missFact = missingFacts(ph.facts, prompt);
-                if (_missFact.length) slErr('⛔ 事实通道异常（拼入后仍找不到，可能被改写/清洗吃掉）: ' + _missFact.join('、'));
-                else slLog('事实通道: ' + ph.facts.join('；'));
-            }
-        }
+        } catch (eWrap) {}
         return buildImageBlock(ph.scene, prompt);
     });
-    // [Fix] 数量不一致明确告警（C7）：提示词与占位符错位会静默配错图，仅靠日志统计不可见
     if (prompts.length !== placeholders.length) {
-        slErr('⚠️ 提示词条数(' + prompts.length + ') ≠ 占位符数(' + placeholders.length + ')，按序配对可能错位/漏写——检查插件AI输出');
+        slErr('⚠️ 提示词条数(' + prompts.length + ') ≠ 占位符数(' + placeholders.length + ')，按序配对');
     }
-    slLog('占位符填充: ' + phIdx + '/' + placeholders.length + ' 占位, 提示词 ' + pIdx + '/' + prompts.length + ' 条');
+    slLog('占位符填充: ' + (phIdx - missing) + '/' + placeholders.length + '（缺 ' + missing + '，未做任何内容补写）');
     return out;
+}
+
+// 事实审计：只记录"给出的事实里，有几个在这条提示词里字面出现"
+// 刻意不拦截：合法同义改写（怀孕16周 → 身孕四个月）会被记成"未逐字出现"，需要人看图判断。
+function _auditFacts(ph, prompt, idx) {
+    var facts = (ph && ph.facts) || [];
+    if (!facts.length) return;
+    var hit = [], miss = [];
+    for (var i = 0; i < facts.length; i++) {
+        if (String(prompt || '').indexOf(facts[i]) >= 0) hit.push(facts[i]);
+        else miss.push(facts[i]);
+    }
+    slLog('事实审计 #' + idx + ': 给出[' + facts.join('；') + '] 字面命中[' + (hit.join('；') || '无') + ']'
+        + (miss.length ? ' 未逐字[' + miss.join('；') + ']（可能是合法同义，看图确认）' : ''));
 }
 
 // ── 入口 ──

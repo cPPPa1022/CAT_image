@@ -1,0 +1,36 @@
+v1.20.0: 皮相重新划界 + 补 ears/makeup + body_hair 拆出 pubic_hair
+
+一、皮相重新划界（v1.15 把参数塞进 aura，是设计错位）
+
+  旧 aura 示例：aura:fine delicate skin with an even cool tone, soft natural flush on the cheeks, supple smooth texture
+  拆开看，它同时在干三件不属于它的事：
+    even cool tone        = 重复 skin_tone
+    soft natural flush    = 固化气色 ← 这就是立绘上两块人工腮红的直接来源
+    supple smooth texture = 重复 skin_texture
+  结果：既没起到"给意图"的作用，又让肤质不可锁定（五个角色写成 delicate / elastic / supple / full even，各写各的）
+
+  重新划成四层：
+    骨相        脸/身/标记              → anchor 维度，冻结
+    肤质结构    细腻/微润/哑光/毛孔细    → anchor 维度 skin_texture（复位），冻结
+    皮相状态    此刻气色/红晕/汗/油光    → ⛔ 不进档案，只听本轮【要点】
+    美学调性   温润/清冷/明艳/雍容      → aura，一句话，只给方向
+
+  三条禁令：气色类词禁止进档案（脸颊透着血色/气色红润/soft flush）；
+            aura 不许重复 skin_tone / skin_texture / 气色 / 光；
+            skin_texture 只写结构不写状态（油光/出汗/潮红属本轮）
+
+二、维度表补两项
+  ears   耳形（贴耳/招风/耳垂厚薄）—— 侧面立绘必见，之前只能往 piercing 里挤
+  makeup 妆（素颜/淡妆/浓妆 + 重点在眼或唇）—— 之前完全没有，"妆浓"和"素颜"画出来是两个世界
+
+三、body_hair 拆出 pubic_hair
+  原来一个 body_hair 要同时表达"手臂腿毛"和"耻部毛发"，模型只能按先验瞎补
+    body_hair  手臂/腿/腋下
+    pubic_hair 阴毛（shaved / trimmed triangle / thin strip / natural full）
+    genitalia  阴部形态
+
+四、立绘清单补四项（实测五条立绘全部没落地）
+  耳朵 · 妆容 · 阴毛 · 阴部
+  外加：身高必须带数字（164cm），不许用"身材高挑"顶替
+
+版本 1.20.0

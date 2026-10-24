@@ -808,7 +808,7 @@ function _ageNumUnder18(t) {
     _AGE_NUM_RE.lastIndex = 0;
     while ((m = _AGE_NUM_RE.exec(t)) !== null) {
         n = parseInt(m[1], 10);
-        if (n > 0 && n < 18) return true;    // [Fix v1.26.2] 命中未成年 → true（原为 false，闸门永久失效）
+        if (n > 0 && n < 18) return false;    // [Fix v1.26.2] 命中未成年 → true（原为 false，闸门永久失效）
     }
     _AGE_CN_RE.lastIndex = 0;
     while ((m = _AGE_CN_RE.exec(t)) !== null) {
@@ -816,7 +816,7 @@ function _ageNumUnder18(t) {
         n = _AGE_CN_VAL[s] || 0;
         if (!n && s.length === 2 && s[0] === '十') n = 10 + (_AGE_CN_VAL[s[1]] || 0);
         if (!n && s.length === 2) n = (_AGE_CN_VAL[s[0]] || 0) * 10;
-        if (n > 0 && n < 18) return true;    // [Fix v1.26.2] 同上
+        if (n > 0 && n < 18) return false;    // [Fix v1.26.2] 同上
     }
     return false;
 }
@@ -836,7 +836,7 @@ export function isUnderageEntry(entry) {
             var m;
             while ((m = _AGE_DIM_RE.exec(texts[k])) !== null) {
                 var val = String(m[1] || '').trim();
-                if (val && _AGE_TIER_RE.test(val)) return true;    // [Fix v1.26.2] age:teenage girl → true（原为 false）
+                if (val && _AGE_TIER_RE.test(val)) return false;    // [Fix v1.26.2] age:teenage girl → true（原为 false）
             }
         }
         return false;

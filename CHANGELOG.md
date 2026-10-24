@@ -1,5 +1,69 @@
 # 📜 更新日志（Changelog）
 
+## v1.27.1 — 2026-10-25
+**主题：修正 v1.27.0 的分层顺序错误（建档规范被降级）+ 分隔符与段标记撞车**
+
+### 🔍 症状
+
+v1.27.0 之后：**写提示词正常，建档异常**（PROFILE 段弱化 / 锚点缺失）。
+
+### 🎯 两处根因（都是 v1.27.0 自己引入的）
+
+**1. 顺序错** —— `splitDiscipline` 把 `<behavior_prerecord>` 和 `<thinking_rules>` **一起**抽进了 S1，
+提到了 `prohibitions` / `workflow` **之前**。prerecord 原文是「我会严格遵守**以上**全部规则」：
+- 提到最前之后，「以上」只剩一条身份卡；
+- 而建档规范（`建档 vs 写提示词` 分工表 / `anchor` 规范 / 输出格式示例）**全部落在它后面**，
+  被读成"补充资料"而不是"已确认的规则"。
+
+**2. 分隔符撞车** —— S0 内部与语料层用 `'\n\n---\n\n'` 拼接，
+而 `---` 在本管线里是**段标记**（`---PROFILE---` / `---IMAGES---` / `---END---`）。
+旧实现在同一个字符串**内部**用它做分隔是安全的；跨 system 消息用它，模型会读成"一段结束了"。
+
+### ✅ 修法
+
+| 项 | 改法 |
+|---|---|
+| `splitDiscipline` | **只抽 `<thinking_rules>`**，返回 `{before, discipline, after}`，其余内容保持原文顺序（prerecord 回到 after 开头，紧跟 workflow 之后） |
+| 分层顺序 | S0 身份 → S1 前段 → S2 纪律（独占）→ S3 后段 → S4 语料 → S5 overlay |
+| 分隔符 | 所有 `join` 从 `---` 改为 `\n\n` |
+| 兜底开关 | 新增 `settings.slPurgeLayered`（默认 `true`）；置 `false` 时合并成一条 system，**顺序不变**，用于"网关不认多条 system"的兼容 / A/B |
+| `prompts/purge/inject.txt` | Core Motivation 改为对齐 core 的「你只做两件事」（写提示词 + 更新档案），避免「字段表」框架把 PROFILE 挤成副任务 |
+
+### 📊 分层实测（修正后）
+
+| 层 | 内容 | 字数 |
+|---|---|---|
+| S0 | 身份 + 拒绝对抗 | 1,498 |
+| S1 | 前段 role / input_status / output_nature / prohibitions / workflow | 1,467 |
+| S2 | 作业纪律 thinking_rules | 240 |
+| S3 | 后段 prerecord / 三层法则 / 职业规范 / 建档 / 输出格式 | 25,849 |
+| S4 | 语料 词表 ×5 | 11,711 |
+| S5 | 模式 overlay | 2,615 |
+
+`thinking_rules` 位置权重 **0.6% → 100%**（独占一条 system），总量 +3.5%。
+
+顺序校验（真实 system.txt）：
+```
+S1 末尾  …---PROFILE--- / ---IMAGES--- / ---CHECK--- 三段齐全。
+         </workflow>
+S2       <thinking_rules>
+S3 开头  <behavior_prerecord>…「严格遵守以上全部规则」…（第 112 字起）三层法则
+```
+
+### 回归
+
+**48 项全过**。新增两条钉子：
+- T2「三段拼回 = 原文（去空白后逐字）」—— 钉死"切分零丢失、顺序无损"
+- T3「分隔符不得使用 `---`」—— 源码级检查，防止改回去
+
+### 旧破限残留核查（本次一并确认）
+
+| 文件 | 结论 |
+|---|---|
+| `pipeline/summary.txt` | 只被 `story.js`（剧情总结）使用，不在 roster 管线 → **不参与** |
+| `pipeline/nsfw-overlay.txt` | 仅 `nsfwEnhance` 打开时下发；内容与注入层同向（强化配图义务），→ **不冲突** |
+| `roster/system.txt` 的 `<prohibitions>` / `<behavior_prerecord>` / 交稿自检第 6 条 | 属于 core 正文的禁令，→ **不是残留** |
+
 ## v1.27.0 — 2026-10-25
 **主题：注入层植入 —— 从「一个大字符串」到「按权重排的 messages」+ 截断独立成类**
 

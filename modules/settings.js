@@ -77,6 +77,10 @@ export function getDefaults() {
         // { seedHash, injectHash, appliedAt }：只用于判断"注入内容有没有变"，
         // 不参与权限/校验。reset 之后 seedHash 会重新登记，但至少"内容变了"这件事在日志里可见。
         slPurgeMeta: {},
+        // v1.27.0 分层 system 开关：true=按 S0~S5 多层 system 下发（S1 纪律条独占位置）；
+        // false=合并成一条 system（顺序不变，只是丢掉"独占位置"这一项收益）。
+        // 只在"网关不认多条 system / 建档异常"时关掉，作为兼容兜底。
+        slPurgeLayered: true,
     };
 }
 

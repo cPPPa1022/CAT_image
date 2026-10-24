@@ -1,5 +1,69 @@
 # 📜 更新日志（Changelog）
 
+## v1.27.2 — 2026-10-25
+**主题：函数级解析器只认第一个段 —— 3 个占位符输出 3 份三段，只解析出 1 条 → 误判 short**
+
+### 🔍 现场
+
+```
+auxApiCall 返回: finish=stop, content_len=14707, reasoning_len=0
+首调: finish=stop, content=14707 字, reasoning=0 字, system 分层=6 条
+⚠️ 管线输出不合格(short, 14707 字, 需要 3 条) → 重试
+```
+
+`finish=stop`（**不是截断**）、14707 字、却只解析到不到 3 条。档案也空。
+
+### 🎯 根因
+
+`parseRosterImages` / `parseRosterProfile` / `parseRosterWardrobe` / `parseRosterStatuses` 用的都是**单段**正则：
+
+```js
+output.match(/---\s*IMAGES\s*---\s*([\s\S]*?)(?:---\s*END\s*---|$)/)
+```
+
+`String.match` 不带 `g` → **只取第一个同名段**。
+
+而模型把 system.txt 的 workflow「对**每一个【占位符】**依次执行以下 6 步 … Step 7 · 输出」理解成
+「每个占位符各输出一份完整三段」，于是输出：
+
+```
+---PROFILE--- {甲} ---END--- ---IMAGES--- 1.… ---END--- ---CHECK--- … ---END---
+---PROFILE--- {乙} ---END--- ---IMAGES--- 2.… ---END--- ---CHECK--- … ---END---
+---PROFILE--- {丙} ---END--- ---IMAGES--- 3.… ---END--- ---CHECK--- … ---END---
+```
+
+3 个 IMAGES 段 → 只解析第 1 条 → `short` → 整轮重试（白烧一次 14707 字）。
+`parseRosterProfile` 同理只取第一段 → 只建了 1 个人的档 → 看起来"档案无"。
+
+### 🧪 六种输出格式逐一验证，只有这一种会产生 short
+
+| 假设 | 解析条数 | 会判 short |
+|---|---|---|
+| **每个占位符一份完整三段** | **1** | **是** ← 实际命中 |
+| 正常单段 3 条 | 3 | 否 |
+| 3 条中间夹 `---CHECK---` | 5 | 否 |
+| 每条被硬折行（无列表前缀） | 3 | 否 |
+| IMAGES 在前、PROFILE 在后 | 3 | 否 |
+| 用「第1条 / 第2条」前缀 | 3 | 否 |
+
+### ✅ 修法（三处一起）
+
+| 位置 | 改动 |
+|---|---|
+| `_allSections(output, name)`（新） | 用 `g` 标志收集**全部**同名段；`(?:---END---\|(?=---(?:PROFILE\|IMAGES\|CHECK\|WARDROBE\|STATUSES)---)\|$)` 前瞻，缺 END 时不吃掉下一段 |
+| `parseRosterImages` | 单段走原逻辑（逐字搬进 `_parseImageLines`，行为不变）；多段逐段解析后按序拼接、去重 |
+| `parseRosterProfile` | 多段 JSON 逐个解析，`persons` 用 `_mergePersonEntry` 合并（后段补前段，不丢非空字段） |
+| `parseRosterWardrobe` / `parseRosterStatuses` | 多段 key→value 合并 |
+| `classifyPipelineFailure` | 条数不足时打**标记计数**（PROFILE / IMAGES / CHECK / END 各出现几次）—— 不猜，让失败可见 |
+| `buildRosterUserContent` | 源头堵住：新增「**整轮只输出一次三段**，N 个占位符就写在同一个 `---IMAGES---` 段里的 N 行」 |
+
+### 回归
+
+**47 项全过**（改为 import 真实模块，不再抽取——`_looseJson` 的正则里含 `{}` 会截断抽取器）。
+新增两条钉子：
+- **T9** 多段：3 个 IMAGES 段 → 合并 3 条、`classifyPipelineFailure` 不再判 short、3 个 PROFILE 段合并 3 人、WARDROBE/STATUSES 多段合并
+- **T11** 单段回归保护：单段 3 条仍是 3 条、单段 PROFILE 仍是 1 人、（无）→ 0 条、无 IMAGES 段 → 0 条
+
 ## v1.27.1 — 2026-10-25
 **主题：修正 v1.27.0 的分层顺序错误（建档规范被降级）+ 分隔符与段标记撞车**
 

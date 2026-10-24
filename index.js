@@ -17,8 +17,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.27.1';
-slLog('LOADED v1.27.1');
+window.SILLYLAB_VERSION = 'v1.27.2';
+slLog('LOADED v1.27.2');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -119,7 +119,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',call
 
 // ── v1.1：移除上游版本检测+公告（远端为原作者仓库，会误报新版本/展示上游公告） ──
 
-// ── v1.27.1 purge 注入层指纹（幂等登记）──
+// ── v1.27.2 purge 注入层指纹（幂等登记）──
 // 只做一件事：把 purge/inject.txt 的内容指纹记下来，变了就在日志里说出来。
 // 不覆盖用户改动、不静默回滚 —— 上游那套「原文对不上就跳过、这次应用仍算完成」的纪律。
 function checkPurgeMeta() {

@@ -38,7 +38,16 @@ export function classifyPipelineFailure(out, expectCount, meta) {
         var lines = [];
         try { lines = parseRosterImages(t) || []; } catch (ePL) { lines = []; }
         if (!lines.length) return REFUSAL_RE.test(t) ? 'refusal' : 'noimage';
-        if (lines.length < expectCount) return 'short';
+        if (lines.length < expectCount) {
+            // v1.27.2：条数不足时把"标记计数"打出来 —— 不猜，让失败可见。
+            // IMAGES 出现多次 = 模型按"每个占位符各写一份三段"输出（解析器已合并，走到这里说明合并后仍不够）。
+            var st = _markerStats(t);
+            slErr('⚠️ 条数不足: 解析到 ' + lines.length + '/' + expectCount
+                + ' | 标记 PROFILE=' + st.profile + ' IMAGES=' + st.images + ' CHECK=' + st.check + ' END=' + st.end
+                + ' | 长度 ' + st.len
+                + (st.images > 1 ? '  ← 多段输出，已由解析器合并' : ''));
+            return 'short';
+        }
         for (var i = 0; i < lines.length; i++) {
             if (lines[i] && lines[i].length < 120 && REFUSAL_RE.test(lines[i])) return 'refusal';
         }
@@ -270,6 +279,10 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
     lines.push('【任务】为每个 [img:] 占位符输出 1 条提示词，按【占位符】编号一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
     // [Fix] 格式硬约束（格式缺失=整轮作废，是此前 0 条提示词/串味的主因）
     lines.push('【输出格式·必须严格遵守·PROFILE 与 IMAGES 漏一段整轮作废】');
+    // v1.27.2：模型会把 workflow 的「对每一个占位符依次执行」理解成"每个占位符各输出一份三段"，
+    // 于是 3 个占位符 → 3 个 PROFILE/IMAGES/END（实测 14707 字被误判 short）。
+    // 解析器已经能合并多段；这里再把源头堵上，省掉重复输出的 token。
+    lines.push('⚠️ **整轮只输出一次三段**：占位符有 N 个，就在**同一个** `---IMAGES---` 段里写 N 行。禁止"每个占位符各写一份 PROFILE/IMAGES/END"。');
     lines.push('---PROFILE---\n{人物建档 JSON，无更新写{}}---END---\n\n[---WARDROBE---\n{造型具象化 JSON}---END---  ← **仅当【造型库】有「待具象化」条目时才输出这一段；没有就整段省略**]\n\n[---STATUSES---\n{状态具象化 JSON}---END---  ← **仅当【状态库】有「待具象化」条目时才输出；没有就整段省略**]\n\n---IMAGES---\n第1条纯文本提示词（禁止 [image:]、禁止【提示词】包裹、禁止解释性文字）\n第2条……\n（条数=占位符数；零图写：（无））\n---END---');
     lines.push('只输出以上段落，禁止任何其他内容：禁止图块、禁止复述正文/占位符原文、禁止聊天口吻、禁止 Markdown 代码块。');
     lines.push('');
@@ -376,49 +389,125 @@ function _looseJson(raw) {
     return JSON.parse(out);
 }
 
-export function parseRosterProfile(output) {
-    // [Fix] 容错：END 缺失/用其它分隔符时，PROFILE 段截至 ---IMAGES--- 或文尾
-    var m = output.match(/---\s*PROFILE\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
-    if (!m) { slErr('⛔ 模型没输出 ---PROFILE--- 段（本轮锚点/档案不会更新）'); return null; }
-    try {
-        return _looseJson(m[1]);
-    } catch (e) {
-        slErr('⛔ PROFILE JSON 解析失败: ' + e.message + ' | 原文前 200 字: ' + String(m[1]).slice(0, 200).replace(/\s+/g, ' '));
-        return null;
+// ══════════════════════════════════════════════════════════════
+// v1.27.2 多段容错
+// ══════════════════════════════════════════════════════════════
+// 旧解析器用**单段**正则：`---NAME---([\s\S]*?)(?:---END---|$)`，只取第一个同名段。
+// 而模型完全可能按「每个占位符走一遍 workflow」来输出 —— 那就有 N 个 PROFILE/IMAGES/END。
+// 结果：3 个 IMAGES 段只解析出第 1 条 → classifyPipelineFailure 判 short → 整轮重试 → 白烧。
+//
+// 2026-10-25 实测：finish=stop / content=14707 字 / system 分层=6 / 判 short（需要 3 条）。
+// 六种输出格式逐一验证，只有「每个占位符一份完整三段」会产生 short。
+//
+// 现在：收集**全部同名段**再合并。单段输入的行为与原来逐字一致（回归 T2 钉住）。
+function _allSections(output, name) {
+    var re = new RegExp(
+        '---\\s*' + name + '\\s*---([\\s\\S]*?)'
+        + '(?:---\\s*END\\s*---|(?=---\\s*(?:PROFILE|IMAGES|CHECK|WARDROBE|STATUSES)\\s*---)|$)',
+        'g');
+    var out = [], m, t = String(output || '');
+    while ((m = re.exec(t)) !== null) {
+        var seg = m[1].trim();
+        if (seg) out.push(seg);
     }
+    return out;
+}
+
+// 标记计数：失败时用来说明"到底是几个段"，不是猜
+function _markerStats(out) {
+    var t = String(out || '');
+    var n = function (name) { return (t.match(new RegExp('---\\s*' + name + '\\s*---', 'g')) || []).length; };
+    return { profile: n('PROFILE'), images: n('IMAGES'), check: n('CHECK'), end: n('END'), len: t.length };
+}
+
+// 同一人被多段重复建档：后段补充前段，不丢前段的非空字段
+function _mergePersonEntry(a, b) {
+    if (!a) return b;
+    if (!b || typeof b !== 'object') return a;
+    var out = {}, k;
+    for (k in a) out[k] = a[k];
+    for (k in b) {
+        var v = b[k];
+        if (v === null || v === undefined || v === '') continue;
+        var isObj = v && typeof v === 'object' && !Array.isArray(v);
+        var oldObj = out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]);
+        if (isObj && oldObj) {
+            var sub = {}, sk;
+            for (sk in out[k]) sub[sk] = out[k][sk];
+            for (sk in v) if (v[sk]) sub[sk] = v[sk];
+            out[k] = sub;
+        } else {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+
+// WARDROBE / STATUSES 这种 key→string 的段：宽容 JSON → 对象
+function _looseKeyMap(text, tag) {
+    try {
+        var fixed = (String(text || '').trim()).replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g,
+            function (match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
+        var i = fixed.indexOf('{'), j = fixed.lastIndexOf('}');
+        if (i >= 0 && j > i) return JSON.parse(fixed.substring(i, j + 1));
+    } catch (e) { slLog(tag + ' JSON解析失败: ' + e.message); }
+    return null;
+}
+
+export function parseRosterProfile(output) {
+    var sections = _allSections(output, 'PROFILE');
+    if (!sections.length) { slErr('⛔ 模型没输出 ---PROFILE--- 段（本轮锚点/档案不会更新）'); return null; }
+    var merged = null;
+    for (var s = 0; s < sections.length; s++) {
+        var obj = null;
+        try { obj = _looseJson(sections[s]); }
+        catch (e) {
+            slErr('⛔ PROFILE JSON 解析失败(段 ' + (s + 1) + '/' + sections.length + '): ' + e.message
+                + ' | 原文前 200 字: ' + sections[s].slice(0, 200).replace(/\s+/g, ' '));
+            continue;
+        }
+        if (!obj || typeof obj !== 'object') continue;
+        var persons = obj.persons;
+        if (!persons || typeof persons !== 'object') continue;
+        if (!merged) merged = { persons: {} };
+        for (var k in persons) merged.persons[k] = _mergePersonEntry(merged.persons[k], persons[k]);
+    }
+    if (!merged) return null;
+    if (sections.length > 1) {
+        slLog('parseRosterProfile: 合并 ' + sections.length + ' 个 PROFILE 段 → ' + Object.keys(merged.persons).length + ' 人');
+    }
+    return merged;
 }
 
 // v1.5.0：解析可选的 ---WARDROBE--- 段（key → detail）
 export function parseRosterWardrobe(output) {
-    var m = output.match(/---\s*WARDROBE\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
-    if (!m) return null;
-    try {
-        var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
-        var outerI = fixed.indexOf('{'), outerEnd = fixed.lastIndexOf('}');
-        if (outerI >= 0 && outerEnd > outerI) return JSON.parse(fixed.substring(outerI, outerEnd + 1));
-    } catch (e) { slLog('造型 WARDROBE JSON解析失败: ' + e.message); }
-    return null;
+    var sections = _allSections(output, 'WARDROBE');
+    if (!sections.length) return null;
+    var merged = {};
+    for (var s = 0; s < sections.length; s++) {
+        var obj = _looseKeyMap(sections[s], '造型 WARDROBE');
+        if (obj) for (var k in obj) merged[k] = obj[k];
+    }
+    return Object.keys(merged).length ? merged : null;
 }
 
 // v1.9.0：解析可选的 ---STATUSES--- 段（key → detail）
 export function parseRosterStatuses(output) {
-    var m = output.match(/---\s*STATUSES\s*---\s*([\s\S]*?)(?:---\s*END\s*---|(?=---\s*IMAGES\s*---)|$)/);
-    if (!m) return null;
-    try {
-        var fixed = (m[1].trim() || '').replace(/:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g, function(match) { return match.replace(/\n/g, '\\n').replace(/\r/g, ''); });
-        var outerI = fixed.indexOf('{'), outerEnd = fixed.lastIndexOf('}');
-        if (outerI >= 0 && outerEnd > outerI) return JSON.parse(fixed.substring(outerI, outerEnd + 1));
-    } catch (e) { slLog('状态 STATUSES JSON解析失败: ' + e.message); }
-    return null;
+    var sections = _allSections(output, 'STATUSES');
+    if (!sections.length) return null;
+    var merged = {};
+    for (var s = 0; s < sections.length; s++) {
+        var obj = _looseKeyMap(sections[s], '状态 STATUSES');
+        if (obj) for (var k in obj) merged[k] = obj[k];
+    }
+    return Object.keys(merged).length ? merged : null;
 }
 
-export function parseRosterImages(output) {
-    // [Fix] 容错：END 缺失时截至文尾；大小写/间隔符变体也接受
-    var m = output.match(/---\s*IMAGES\s*---\s*([\s\S]*?)(?:---\s*END\s*---|$)/);
-    if (!m) return [];
-    var text = m[1].trim();
-    if (!text || text === '（无）' || text === '(无)') return [];
-    var lines = text.split(/\n/);
+// 单段内的行解析（原逻辑，逐字搬出以免行为漂移）
+function _parseImageLines(text) {
+    var t = String(text || '').trim();
+    if (!t || t === '（无）' || t === '(无)') return [];
+    var lines = t.split(/\n/);
     var out = [];
     for (var i = 0; i < lines.length; i++) {
         var line = lines[i].trim();
@@ -449,6 +538,22 @@ export function parseRosterImages(output) {
         // 连续去重：包装剥离后可能与后续行重复
         if (line) { var _lt = line.trim(); if (out.length === 0 || out[out.length - 1] !== _lt) out.push(_lt); }
     }
+    return out;
+}
+
+export function parseRosterImages(output) {
+    var sections = _allSections(output, 'IMAGES');
+    if (!sections.length) return [];
+    if (sections.length === 1) return _parseImageLines(sections[0]);
+    // 多段：逐段解析后按出现顺序拼接（跨段重复条目丢弃）
+    var out = [];
+    for (var s = 0; s < sections.length; s++) {
+        var part = _parseImageLines(sections[s]);
+        for (var k = 0; k < part.length; k++) {
+            if (!out.length || out[out.length - 1] !== part[k]) out.push(part[k]);
+        }
+    }
+    slLog('parseRosterImages: 输出含 ' + sections.length + ' 个 IMAGES 段（模型按每个占位符各写一份）→ 合并为 ' + out.length + ' 条');
     return out;
 }
 

@@ -1,5 +1,44 @@
 # 📜 更新日志（Changelog）
 
+## v1.27.4 — 2026-10-25
+**主题：年龄闸门接通 —— 返回值早已是 true，但全仓库零调用，等于死代码**
+
+### 🔍 现状（核查结果）
+
+| 项 | 事实 |
+|---|---|
+| `isUnderageEntry` 三处返回值 | 已经是 `return true`（`4877c0f` 2026-10-18 改回，非本轮） |
+| 调用点 | **0**（全仓库只有 `roster.js:790` 的定义） |
+| 所以 | 无论 `true` 还是 `false`，从未执行过 —— 立绘与提示词都不经过它 |
+
+### ✅ 本次改动
+
+把闸门接到**真正被调用的出口**：`getPortraitPrompt()`（`tabs.js:327` / `:455` 生成立绘时走这里）。
+
+```
+getPortraitPrompt(entry, view)
+  ├─ isUnderageEntry(entry) === false → 原样返回模型写的立绘提示词（行为不变）
+  └─ isUnderageEntry(entry) === true  → _safeMinorPortrait() 中性重建
+```
+
+`_safeMinorPortrait()` 的取舍：
+
+| 保留（可画维度） | 剔除（体表性征） |
+|---|---|
+| `aura` / `race` / `age` / `face_shape` / 五官 / `hair` / `skin_tone` / `neck` / `shoulder` / `height` / `waist` / `build` / `leg` / `hands` / `posture` / `marks` | `bust` / `breast` / `nipple` / `areola` / `chest` / `pubic` / `genitalia` / `groin` / `nudity` / `lingerie` 等 |
+
+服装固定为 `plain solid-color long-sleeve leotard, opaque tights, modest full coverage`，并带 `no revealing details`。
+
+**为什么在出口拦而不是在入口拦**：`system.txt` 的立绘清单要求逐人落地「胸的大小 · 胸型 · 乳晕 · 乳头 · 体毛 · 阴毛 · 阴部」，没有年龄门槛 —— 成年角色那是体型参考图，未成年角色就不该有。入口拦需要改提示词清单（影响所有角色），出口拦只影响年龄判定的那一类，且不依赖模型自觉。
+
+### 未改动（明确记录）
+
+`prompts/roster/system.txt` 的「年龄感」一节（L474-484：幼态化/老态校准、`⛔ 幼态：少女感、稚气…`）**保持原样**，本轮未删未改。
+
+### 回归
+
+**70 项全过**。新增 T14（14 项）：未成年 front/left 走安全模板、五个性征维度全部剔除、可画维度保留、成年角色原样返回、无立绘返回空串。
+
 ## v1.27.3 — 2026-10-25
 **主题：端到端实跑暴露的两处（其实是三处）残留单段思维 —— 数字重试后不复检 / CHECK 段错乱 / stripCoT 砍尾段**
 

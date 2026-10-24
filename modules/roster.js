@@ -745,9 +745,43 @@ export function getPortraitPrompt(entry, view) {
         if (!pp) return '';
         // v1.14：非正面视角**不回退到正面** —— 旧写法 pp[view] || pp.front，某个视角没写就用正面那条，
         // 结果四个视角共用一条提示词（实测左右两张几乎一样）。缺就是缺，让上层去补方向/重写。
-        if (view && view !== 'front') return String(pp[view] || '').trim();
-        return String(pp.front || '').trim();
+        var raw;
+        if (view && view !== 'front') raw = String(pp[view] || '').trim();
+        else raw = String(pp.front || '').trim();
+        if (!raw) return '';
+        // v1.27.4：年龄闸门**接通**（v1.26.2 把返回值改回 true 之后一直是死代码，零调用）。
+        // 卡点是：立绘清单（system.txt）要求逐人落地「胸的大小/胸型/乳晕/乳头/体毛/阴毛/阴部」，
+        // 没有年龄门槛 —— 成年角色那是体型参考，未成年角色就不该有。
+        // 在**出口**硬拦（不依赖模型自觉）：未成年角色的立绘不用模型写的那四条，改用中性维度重建。
+        if (isUnderageEntry(entry)) return _safeMinorPortrait(entry, view || 'front');
+        return raw;
     } catch (e) { return ''; }
+}
+
+// 未成年角色立绘：只保留可用维度（气质/族裔/年龄/脸/眼/鼻/唇/耳/肤色/发型/颈肩/身高/腰/腿/手/体态/标记），
+// 一律剔除体表性征（胸/乳晕/乳头/体毛/阴毛/阴部），服装固定为素色长袖紧身打底衣。
+var _MINOR_KEEP_DIM = /^(aura|race|age|face_shape|jaw|chin|brow|eyebrow|eyelid|eye|iris|pupil|lashes|eye_area|nose|lips|ears|skin_tone|skin_texture|hair|hair_color|neck|shoulder|height|waist|build|leg|hands|posture|marks?)\s*[:：]/i;
+var _MINOR_DROP_DIM = /(bust|breast|nipple|areola|chest|pubic|genitalia|groin|crotch|nude|naked|topless|lingerie|underwear|cleavage)/i;
+
+function _safeMinorPortrait(entry, view) {
+    var angle = view === 'left' ? 'left side view'
+        : view === 'right' ? 'right side view'
+        : view === 'back' ? 'back view' : 'front view';
+    var keep = [];
+    var src = [String((entry && entry.anchor) || ''), String((entry && entry.anchor_zh) || '')].join(' | ');
+    var segs = src.split('|');
+    for (var i = 0; i < segs.length; i++) {
+        var s = String(segs[i] || '').trim();
+        if (!s) continue;
+        if (_MINOR_DROP_DIM.test(s)) continue;
+        if (!_MINOR_KEEP_DIM.test(s)) continue;
+        keep.push(s);
+    }
+    return 'character reference sheet, ' + angle + ', standing straight, arms at sides, closed stance, '
+        + 'plain solid-color long-sleeve leotard, opaque tights, modest full coverage, '
+        + 'neutral studio lighting, plain grey background, '
+        + (keep.length ? keep.join(' | ') + ', ' : '')
+        + 'no revealing details';
 }
 
 export function portraitPromptsMode(entry) {

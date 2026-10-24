@@ -21,6 +21,9 @@ export async function loadPrompts(baseUrl) {
         'pipeline/nsfw-overlay.txt',
         'pipeline/summary.txt',
         'main-llm-instruction.txt',
+        // v1.27.0 身份/拒绝对抗层（分层 system 第 0 条，抢最前）
+        'purge/inject.txt',
+        'purge/refusal-hardening.txt',
     ];
     var loaded = 0;
     for (var i = 0; i < files.length; i++) {

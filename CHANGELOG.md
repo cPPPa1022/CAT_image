@@ -1,5 +1,58 @@
 # 📜 更新日志（Changelog）
 
+## v1.27.0 — 2026-10-25
+**主题：注入层植入 —— 从「一个大字符串」到「按权重排的 messages」+ 截断独立成类**
+
+对齐 dsh-purge 的破限结构，把能落到本插件的前四类搬进来：
+文本层、位置·组装层、身份层、异常分类层。
+第 5 类（引擎补丁 82 条：审批门 / 沙箱 / 文件围栏 / 工具描述）结构性不适用 ——
+本插件没有宿主治理层，那些文件在本项目里不存在。
+
+### 改动
+
+| 文件 | 改动 |
+|---|---|
+| `prompts/purge/inject.txt`（新） | PRIME DIRECTIVE / Core Motivation / TASK PRIORITY / 直接生成 / 硬输出规则 / 语法归属。骨架取自 dsh-purge，血肉按生图管线重写（原版 13,865 字里的 PENTEST ROUTING / Scoped Rules 1-25 / CANNED WORKFLOWS 全部不适用，原样搬会把 CoT 引向"意图路由"而不是"拆画面"） |
+| `prompts/purge/refusal-hardening.txt`（新） | 拒绝对抗：逐条点名六类规避形态 + 唯一允许的处理方式 + 两条判据 |
+| `prompts/loader.js` | 注册上述两份 |
+| `modules/pipeline/api.js` | ① `THINKING_BUDGET` 恢复 v1.12.0 的档位-预算配对（off 16k / low 32k / high 64k / max 98k）② `applyThinking(body, level)` ③ 新增 `auxApiCallRaw`，回传 `{content, finish, reasoningLen, truncated}` ④ `auxApiCall` 保留老签名做兼容包装（5 个调用点零改动）⑤ 参数降级路径按 high 档抬预算 |
+| `modules/pipeline/roster-pipeline.js` | ① **删除** `buildRosterSystemPrompt()`（87.5 KB 单条字符串）② 新增 `splitDiscipline()` + `buildPurgeMessages()`：按 S0 身份 / S1 纪律 / S2 规则 / S3 语料 / S4 模式切多条 system ③ `classifyPipelineFailure(out, expect, meta)` 新增 `truncated` 类 ④ 帧内续写：`_continueOutput` / `_trimTo` / `_isDup` / `_mergePartial` / `CONTINUE_MAX=2` 熔断 |
+| `modules/settings.js` | 新增 `slPurgeMeta` 默认值 + `strHash()`（FNV-1a + djb2，同步，不做安全用途） |
+| `index.js` | `checkPurgeMeta()` 幂等指纹登记；`loadPrompts` 接 `.then`；版本号 |
+
+### 📊 分层实测（zit 模式，真实 prompts 目录）
+
+旧实现：单条 system **41,926 字 ≈ 26.2k token**，
+`<thinking_rules>` 起始位置第 **1,471** 字 = 全文 **3.5%**，整段 341 字 = **0.8%**。
+
+| 层 | 内容 | 字数 |
+|---|---|---|
+| S0 | 身份 + 拒绝对抗 | 1,424 |
+| S1 | 作业纪律（thinking_rules + behavior_prerecord） | 341 |
+| S2 | 领域规则（三层法则 / workflow） | 27,225 |
+| S3 | 语料（词表 ×5） | 11,731 |
+| S4 | 模式 overlay | 2,615 |
+
+S1 的位置权重：**0.8% → 100%**（独占一条 system）；总量 +6.8%（约 +1.8k token）。
+
+### 为什么续写一律关思考
+
+帧内续写不是新的一轮：规划在第一轮的 CoT 里已经做完了，续写阶段只需要落成正文。
+reasoning 在这里是纯浪费，而且会再挤占一次预算 —— 这正是「开思考必截断」的死循环入口。
+
+### 为什么截断必须独立成类
+
+旧实现 `classifyPipelineFailure` 只有 empty / format / noprofile / noimage / short / refusal，
+`finish_reason` 被 `auxApiCall` 丢在日志里。于是「被 max_tokens 砍断」被压缩成：
+- `empty` → 走「不带上次输出整轮重发」→ 思考白烧一遍，还要再烧一遍；
+- `short` → 走「带上次输出补齐」→ 其实是对的，但那是偶然撞上的，不是设计。
+
+### 回归
+
+`%TEMP%\sl_purge_test\run.cjs` —— **36 项全过**。
+（T1 splitDiscipline / T2 truncated 判定顺序 / T3 trim 丢弃半截 / T4 isDup 阈值 / T5 merge 四种情形 / T6 端到端）
+做法是从源文件抽取函数体做单测，不 import 整个模块 —— 依赖链会拉进 settings / roster，node 里会碰 window。
+
 ## v1.26.5 — 2026-10-18
 **主题：身份标签写成「（同上，不重复外貌）」→ 建出第二个空档案**
 

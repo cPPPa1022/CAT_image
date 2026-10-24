@@ -2,10 +2,10 @@
 import { extension_settings, getContext } from '../../../extensions.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
-import { loadPrompts } from './prompts/loader.js';
+import { loadPrompts, getPrompt } from './prompts/loader.js';
 
 import { slLog, slErr, slLogDump, getLogCount } from './modules/log.js';
-import { initSettings, settings, getDefaults, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings } from './modules/settings.js';
+import { initSettings, settings, getDefaults, COLORS, getSTContext, getSTHeaders, escapeHtml, saveSettings, strHash } from './modules/settings.js';
 import { buildUI } from './modules/ui.js';
 import { setEnqueueGen, restoreImageBlocks } from './modules/render.js';
 import { enqueueGen } from './modules/queue.js';
@@ -17,8 +17,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.26.5';
-slLog('LOADED v1.26.5');
+window.SILLYLAB_VERSION = 'v1.27.0';
+slLog('LOADED v1.27.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);
@@ -119,11 +119,40 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({name:'sillylab',call
 
 // ── v1.1：移除上游版本检测+公告（远端为原作者仓库，会误报新版本/展示上游公告） ──
 
+// ── v1.27.0 purge 注入层指纹（幂等登记）──
+// 只做一件事：把 purge/inject.txt 的内容指纹记下来，变了就在日志里说出来。
+// 不覆盖用户改动、不静默回滚 —— 上游那套「原文对不上就跳过、这次应用仍算完成」的纪律。
+function checkPurgeMeta() {
+    try {
+        var inj = getPrompt('purge/inject.txt') || '';
+        if (!inj) { slLog('purge 注入层: 未加载（purge/inject.txt 缺失，只有核心规则生效）'); return; }
+        var h = strHash(inj);
+        var meta = settings.slPurgeMeta || {};
+        if (!meta.seedHash) {
+            settings.slPurgeMeta = { seedHash: h, injectHash: h, appliedAt: Date.now() };
+            try { saveSettings(); } catch (e) {}
+            slLog('purge 注入层: 首次登记 ' + h + '（' + inj.length + ' 字）');
+            return;
+        }
+        if (meta.injectHash === h) { slLog('purge 注入层: 未变更 ' + h); return; }
+        settings.slPurgeMeta = { seedHash: meta.seedHash, injectHash: h, appliedAt: Date.now() };
+        try { saveSettings(); } catch (e) {}
+        slLog('purge 注入层: 内容已变更 ' + meta.injectHash + ' → ' + h + '（保留 seedHash，不回滚）');
+    } catch (e) { slLog('purge 注入层检查跳过: ' + e.message); }
+}
+
 // ── 启动💬 提示词📂 加载 ──
 var PROMPTS_BASE = '';
 try { PROMPTS_BASE = new URL('prompts/', import.meta.url).href; } catch (e) { PROMPTS_BASE = '/scripts/extensions/third-party/sillyCAT/prompts/'; slLog('import.meta.url 不可用，使用 fallback 路径'); }
-if (PROMPTS_BASE) { slLog('提示词加载器: 📥 从 ' + PROMPTS_BASE + ' 加载'); /* [AI-Fix] loadPrompts 是 async 函数，原代码未 await 也未被 .catch()，提示词加载失败时产生 Unhandled Promise Rejection。加 catch 防止静默失败。 */ loadPrompts(PROMPTS_BASE).catch(function(e) { slErr('提示词加载失败: ' + (e.message||'').slice(0,80)); }); }
-else { slLog('提示词加载器: 呜呜 import.meta.url 不可用喵~ (╥﹏╥)'); }
+if (PROMPTS_BASE) {
+    slLog('提示词加载器: 📥 从 ' + PROMPTS_BASE + ' 加载');
+    /* [AI-Fix] loadPrompts 是 async 函数，原代码未 await 也未被 .catch()，提示词加载失败时产生 Unhandled Promise Rejection。加 catch 防止静默失败。 */
+    loadPrompts(PROMPTS_BASE)
+        .then(function () { checkPurgeMeta(); })
+        .catch(function (e) { slErr('提示词加载失败: ' + (e.message || '').slice(0, 80)); });
+} else {
+    slLog('提示词加载器: 呜呜 import.meta.url 不可用喵~ (╥﹏╥)');
+}
 
 // ── 注入 render 模块的生图排队 ──
 setEnqueueGen(enqueueGen);

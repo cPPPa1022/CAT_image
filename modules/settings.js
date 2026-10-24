@@ -73,6 +73,10 @@ export function getDefaults() {
         //   auto（默认）—— 本轮剧情里有 [img:] → 导演管线（占位符原位出图）；没有 → 本轮跳过
         //   director    —— 强制导演，并把 [img:] 占位符指令注入卡内请求（预设里没缝小猫指令时用）
         feBridgeMode: 'auto',
+        // ── v1.27.0 purge 注入层指纹（幂等）──
+        // { seedHash, injectHash, appliedAt }：只用于判断"注入内容有没有变"，
+        // 不参与权限/校验。reset 之后 seedHash 会重新登记，但至少"内容变了"这件事在日志里可见。
+        slPurgeMeta: {},
     };
 }
 
@@ -157,4 +161,19 @@ export function getActiveMode() {
 export function isEnglishMode(mode) {
     var m = mode || getActiveMode();
     return m === 'anime' || m === 'anime_tag' || m === 'anima';
+}
+
+// ── v1.27.0 轻量同步指纹（FNV-1a 32bit + djb2，拼成 16 位 hex）──
+// 只用来判「同一份文本有没有变」，不是安全用途，不引入 crypto（浏览器端要异步，不值得）。
+export function strHash(s) {
+    var str = String(s || '');
+    var h1 = 0x811c9dc5, h2 = 0x01000193;
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        h1 = ((h1 ^ c) >>> 0) * 0x01000193 >>> 0;
+        h2 = ((h2 << 5) + h2 + c) >>> 0;
+    }
+    var a = (h1 >>> 0).toString(16).padStart(8, '0');
+    var b = (h2 >>> 0).toString(16).padStart(8, '0');
+    return a + b;
 }

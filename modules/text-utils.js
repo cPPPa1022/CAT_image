@@ -480,16 +480,24 @@ export function findLostNumbers(source, target) {
 // ── v1.25 自校段解析（---CHECK---）──
 // 模型写完提示词后，自己逐条核对：事实是否原词出现、可见维度是否写全、有没有角色名、数字是否保留。
 // 插件只解析并记录（谁也没法替它判断"同义是否到位"），不进生图模型。
+//
+// v1.27.3：多段 + 前瞻。旧实现两个毛病：
+//   ① 只取**第一个** CHECK 段 —— 模型按"每个占位符各写一份三段"输出时，只有第 1 份的自校被记下；
+//   ② 缺 ---END--- 时 `([\s\S]*?)(?:---END---|$)` 会一路吃到文尾 ——
+//      实测把第 2 份输出的 `---PROFILE---` 和 JSON 当成自校行读进来（自校 #2 / #3 就是这个）。
+// 前瞻在遇到下一个段标记时刹车，和 roster-pipeline 的 _allSections 同一套规则。
 export function parseCheckSection(text) {
-    var m = String(text || '').match(/---\s*CHECK\s*---([\s\S]*?)(?:---\s*END\s*---|$)/);
-    if (!m) return [];
-    var out = [];
-    var lines = m[1].split(/\r?\n/);
-    for (var i = 0; i < lines.length; i++) {
-        var l = String(lines[i] || '').trim();
-        if (!l) continue;
-        if (/^-+$/.test(l)) continue;
-        out.push(l);
+    var t = String(text || '');
+    var re = /---\s*CHECK\s*---([\s\S]*?)(?:---\s*END\s*---|(?=---\s*(?:PROFILE|IMAGES|CHECK|WARDROBE|STATUSES)\s*---)|$)/g;
+    var out = [], m;
+    while ((m = re.exec(t)) !== null) {
+        var lines = m[1].split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var l = String(lines[i] || '').trim();
+            if (!l) continue;
+            if (/^-+$/.test(l)) continue;
+            out.push(l);
+        }
     }
     return out;
 }

@@ -147,6 +147,9 @@ function buildPurgeMessages() {
 
     var core = _p('roster/system.txt');
     if (!core) {
+        // v1.27.3：提示词没加载时不再静默降级 —— 那会让整轮规则、建档规范、输出格式全部消失，
+        // 表现成"档案无 / 提示词薄"，而日志里一句话都没有。显式报出来。
+        slErr('⛔ roster/system.txt 未加载 → 本轮只有最小身份兜底，建档规范与输出格式缺失（检查 prompts/ 目录与加载日志）');
         core = '<role>你是 SIL —— 嵌入在聊天系统后端的生图管线组件。你只做两件事：为每个 [img:] 占位符写 1 条完整生图提示词；更新人物档案。</role>';
     }
     var cut = splitDiscipline(core);
@@ -812,6 +815,22 @@ export async function runRosterPipeline(bodyText, mesId) {
                 _meta = { finish: _r3.finish, truncated: _r3.truncated, reasoningLen: _r3.reasoningLen };
             }
             var _fail2 = classifyPipelineFailure(output, expectN, _meta);
+            // v1.27.3：重试后**必须复检数字**。
+            // 旧实现重试后只判 classifyPipelineFailure —— 于是 lostnum 触发重试后，
+            // 重试结果里数字仍然丢失也会被当成"重试成功"放行（实测：mock 两次输出都不带 24岁，第二次直接放行）。
+            // 年龄（14岁）/身高（168cm）是硬事实，静默丢失 = 画面年龄/体型彻底失控。
+            // 这里只**告警不阻断**：findLostNumbers 只认字面数字，「24岁 → 二十四岁」这类合法同义会被算作丢失，
+            // 拿它去回退到上一次输出会更差。让人看图确认才是正确处置。
+            if (!_fail2) {
+                try {
+                    var _lostNum2 = findLostNumbersInPrompts(placeholders, parseRosterImages(output));
+                    if (_lostNum2.length) {
+                        slErr('⚠️ 重试后数字仍未字面出现（可能合法同义改写）: '
+                            + _lostNum2.map(function (x) { return '第' + (x.i + 1) + '条 ' + x.items.join('、'); }).join(' / ')
+                            + ' → 不阻断，按现状继续；数字直接决定画面年龄/体型，请人工看图确认');
+                    }
+                } catch (eLN2) { /* 复检失败不影响主流程 */ }
+            }
             if (_fail2) {
                 // [Fix v1.13.3] 重试也失败时**不要 0 图**：取两次里条数多的那次继续，
                 // 缺的那几条交给 fillPlaceholders 的「锚点+场景」兜底（脸是对的，只是描述薄）。

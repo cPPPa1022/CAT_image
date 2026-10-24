@@ -51,7 +51,16 @@ export function stripCoT(text) {
     if (p > 0) t = t.slice(p);
     var reEnd = /---\s*END\s*---/g, mm, lastIdx = -1;
     while ((mm = reEnd.exec(t)) !== null) lastIdx = mm.index + mm[0].length;
-    if (lastIdx > 0) t = t.slice(0, lastIdx);
+    if (lastIdx > 0) {
+        // v1.27.3：多段输出时，最后一个 ---END--- 之后**可能还有尾段**。
+        // 实测：3 份「PROFILE/IMAGES/END」时，最后那份的 ---CHECK--- 不带 END，
+        // 旧实现把它当思考残留砍掉（1788 字 → 1730 字，正好一段 CHECK）。
+        // 判据：残余里还有段标记就不截，只有纯废话才砍。
+        var tail = t.slice(lastIdx);
+        if (!/---\s*(?:PROFILE|IMAGES|CHECK|WARDROBE|STATUSES)\s*---/.test(tail)) {
+            t = t.slice(0, lastIdx);
+        }
+    }
     return t.trim();
 }
 

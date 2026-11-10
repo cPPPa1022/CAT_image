@@ -3,7 +3,8 @@ import { CAT, CAT_THEMES, TEXT_THEMES, applyTheme, THEME_ORDER, THEME_ICONS } fr
 import { card, groupTitle, cell, cardHead, lbl, chip, btnMain, btnGhost, btnSm, btnDanger, switchHTML, empty } from './primitives.js';
 import { catSVG, catStatusText } from './cat.js';
 import { toast, esc, escAttr, fi, chkProf } from './utils.js';
-import { settings, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
+import { settings, saveSettings, getActiveMode, isEnglishMode, MODES, modeBadge } from '../settings.js';
+import { KREA2_STYLES, krea2StyleById } from '../style-presets.js';
 import { slLogDump, getLogCount, slClearLogs, slLog } from '../log.js';
 import { getProfiles, getCharacterName } from '../pipeline/profile.js';
 import { startPolling, stopPolling, getScannerStatus } from '../scanner.js';
@@ -43,7 +44,7 @@ export function renderHomeTab() {
   h += '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:' + CAT.text + ';">' + esc(cn) + '</div><div style="font-size:11px;color:' + CAT.sub + ';margin-top:2px;">' + '🎬 导演模式 · 主模型指挥' + ' · ' + (settings.autoGen === 1 ? '自动出图' : '手动出图') + '</div></div>';
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
-  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + ({ zit: '🖼️ ZIT', anime: '🎬 Anime', anime_tag: '🎬 Tag', anima: '🎬 Anima' }[getActiveMode()] || '🖼️ ZIT') + '</span>';
+  h += '<span style="' + chip(CAT.bg, CAT.sub) + '">' + modeBadge(getActiveMode()) + '</span>';
   var _pn = 0; try { _pn = rosterEntries().length; } catch (e0) {}
   h += '<span style="' + chip(_pn ? CAT.green + '1F' : CAT.bg, _pn ? CAT.green : CAT.sub) + '">' + (_pn ? '🐾 已建档 ' + _pn + ' 人' : '🐾 暂无档案') + '</span>';
   h += '<span style="' + chip(CAT.bg, CAT.sub) + '">🐟 队列 ' + ql + '</span>';
@@ -96,11 +97,36 @@ function storyCountText() {
 }
 
 // ═══════════ 子页：设置 ═══════════
+// v1.28.0：模式下拉统一从 settings.MODES 生成（加模式不再需要改这里两处）
+function modeOptionsHTML(selected, useShort) {
+  var h = '';
+  for (var i = 0; i < MODES.length; i++) {
+    var m = MODES[i];
+    h += '<option value="' + m.id + '"' + (m.id === selected ? ' selected' : '') + '>' + (useShort ? m.short : m.label) + '</option>';
+  }
+  return h;
+}
+// v1.28.0：Krea 2 风格下拉（清单见 modules/style-presets.js，单一来源；按 group 分 optgroup）
+function krea2StyleOptionsHTML(selected) {
+  var h = '', cur = null;
+  for (var i = 0; i < KREA2_STYLES.length; i++) {
+    var s = KREA2_STYLES[i];
+    var g = s.group || '其他';
+    if (g !== cur) {
+      if (cur !== null) h += '</optgroup>';
+      h += '<optgroup label="' + g + '">';
+      cur = g;
+    }
+    h += '<option value="' + s.id + '"' + (s.id === (selected || '') ? ' selected' : '') + '>' + s.label + '</option>';
+  }
+  if (cur !== null) h += '</optgroup>';
+  return h;
+}
 export function renderSettingsPage() {
   pushPage(function (body) {
     var f = fi(), h = '';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_plugin_on', settings.pluginOn !== false, '插件开启', '关掉就停止扫描与出图') + '</div>';
-    h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '"><option value="zit"' + (settings.modelType === 'zit' ? ' selected' : '') + '>ZIT（中文提示词）</option><option value="anima"' + (settings.modelType === 'anima' ? ' selected' : '') + '>🎬 Anima 混合（标签定结构 + 自然语言写氛围）★ Anima 系模型推荐</option><option value="anime"' + (settings.modelType === 'anime' ? ' selected' : '') + '>Anime（纯英文描述）</option><option value="anime_tag"' + (settings.modelType === 'anime_tag' ? ' selected' : '') + '>Anime Tag（纯英文标签）</option></select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">Anima 系模型由 Danbooru 标签 + 自然语言 caption 混合训练：<b>纯标签丢氛围，纯描述丢结构</b> → 用混合模式效果最好。</div></div>';
+    h += '<div style="' + card() + '">' + cardHead('🖼️', '模型类型', '决定提示词语言') + '<select id="sl_model_type" style="' + f + '">' + modeOptionsHTML(settings.modelType, false) + '</select><div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.6;">Anima 系模型由 Danbooru 标签 + 自然语言 caption 混合训练：<b>纯标签丢氛围，纯描述丢结构</b> → 用混合模式效果最好。<br>Krea 2 吃<b>英文自然语言段落</b>（不吃标签链 / 权重语法）；它默认会探索风格，多张图靠同一套风格句保持一致。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('🐟', '配图偏好', '这只猫什么时候画图') + '<select id="sl_image_mode" style="' + f + '"><option value="always"' + (settings.imageMode === 'always' ? ' selected' : '') + '>总是配图（每轮 ≥1 张）</option><option value="encourage"' + (settings.imageMode === 'encourage' ? ' selected' : '') + '>鼓励配图（该插就插）</option><option value="key"' + (settings.imageMode === 'key' ? ' selected' : '') + '>关键场景（宁缺毋滥）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🖼️', '图块尺寸', '图卡里图片的宽度（分辨率低建议调小）') + '<select id="sl_img_width" style="' + f + '"><option value="100%"' + ((settings.imgBlockWidth || '55%') === '100%' ? ' selected' : '') + '>大（100%）</option><option value="75%"' + ((settings.imgBlockWidth || '55%') === '75%' ? ' selected' : '') + '>中（75%）</option><option value="55%"' + ((settings.imgBlockWidth || '55%') === '55%' ? ' selected' : '') + '>小（55% · 默认）</option><option value="40%"' + ((settings.imgBlockWidth || '55%') === '40%' ? ' selected' : '') + '>迷你（40%）</option></select></div>';
     h += '<div style="' + card() + '">' + cardHead('🎬', '配图方式：导演模式', '主模型写 [img:] 占位符 → 插件 AI 写提示词') + '<div style="font-size:10.5px;color:' + CAT.sub + ';margin:6px 0 10px;line-height:1.6;">主模型在正文写 <code>[img:场景|人物:名字（标签）：静态外貌特征|要点]</code> 标记图片位置+画面要点 → 插件按「占位符 + 人物档案」写提示词出图，<b>不读正文</b>（最省 token）。<br>需要在角色卡 / 预设 / 世界书贴「小猫指令」（👇 一键复制）。</div><div style="margin-bottom:10px;">' + switchHTML('sl_director_cast', settings.directorCastImport === true, '把卡级旧扫描档案带进每个聊天', '默认关闭 —— 人物档案跟着聊天走：每个聊天各存一套，同卡不同聊天【不继承】。开启后，新聊天第一次出图时会把卡级的旧扫描档案导入本聊天（一般不需要）') + '</div><button id="sl_copy_instr" style="width:100%;' + btnGhost() + 'color:' + CAT.accent + ';">复制 小猫指令</button></div>';
@@ -118,7 +144,8 @@ export function renderSettingsPage() {
       '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:8px;line-height:1.6;">前端卡必须装「酒馆助手 / JS-Slash-Runner」才能跑；每条剧情都会多一次辅助 AI 调用（导演管线的开销）。</div></div>';
     h += '<div style="' + card() + '">' + cardHead('📝', '前置提示词', '拼到每张提示词最前') + '<input id="sl_prompt_prefix" type="text" value="' + escAttr(settings.promptPrefix || '') + '" style="' + f + '" placeholder="留空则不生效"></div>';
     h += '<div style="' + card() + ';padding:14px 16px;">' + switchHTML('sl_show_prompt', settings.showGenPrompt === true, '图块显示完整提示词', '默认关闭：图块只显示短标题（详细字段只进生成链，用户看不到）；调试时打开可看到每张图的完整生成提示词') + '</div>';
-    h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (settings.modelType === 'anime' || settings.modelType === 'anime_tag' || settings.modelType === 'anima' ? '' : 'display:none;') + '">' + cardHead('🎬', 'Anime 增强', 'Anime / Tag / Anima 模式生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用"></div>';
+    h += '<div id="sl_anime_opts" style="' + card() + 'background:' + CAT.bg + ';' + (isEnglishMode(settings.modelType) ? '' : 'display:none;') + '">' + cardHead('🎬', '英文模式增强', 'Anime / Tag / Anima / Krea 2 生效') + '<span style="' + lbl() + '">质量前缀</span><input id="sl_anime_prefix" type="text" value="' + escAttr(settings.animeQualityPrefix || '') + '" style="' + f + 'margin-bottom:10px;"><span style="' + lbl() + '">艺术家标签</span><input id="sl_anime_artist" type="text" value="' + escAttr(settings.animeArtist || '') + '" style="' + f + '" placeholder="留空则不使用（Krea 2 建议留空，风格用下方下拉）"></div>';
+    h += '<div id="sl_krea2_style_card" style="' + card() + ';' + (settings.modelType === 'krea2' ? '' : 'display:none;') + '">' + cardHead('🎨', 'Krea 2 风格', '锁定本场画风 · 插件统一前置，跨轮不漂') + '<select id="sl_krea2_style" style="' + f + '">' + krea2StyleOptionsHTML(settings.krea2Style) + '</select>' + '<div id="sl_krea2_style_note" style="font-size:10px;color:' + CAT.sub + ';margin-top:6px;line-height:1.7;">' + esc((krea2StyleById(settings.krea2Style) || {}).note || '') + '</div>' + '<div style="font-size:10px;color:' + CAT.mute + ';margin-top:6px;line-height:1.7;">官方没有固定的内置风格清单：Krea 2 的风格靠<b>提示词 / 风格参考图 / 情绪板 / LoRA</b> 四条路。这里是从官方示例归纳出的风格句 —— 选中后由插件加在每张提示词最前，辅助 AI 只写人物与场景，不再另写画风。<br>已选风格时，上面「质量前缀」只写质量（<code>sharp focus</code> / <code>high detail</code>），别再写媒介，否则会打架。</div></div>';
     h += '<div style="text-align:center;font-size:10px;color:' + CAT.mute + ';padding:6px 0 2px;">所有改动即时保存 · 无需手动保存</div>';
     body.html(h);
     bindSettingsEvents(body);
@@ -126,7 +153,7 @@ export function renderSettingsPage() {
 }
 export function bindSettingsEvents(b) {
   b.off('change', '#sl_plugin_on').on('change', '#sl_plugin_on', function () { settings.pluginOn = jQuery(this).is(':checked'); saveSettings(); if (settings.pluginOn) { startPolling(); compact.setPluginEnabled(true); } else { stopPolling(); compact.setPluginEnabled(false); } });
-  b.off('change', '#sl_model_type').on('change', '#sl_model_type', function () { settings.modelType = jQuery(this).val(); jQuery('#sl_anime_opts').toggle(settings.modelType === 'anime' || settings.modelType === 'anime_tag' || settings.modelType === 'anima'); saveSettings(); });
+  b.off('change', '#sl_model_type').on('change', '#sl_model_type', function () { settings.modelType = jQuery(this).val(); jQuery('#sl_anime_opts').toggle(isEnglishMode(settings.modelType)); jQuery('#sl_krea2_style_card').toggle(settings.modelType === 'krea2'); saveSettings(); });
   b.off('change', '#sl_image_mode').on('change', '#sl_image_mode', function () { settings.imageMode = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_img_width').on('change', '#sl_img_width', function () { settings.imgBlockWidth = jQuery(this).val(); saveSettings(); });
   b.off('change', '#sl_director_cast').on('change', '#sl_director_cast', function () { settings.directorCastImport = jQuery(this).is(':checked'); saveSettings(); try { refreshCoopCards(); } catch (e) {} toast('success', settings.directorCastImport !== false ? '已开启：卡库档案导入人物表' : '已关闭：扫描仅用于立绘/档案，人物表只留占位符收集'); });
@@ -164,6 +191,12 @@ export function bindSettingsEvents(b) {
   b.off('change', '#sl_show_prompt').on('change', '#sl_show_prompt', function () { settings.showGenPrompt = jQuery(this).is(':checked'); saveSettings(); });
   b.off('change input', '#sl_anime_prefix').on('change input', '#sl_anime_prefix', function () { settings.animeQualityPrefix = jQuery(this).val(); saveSettings(); });
   b.off('change input', '#sl_anime_artist').on('change input', '#sl_anime_artist', function () { settings.animeArtist = jQuery(this).val(); saveSettings(); });
+  b.off('change', '#sl_krea2_style').on('change', '#sl_krea2_style', function () {
+    settings.krea2Style = jQuery(this).val() || '';
+    var s = krea2StyleById(settings.krea2Style);
+    jQuery('#sl_krea2_style_note').text(s ? s.note : '');
+    saveSettings();
+  });
 }
 
 // ═══════════ 子页：主题外观 ═══════════
@@ -359,7 +392,7 @@ function renderPersonDetail(body, key) {
   for (var i = 0; i < people.length; i++) { if (people[i].key === key) { ppl = people[i]; break; } }
   if (!ppl) { renderArchiveInto(body); return; }
   var bm = getActiveMode() || 'zit';
-  var atom = getAtomAnchor(ppl.ent, bm);   // [v2.0] 英文三模式读英文权威锚点；zit 读中文呈现缓存
+  var atom = getAtomAnchor(ppl.ent, bm);   // [v2.0] 所有英文模式读英文权威锚点；zit 读中文呈现缓存
   var purl = getPortraitUrl(ppl.ent);
   var safe = String(ppl.key).replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_');
   var h = '';
@@ -371,12 +404,12 @@ function renderPersonDetail(body, key) {
   h += '<div style="font-weight:700;font-size:14px;color:' + CAT.text + ';margin-bottom:3px;">' + esc(ppl.name || ppl.key) + '</div>';
   h += '<div style="font-size:11px;color:' + CAT.sub + ';margin-bottom:9px;">' + esc(ppl.identity || '（无标签）') + '</div>';
   var _an = atomCount(atom);
-  var _atomLabel = (bm === 'zit') ? '中文呈现锚点（zit 专用）' : '英文权威锚点（四种模式共用）';
+  var _atomLabel = (bm === 'zit') ? '中文呈现锚点（zit 专用）' : '英文权威锚点（英文模式共用）';
   h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin-bottom:3px;">完整档案 · ' + _atomLabel + '【' + esc(bm) + '】'
      + (atom ? ' · <span style="color:' + (_an >= 20 ? CAT.green : CAT.red) + ';">共 ' + _an + ' 项' + (_an >= 20 ? '' : ' ⚠️ 偏少') + '</span>' : '') + '</div>';
   h += '<div style="font-size:10px;color:' + CAT.mute + ';line-height:1.75;max-height:190px;overflow:auto;">' + (atom ? esc(atom) : (bm === 'zit'
      ? '（还没有锚点 —— 先正常聊一轮、出一次图，插件就会按 38 维建档）'
-     : '（还没有【英文锚点】—— 英文三模式只读英文锚点（中文会被清洗逻辑删空、立绘画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点）')) + '</div>';
+     : '（还没有【英文锚点】—— 英文模式只读英文锚点（中文会被清洗逻辑删空、立绘画出路人）。先正常聊一轮出一次图，辅助 AI 会按 38 维生成英文锚点）')) + '</div>';
   // v1.13.8：立绘四视角（正面在第2层就能出；左/右/背面在这里手动点）
   h += '<div style="font-size:9.5px;color:' + CAT.mute + ';margin:11px 0 5px;">立绘视角（都需手动点；正面在第2层列表里直接出）</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
@@ -454,7 +487,7 @@ export function bindArchiveEvents(b) {
     var aiP = '', aiM = '';
     try { aiP = getPortraitPrompt(ent, view); aiM = portraitPromptsMode(ent); } catch (e8) {}
     var aiOk = !!(aiP && (!aiM || isEnglishMode(aiM) === isEnglishMode(bm)));
-    // [v2.0] 英文三模式读【英文权威锚点】，zit 读中文呈现缓存；base 永不进立绘
+    // [v2.0] 英文模式读【英文权威锚点】，zit 读中文呈现缓存；base 永不进立绘
     var anchor = getAtomAnchor(ent, bm);
     if (!anchor && !aiOk) {
       toast('warning', bm === 'zit'
@@ -496,10 +529,7 @@ function cardTypeSelectHTML(selected) {
   return h + '</select>';
 }
 function scanModeSelectHTML(selected) {
-  var opts = [['zit', 'ZIT（中文提示词）'], ['anima', 'Anima 混合（标签+自然语言）'], ['anime', 'Anime（纯英文描述）'], ['anime_tag', 'Anime Tag（纯英文标签）']];
-  var h = '<select id="sl_scan_mode" style="' + fi() + '">';
-  for (var i = 0; i < opts.length; i++) h += '<option value="' + opts[i][0] + '"' + (opts[i][0] === selected ? ' selected' : '') + '>' + opts[i][1] + '</option>';
-  return h + '</select>';
+  return '<select id="sl_scan_mode" style="' + fi() + '">' + modeOptionsHTML(selected, true) + '</select>';
 }
 
 // ═══════════ 子页：剧情库 ═══════════

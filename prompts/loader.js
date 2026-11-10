@@ -18,6 +18,7 @@ export async function loadPrompts(baseUrl) {
         'pipeline/anima-overlay.txt',
         'pipeline/anime-overlay.txt',
         'pipeline/anime-tag-overlay.txt',
+        'pipeline/krea2-overlay.txt',
         'pipeline/nsfw-overlay.txt',
         'pipeline/summary.txt',
         'main-llm-instruction.txt',

@@ -336,10 +336,10 @@ export async function scanCharacterProfile(modelMode) {
             result = result.replace(/===EN-TAGS===\s*[\s\S]*?===END===/g, '').trim();
         }
 
-        // EN-PROMPT：总是从 result 剥离，仅 anime 模式存储
+        // EN-PROMPT：总是从 result 剥离，anime / krea2 模式存储（两者都是英文自然语言）
         var epMatch = result.match(/===EN-PROMPT===\s*([\s\S]*?)===END===/);
         if (epMatch) {
-            if (modelMode === "anime") {
+            if (modelMode === 'anime' || modelMode === 'krea2') {
                 var epLines = epMatch[1].trim().split("\n");
                 for (var epl = 0; epl < epLines.length; epl++) {
                     var epLine = epLines[epl].trim();
@@ -418,14 +418,14 @@ export async function scanCharacterProfile(modelMode) {
         profiles.root[charName].cast = cast;
         if (userProfile) profiles.root[charName].userProfile = userProfile;
         try { refreshCoopCards(); } catch (e3) { slLog('扫描后协作卡刷新跳过: ' + (e3.message || '')); }
-        // [Fix] anime系模式：英文锚点缺失告警（LLM 未输出 EN-PROMPT/EN-TAGS 块，或角色名不一致导致失配）
-        if ((modelMode === 'anime' || modelMode === 'anime_tag') && Object.keys(cast).length) {
-            var enField = modelMode === 'anime' ? 'enPrompt' : 'enTags';
-            var enBlock = modelMode === 'anime' ? 'EN-PROMPT' : 'EN-TAGS';
+        // [Fix] 英文模式：英文锚点缺失告警（LLM 未输出 EN-PROMPT/EN-TAGS 块，或角色名不一致导致失配）
+        if ((modelMode === 'anime' || modelMode === 'krea2' || modelMode === 'anime_tag') && Object.keys(cast).length) {
+            var enField = (modelMode === 'anime' || modelMode === 'krea2') ? 'enPrompt' : 'enTags';
+            var enBlock = (modelMode === 'anime' || modelMode === 'krea2') ? 'EN-PROMPT' : 'EN-TAGS';
             var enMissing = [];
             for (var _ck in cast) { if (!cast[_ck][enField]) enMissing.push(_ck); }
             if (enMissing.length === Object.keys(cast).length) {
-                slErr('⚠️ 英文锚点(' + enBlock + ')一个都没提取到——LLM 未输出该块或角色名不一致，anime 生图将回退中文提示词');
+                slErr('⚠️ 英文锚点(' + enBlock + ')一个都没提取到——LLM 未输出该块或角色名不一致，' + modelMode + ' 生图将回退中文提示词');
             } else if (enMissing.length) {
                 slErr('⚠️ ' + enMissing.length + ' 个角色英文锚点缺失（' + enBlock + '）: ' + enMissing.join('、') + ' —— 这些角色生图将回退中文');
             }
@@ -537,14 +537,14 @@ export function resolveFacePrompt(rawPrompt) {
                 // [Fix] 统一走 getActiveMode()（锁定>设置>zit）：原实现无 settings.modelType 回退，未锁定时永远按 zit 选锚点语言（C6）。
                 var boundMode = getActiveMode(); var castAnchor = cast[charName].static;
                 if (boundMode === 'anima' && (cast[charName].enTags || cast[charName].enPrompt)) castAnchor = cast[charName].enTags || cast[charName].enPrompt;
-                else if (boundMode === 'anime' && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt;
+                else if ((boundMode === 'anime' || boundMode === 'krea2') && cast[charName].enPrompt) castAnchor = cast[charName].enPrompt;
                 else if (boundMode === 'anime_tag' && cast[charName].enTags) castAnchor = cast[charName].enTags;
                 if (castAnchor) anchor = isEnglishMode(boundMode) ? castAnchor : stripAnchors(castAnchor);
             // 2. NPC → 完整外貌（anime系优先英文锚点，避免中文被 cleanAnimePrompt 删空）
             } else if (npcs[charName] && (npcs[charName].static || npcs[charName].enPrompt || npcs[charName].enTags)) {
                 var npcMode = getActiveMode();
                 if (npcMode === 'anima' && (npcs[charName].enTags || npcs[charName].enPrompt)) anchor = npcs[charName].enTags || npcs[charName].enPrompt;
-                else if (npcMode === 'anime' && npcs[charName].enPrompt) anchor = npcs[charName].enPrompt;
+                else if ((npcMode === 'anime' || npcMode === 'krea2') && npcs[charName].enPrompt) anchor = npcs[charName].enPrompt;
                 else if (npcMode === 'anime_tag' && npcs[charName].enTags) anchor = npcs[charName].enTags;
                 else anchor = stripAnchors(npcs[charName].static);
             // 3. User → userProfile 档案

@@ -1,0 +1,173 @@
+---
+
+【模式：Krea 2 · 英文自然语言段落】
+
+Krea 2 是通用基础模型，靠**一段连贯的英文自然语言**理解画面：细节写得越具体，构图与长相越稳。
+它默认是"探索"的——同一句模糊提示会给出风格完全不同的几张图。
+所以在多张图之间保持一致的唯一办法，是**每张都把媒介、镜头、光线、色调用同一套话写死**。
+
+以下只写本模式**特有**的规则；景别裁剪 / 主体分配 / 语言规范 / 自检 / 输出格式仍以协作模式主规则为准。
+
+## 唯一形态：一段连贯英文
+- ✅ 一整段（3–6 句），句间用句号自然衔接；可以按句子换行排版，但**不许分条、不许小标题、不许编号**
+- ✅ 每句都有主语和动词，像在向一个人口述这张照片 / 这张画：
+  `She stands at the sink with her sleeves rolled up and looks up at the viewer.`
+- ⛔ 禁止标签链 / 逗号堆词：`asian, 1girl, solo, oval face, brown eyes, ...` —— 那不是 Krea 2 的语言
+- ⛔ 禁止 Danbooru 缩写：`1girl` `solo` `tareme` `tsurime` `pov` `cowboy shot` `monolid`
+  改写成日常英文：`a single young woman` / `a waist-up shot` / `downturned eyes` / `single-fold eyelids`
+- ⛔ 禁止权重语法 `(word:1.2)`、禁止 `score_*`
+- ⛔ 禁止画质词 `masterpiece` `best quality` `8k` `ultra detailed` `highly detailed`
+  —— 插件会在提示词前统一加质量前缀，正文里再写一遍只是挤占真正描述画面的篇幅
+- ⛔ 禁止摄影数值：`f/1.8` `ISO 400` `5600K` `50mm` `85mm`
+  改写成看得见的结果：`a shallow depth of field` / `warm evening light`
+  （`macro lens` `35mm film grain` `shallow depth of field` 这类**语言化的镜头 / 质感词**可以用）
+- **长度**：不设字数上限，由"维度是否写全"决定；但也不靠堆形容词——
+  写到"再加一个词，画面也不会变"就停。
+
+## 段落内部顺序（固定的六个节拍，不要写成标题）
+1. **定场**：媒介 + 景别 + 机位（`A close-up photograph from eye level ...`）
+2. **主体与外貌**：先说年龄 / 族裔 / 性别，再逐项把锚点值放进句子
+3. **衣着 / 头发 / 此刻状态**：材质、颜色、穿着方式
+4. **动作与表情**：只写看得见的姿态，不写心情
+5. **场景与光**：地方感（墙地材质、家具形制、光源与方向、哪亮哪暗、影子落在哪）
+6. **收尾定调**：色调 / 质感 / 笔触 / 氛围
+
+## Krea 2 专属的四条
+1. **风格必须每张写死，且同一场聊天里不换词**：媒介（photograph / cinematic still / digital painting /
+   anime illustration / 3D render）、镜头语言、光线方向、色调——这几样每张都用**同一组词**。
+   Krea 2 不会替你在多张之间保持风格：换一个说法 = 换一种画风，同一场聊天里两个人像出自两个画师。
+   ⚠️ **媒介不是默认 photograph**：动漫卡 / 动漫工作流 → `anime illustration` / `digital painting` / `cel animation`；
+   真人向 → `photograph` / `cinematic still`；按角色卡与工作流的画风定，定下就不再改。
+   ⚠️ 若本轮任务里出现【风格·已由插件锁定】→ 媒介 / 质感以它为准，**你不要再写媒介与画风词**；
+   没有这句时才由你自己写媒介，且本轮所有图用同一套词。
+2. **空间关系写实**：谁在画面哪一侧、前景挡了什么、背景是什么、光从哪来——用位置语言
+   （`in the left foreground` / `behind her shoulder` / `the light falls in from the window on the right`）。
+   Krea 2 对"grounded"的位置描述很敏感：写了就到位，不写就随机。
+3. **只写本轮给过的素材**：占位符 / 要点里没有的道具、颜色、纹样、文字，⛔ 一律不许编
+   （Krea 2 会把编出来的东西画得很实，多一个花瓶就穿帮）。
+   维度（眉 / 眼 / 鼻 / 唇 / 肤质…）必须写全，但那是"同一个人本来就有的"，不算新增素材。
+4. **画面里真有文字才用引号**：招牌 / 书页 / 字幕这类需要渲染的字，用引号原样包住
+   （`a sign reading "7号仓库"`；中文渲染不稳，能改成英文就写英文）。
+   其余任何情况都不加引号。
+
+## 年龄 / 体型必须显式写（防幼态化）
+不写年龄与体型 = 把这两项交给模型先验（默认偏"通用年轻女性"），和你的角色对不上。
+成年角色每张都要写清：
+
+    a woman in her late twenties, tall, with a full figure, a narrow waist and long legs
+
+- 年龄写数字或明确档位（`twenty-two` / `in her late thirties`），⛔ 不用 `girl` / `young lady` 把年龄糊过去
+- 体型逐项写：身高感 / 肩 / 腰 / 胸 / 胯 / 腿；⛔ 只写 `slim` / `slender` 等于没写
+- 胸：`small breasts` / `a medium bust` / `full breasts`；胯：`wide hips` / `full hips`；腿：`long legs` / `thick thighs`
+- ⚠️ **看不见就不写**：穿着且无凸显 → 不写胸部细节；远景 → 省睫毛 / 肤质等细节层
+
+## 档案锚点 → 英文段落（v2）
+档案里有两层：**已解析锚点（英文权威）** 和 **主模型写的原始锚点（中文）**。
+
+- **有「✅ 已解析锚点（英文权威锚点）」** → 值**逐字复用，禁止换词**；去掉 `维度:` 前缀，
+  把它们组织成句子里的短语。⛔ 不是把整串锚点粘在句尾（`... , brown eyes, low nose bridge` 又变成标签链了）。
+- **只有「⚠️ 原始锚点（中文）」**（首次）→ 把它**具象化成英文**写进段落，
+  并通过 `---PROFILE---` 的 `anchor` 字段回传**英文**锚点（维度名与值全英文）。
+- 老档案里的量化比例 **禁止进提示词**（生图模型没有这些表示，写了只是噪音），按档位词写：
+
+    眼裂≈2.8:1        → almond eyes
+    眼尾下垂5°         → downturned eyes
+    眼尾上挑          → upturned eyes
+    半睁              → half-lidded eyes
+    腰宽≈0.72胸宽      → a narrow waist
+    胯宽≈1.15肩宽      → wide hips
+    C罩杯             → a medium bust
+    168cm / 7头身      → tall, with long legs
+
+- **L1 身份锚（瞳色 / 痣 / 疤痕 / 罕见发色）+ L2 形体锚每张必写**，不受景别影响；砍了就每张换脸。
+- **按景别裁剪**（见核心规则）：中景不写腿 / 臀 / 脚；特写不写身体。
+- **永久标记每张必写**，位置用自然语言补
+  （`a small mole just under the outer corner of her left eye`），用词逐字一致。
+- 同一个特征跨轮用**同一个词**：这轮 `a narrow waist`，下轮还是 `a narrow waist`——换说法 = 长相漂移。
+- ⛔ 段落里不出现角色名，全部用描述替代。
+
+## 皮相三层分开写（v1.20）
+- **肤质** → 用锚点 `skin_texture` 的值，逐字复用（`soft even skin` / `matte skin with fine pores`）
+- **气色 / 红晕 / 汗 / 油光** → **只听本轮【要点】**，⛔ 不许从档案搬
+  （冻进档案 = 每张图都被强制打上腮红）
+- **审美调性** → 锚点 `aura:` 的值，化成段落里第一个形容词短语，放在外貌描写之前
+- ⛔ 禁用高反射词（塑料感元凶）：`luminous` `glowing` `lit from within` `glass skin` `dewy`
+  —— 画出来是硅胶娃娃
+- ⛔ 禁用骨相美化词：`refined features` `delicate features` `perfect face` `stunning beauty`
+  —— 它们会把五官往"标准美"拉，锚点里的值就消失了
+- ⛔ `beautiful` 可以和维度**并存**，不能**替代**维度
+- ⛔ 锚点值必须逐字落地：`low nose bridge` 不许写 `a straight nose bridge`；
+  `thin upper lip` 不许写 `full lips`；`a short wide face` 不许省
+
+## 造型库 detail 的处理（v1.5.0）
+【造型库】里 **✅ 已解析** 的 detail：特征词**一个不许少、一个字不许改**，但要**织进句子**，
+⛔ 不要原样粘贴整串。
+（例：detail `long wavy dark brown hair, side part, loose curls at the ends` →
+`Her dark brown hair falls in long waves, parted on the side, the ends loosening into soft curls.`）
+**⚠️ 待具象化**：按 wardrobe-vocab.txt 取词写进去，并通过 `---WARDROBE---` 回传。
+造型只写"是什么"；「滑落 / 卷袖 / 湿透」属于本轮状态，写进动作或衣着的状态里。
+
+## 动态字段转英文
+- `发型:黑色低发髻，斜刘海` → `Her black hair is gathered in a low bun, with side-swept bangs.`
+- `衣着:深灰V领紧身短袖` → `She wears a tight dark grey v-neck short-sleeve top.`
+- `状态:耳根泛红` → `A faint blush spreads over her ears.`
+
+## 示例
+
+**⚠️ 下面是两组结构示范，两个角色脸型 / 年龄 / 气质 / 景别全都相反。
+它们示范的是「结构」，⛔ 不是「模板」—— 照抄其中任何一个 = 把所有人都画成同一个人。**
+（示例里的 `her` 是代词占位，写的时候换成实际主体描述；示例为英文段落，正是本模式的唯一形态。
+示例用 `photograph` 只是中性基准 —— 动漫卡把媒介换成 `anime illustration` / `digital painting` 即可，其余结构照旧。）
+
+**✅ 示例 A · close-up · 22 岁清瘦冷感**（近景**不写胸 / 腰 / 臀 / 腿**）
+
+    A close-up photograph taken from eye level in a bare art studio before dawn. She is twenty-two, a
+    Han woman from the southwest, with a clean oval face that narrows to a small chin, a low brow bone
+    and thin single-fold eyelids; her eyes are long with level corners and light brown irises under
+    short, straight lashes, her nose bridge is low with a small tip, and her upper lip is thin over a
+    small, flat mouth with pale lips. Her skin is cool and pale, translucent enough to show a faint
+    vein at the temple, with a tiny mole just outside the corner of her right eye, and her hair is
+    long, straight and black, falling past her waist, center-parted with the forehead exposed. She
+    wears a grey cotton smock worn thin, a smudge of paint on the cuff, and turns back over her
+    shoulder with a brush still in her hand, her shoulders dropped and her head tilted slightly away
+    from the viewer. A paint-spattered easel and tins of paint sit soft in the left foreground, and
+    the tall window is still dark behind her. The frame is quiet and restrained, with shallow depth of
+    field, cool desaturated tones and fine 35mm film grain.
+
+**✅ 示例 B · waist-up · 38 岁丰润风韵**（中景**不写腿 / 臀 / 脚**）
+
+    A waist-up photograph taken from a slightly low angle in the back kitchen of an old restaurant at
+    dusk. She is thirty-eight, a Han woman from the north, with a round face that is short and wide,
+    a soft jawline and a fleshy round chin; her brow bone is flat and her eye sockets shallow, her
+    eyelids a faint inner double fold with outer corners that droop slightly, and her irises are dark
+    brown. Her nose bridge is low with a wide base, her upper lip is thin and her lower lip full, the
+    lips a natural rose red, and her skin is warm and fair with a healthy flush across the cheeks. Her
+    dark brown hair is wavy, gathered low and loose at the back of her head, a few strands escaping at
+    the temples. She wears a deep blue cotton work jacket with the collar left open and the sleeves
+    rolled to the forearm, a dishcloth still in one hand, and she leans against the sink and looks up
+    at the viewer with a relaxed half-smile. A steel sink, enamel basins and hanging iron ladles fill
+    the dim background. The frame is warm and slightly dim, with shallow depth of field and a soft
+    photographic texture.
+
+## 反例（出现任何一条都要重写）
+- `asian, 1girl, solo, 22 years old, oval face, monolid, large breasts, close-up, cinematic lighting`
+  ← 标签链，不是句子
+- `(beautiful face:1.3), masterpiece, best quality, 8k, ultra detailed` ← 权重 + 画质词
+- `A photo of a stunningly beautiful young woman with perfect features.` ← 评价词 / 骨相美化，零维度
+- `She is 林小雨, standing by the window.` ← 角色名代替外貌
+- `no hat, without makeup, head turned away from the camera` ← 否定式（没有负向提示词；否定会反向激活）
+- `中景，鹅蛋脸，杏眼，深棕瞳，细腰，胸部丰满，长腿` ← 中文 + 逗号堆词
+- 只有一两句、没有场景与光 ← 维度不全，Krea 2 会自己补一套（每张都不一样）
+- 把占位符 / 要点原文（`要点：…` `造型：…`）直接抄进段落 ← 那是素材不是画面
+
+## 场景约束
+每个场景描述只能从本轮【当前正文】/【占位符】提取，不能使用历史数据；
+正文没写的细节（色温 / 布局 / 天气）按当前段落合理推断，⛔ 不许编造场景转换。
+
+## 自检
+1. 是一段连贯英文，还是标签 / 分条 / 小标题？
+2. 媒介、镜头、光线、色调写死了吗？本轮几张之间是同一套词吗？有没有每轮都在换媒介 / 色调？
+3. 年龄与体型写全了吗？只写 slim 不算。
+4. 有没有编占位符里没有的素材？
+5. 锚点值逐字用了吗？跨轮同词吗？
+6. 有没有中文残留、角色名、权重语法、画质词、摄影数值？

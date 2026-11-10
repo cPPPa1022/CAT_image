@@ -4,7 +4,7 @@ import { rosterEntries } from '../roster.js';
 import { catSVG, catStatusText } from './cat.js';
 import { setHeadStatus } from './panel.js';
 import { toast, chkProf } from './utils.js';
-import { settings, saveSettings, getActiveMode, isEnglishMode } from '../settings.js';
+import { settings, saveSettings, getActiveMode, modeBadge } from '../settings.js';
 import { getCharacterName } from '../pipeline/profile.js';
 import { getScannerStatus } from '../scanner.js';
 import { getQueueLength } from '../queue.js';
@@ -70,7 +70,7 @@ export function refreshCompactBar() {
   if (!_compactEl || !_compactEl.is(':visible')) return;
   var cn = getCharacterName() || '', hasChat = !!cn;
   jQuery('#sl_comp_char').text(hasChat ? cn : '还没有选角色喵~');
-  jQuery('#sl_comp_model').text(hasChat ? (isEnglishMode() ? (getActiveMode() === 'anima' ? '🎬 ANIMA' : '🎬 ANIME') : '🖼️ ZIT') : '');
+  jQuery('#sl_comp_model').text(hasChat ? String(modeBadge(getActiveMode())).toUpperCase() : '');
   var hp = chkProf();
   if (!hasChat) { jQuery('#sl_comp_profile').text('').hide(); }
   else {

@@ -294,7 +294,7 @@ export function rosterIndexText(limit) {
 
 // ── 从卡库扫描档案导入人物表（复用 scanCharacterProfile 产出，保证人物一致性） ──
 // cast: { 角色名: { static, body, enPrompt, enTags, ... } }
-// mode: 'zit' | 'anime' | 'anime_tag' → 选对应语言锚点
+// mode: 'zit' | 'anima' | 'anime' | 'anime_tag' | 'krea2' → 选对应语言锚点
 // 返回值：导入/更新条数
 // 身份维度过滤器：档案只保留"脸部/身材/永久标记"（用户规则）——
 // 发型/衣着/配饰/状态等可变维度由酒馆AI按轮次写（插件AI只做 档案+酒馆AI提示词 → 图片prompt）。
@@ -322,7 +322,7 @@ export function importFromCast(cast) {
         var appearance = '';
         // anima 混合模式：结构用标签，所以优先 enTags；没有则退回 enPrompt
         if (mode === 'anima' && (c.enTags || c.enPrompt)) appearance = c.enTags || c.enPrompt;
-        else if (mode === 'anime' && c.enPrompt) appearance = c.enPrompt;   // 英文锚点为整体描述，暂不拆维度
+        else if ((mode === 'anime' || mode === 'krea2') && c.enPrompt) appearance = c.enPrompt;   // 英文锚点为整体描述，暂不拆维度
         else if (mode === 'anime_tag' && c.enTags) appearance = c.enTags;
         else appearance = identityAnchorOnly(c.static || '');             // 中文：只保留脸/身形/永久标记
         if (c.body && appearance && !/身形/.test(appearance)) appearance += '；身形：' + c.body;
@@ -336,16 +336,16 @@ export function importFromCast(cast) {
 }
 
 // ══════════════════════════════
-// ── 锚点库 v2.0 · 英文权威，四种模式共用一份 ──
+// ── 锚点库 v2.0 · 英文权威，英文模式共用一份 ──
 // 演进：
 //   v1.6.2 之前 —— 英文三模式每轮重新翻译主模型的中文锚点 → 措辞漂移（同一特征四种写法）。
 //   v1.6.2 做法 —— 按【模式】各存一份"该模式语言"的锚点。但 anima 的锚点规范没写清楚，
 //                  辅助AI 照 PROFILE 示例存成了中文 → 立绘走 cleanAnimePrompt 时被整段删空 →
 //                  只剩框架词 → 画出与角色无关的路人（2026-10-17 实测 8/8 全废）。
 //   v2.0 做法 —— 锚点**只有一套、只写英文**（`维度:值 | …`，维度名与值全 ASCII）：
-//      · entry.anchor    = 英文权威锚点（唯一来源，anima / anime / anime_tag / zit 共用）
+//      · entry.anchor    = 英文权威锚点（唯一来源，anima / anime / anime_tag / krea2 / zit 共用）
 //      · entry.atoms.zit = 中文呈现缓存（zit 中文模式逐字复用；辅助AI 在 zit 模式回传 anchor_zh）
-//      英文三模式一律读 entry.anchor，**绝不读中文**（读了就会被 cleanAnimePrompt 删空 = 低级失误）。
+//      英文模式一律读 entry.anchor，**绝不读中文**（读了就会被 cleanAnimePrompt 删空 = 低级失误）。
 // 写入闸门：英文 → entry.anchor；中文 → 只允许进 atoms.zit 且模式必须是 zit；
 //          其余（英文模式收到中文锚点）一律拒绝并记日志。
 // 写入规则：首次写入即冻结；之后只接受「包含旧文且更长」的版本（= 追加缺失维度，而不是重写措辞）。
@@ -372,7 +372,7 @@ export function getEnglishAnchor(entry) {
         return _legacyEnglishAtoms(entry);
     } catch (e) { return ''; }
 }
-// 该模式下"该用的锚点文本"：zit → 中文呈现缓存（没有才退回英文权威锚点）；英文三模式 → 英文权威锚点
+// 该模式下"该用的锚点文本"：zit → 中文呈现缓存（没有才退回英文权威锚点）；英文模式 → 英文权威锚点
 export function getAtomAnchor(entry, mode) {
     try {
         if (!entry) return '';
@@ -437,7 +437,7 @@ function _applyFrozen(old, t) {
     if (old.indexOf('|') < 0 && t.indexOf('|') >= 0) return { write: true, why: '升级为新格式' };
     return { write: false, why: '回传被忽略（旧文已冻结，防重写）' };
 }
-// ── 英文权威锚点（四种模式共用；英文模式读它出图）──
+// ── 英文权威锚点（所有英文模式共用；英文模式读它出图）──
 export function setEnglishAnchor(name, identity, text) {
     try {
         var t = String(text || '').trim();
@@ -540,7 +540,7 @@ export function rosterDataTextFor(nameList) {
                     if (_atom) {
                         // 已有锚点 → 逐字复用（零漂移）；同时给出主模型原文供"补全缺失维度"对照
                         nmLines.push('■ ' + e.key);
-                        nmLines.push('   ✅ 已解析锚点' + (_m === 'zit' ? '（中文呈现 · 逐字复用）' : '（英文权威锚点 · 四种模式共用 · 逐字复用）')
+                        nmLines.push('   ✅ 已解析锚点' + (_m === 'zit' ? '（中文呈现 · 逐字复用）' : '（英文权威锚点 · 英文模式共用 · 逐字复用）')
                             + '（**逐字写进提示词，禁止改写、禁止同义替换**）：' + _atom);
                         nmLines.push('   ⚠️ 原始锚点（主模型原文，**只用于对照是否缺维度，不要照抄**）：' + (e.base || e.appearance || '').slice(0, 200));
                         // v1.15.0：锚点里缺【美学基调 aura】→ 点名要回来（老档案都是 v1.14 前建的，全都没有）
@@ -565,9 +565,9 @@ export function rosterDataTextFor(nameList) {
                                 }
                             } catch (e3) {}
                         })();
-                        // zit 模式下若英文权威锚点还缺着：顺手让它补一份（英文锚点四种模式共用，缺了英文模式画不了立绘）
+                        // zit 模式下若英文权威锚点还缺着：顺手让它补一份（英文锚点各英文模式共用，缺了英文模式画不了立绘）
                         if (_m === 'zit' && !getEnglishAnchor(e)) {
-                            nmLines.push('   ⭐ 另：这位还缺【英文权威锚点】—— 本轮请一并回传 anchor（英文，维度名与值全英文）字段；它与中文呈现表达同一件事，四种模式共用。');
+                            nmLines.push('   ⭐ 另：这位还缺【英文权威锚点】—— 本轮请一并回传 anchor（英文，维度名与值全英文）字段；它与中文呈现表达同一件事，所有英文模式共用。');
                         }
                     } else if (_m !== 'zit' && e.base) {
                         // [Fix v1.7.4] 只发【静态锚点】，**不夹带上一轮的 live**

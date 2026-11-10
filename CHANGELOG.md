@@ -1,5 +1,79 @@
 # 📜 更新日志（Changelog）
 
+## v1.28.0 — 2026-11-11
+**主题：新增 Krea 2 文生图模式（第五种提示词模式）**
+
+### ✅ 新增
+
+`prompts/pipeline/krea2-overlay.txt` —— Krea 2 专用生图提示词规则：
+
+- **唯一形态：一段连贯英文**（3–6 句）。禁标签链、Danbooru 缩写（`1girl`/`solo`/`tareme`）、
+  权重语法、画质词（`masterpiece`/`8k`）、摄影数值（`f/1.8`/`ISO 400`）。
+- **固定六节拍**：定场（媒介+景别+机位）→ 主体与外貌 → 衣着/头发/状态 → 动作表情 → 场景与光 → 收尾定调。
+- **Krea 2 专属四条**：
+  1. 风格每张写死且跨轮同词 —— 它默认"探索"，同一句模糊提示会给出不同画风；
+  2. 空间关系用位置语言（`in the left foreground` / 光从哪边来）；
+  3. 只写本轮给过的素材（维度必须写全，但不许编道具/颜色/纹样）；
+  4. 画面里真有文字才用引号（Krea 2 支持文字渲染）。
+- **项目硬约束全部保留**：锚点值逐字复用 + 跨轮同词、L1/L2 每张必写、按景别裁剪、
+  年龄/体型显式写（防"通用年轻女性"）、皮相三层、造型库 detail 织进句子、事实段原样落地。
+- 含两组反向示例（近景 22 岁清瘦 / 中景 38 岁丰润）+ 7 条反例 + 6 项自检。
+
+### 🎨 Krea 2 风格下拉（同日追加）
+
+**事实核对**：Krea 2 官方**没有固定的内置风格清单**——风格控制是四条路：提示词语言 / 风格参考图（≤4 张，各自强度）/
+情绪板（taste profile·keywords·avoids）/ Krea 风格 LoRA。见 [官方 Krea 2 指南](https://www.krea.ai/docs/user-guide/features/krea-2)。
+
+所以下拉框收录的是**官方示例与文档覆盖到的风格大类**，每条一句纯风格英文（不含主体、不含具体光源）：
+
+| 分组 | 预设 |
+|---|---|
+| 通用 | 自动（不锁风格） |
+| 摄影 | 🎞 电影感摄影 · 📷 35mm 胶片 · 💄 时尚杂志 · 🔬 微距特写 |
+| 二次元 | 🎬 动漫插画 · 📺 90s 赛璐璐动画 |
+| 绘画 | 🖌 数字绘画 · 🎨 厚涂油画 · 🖋 黑白墨线 |
+| 平面 | 🔷 扁平矢量 · ✂️ 复古拼贴 |
+| 3D / 实验 | 🧸 3D 渲染 · 🌈 80s 喷枪 |
+
+- `modules/style-presets.js`（新）：`KREA2_STYLES` 清单 + `krea2StyleById` / `krea2StylePrompt`。
+- `settings.krea2Style`（默认 `''`=自动）；设置页新增「🎨 Krea 2 风格」卡片，**仅 krea2 模式显示**，按分组用 optgroup。
+- `comfyui.composeFinalPrompt`：krea2 且选了风格 → 把风格句前置。
+  最终顺序：全局「前置提示词」→ **风格句** → 质量前缀 → 正文 → 艺术家标签。
+- `roster-pipeline` 的 user 消息新增【风格·已由插件锁定】：把风格句下发给辅助 AI，并要求它**不要再写媒介/画风词**；
+  未选风格时反向提示「你必须自己写媒介，且本轮所有图同一套词」。
+- `krea2-overlay.txt` 同步这一分支。
+
+**为什么要落到代码而不是提示词**：辅助模型每轮独立调用、无记忆，提示词里写「跨轮同词」它做不到；
+插件统一前置的这一句才是真正的稳定通道。
+
+### 🔧 接线
+
+| 文件 | 改动 |
+|---|---|
+| `prompts/loader.js` | 加载 `pipeline/krea2-overlay.txt` |
+| `modules/settings.js` | `isEnglishMode` 收 krea2；新增 `MODES` 模式清单（id / 设置页标签 / 扫描下拉简称 / 徽章）为**唯一来源**，配 `modeLabel` / `modeBadge`；新增 `krea2Style` 默认值 |
+| `modules/style-presets.js` | 新增：Krea 2 风格预设清单（14 条 / 6 组）+ 查询函数 |
+| `modules/comfyui.js` | 组装时前置 Krea 2 风格句 |
+| `modules/pipeline/roster-pipeline.js` | 模式→overlay 由嵌套三元改为 `MODE_OVERLAY` 表（含 krea2）；user 消息下发【风格·已由插件锁定】 |
+| `modules/ui/tabs.js` | 设置页下拉 / 扫描下拉 / 首页徽章 / 英文增强面板显隐改读 `MODES` + `isEnglishMode`（原先三处各写一份模式清单） |
+| `modules/ui/compact-bar.js` | 模式标签走 `modeBadge` |
+| `modules/sync-cards.js` | 协作卡「当前模式」补 krea2 描述 |
+| `modules/roster.js`、`modules/pipeline/profile.js` | 扫描与卡库导入时 krea2 取 `enPrompt`（与 anime 同路）；英文锚点缺失告警补 krea2 |
+| `manifest.json`、`index.js` | 版本 1.28.0 |
+
+### 🧪 回归
+
+- 接线与内容自检 **23 项全过**（MODES 唯一性 / 英文判定 / overlay 映射与文件存在 / loader 登记 / overlay 关键节与禁令）。
+- 风格预设自检 **20 项全过**（14 条清单 / id 唯一 / 分组 6 类 / 无中文与主体词 / 查询函数 / 三处接线 / 显示条件）。
+- `node --check` 改动文件全过。
+- 手工核对：默认模式仍为 `zit`，老存档不受影响；krea2 仅在用户主动选择或角色卡锁定时生效。
+- 另：PS 的 `Set-Content` 曾把 `style-presets.js` 写成乱码（GBK→UTF8 双重编码），已用 write 重写并复核，**后续改 prompt/中文文件不要用 PowerShell 读写**。
+
+### 说明
+
+- `settings.animeQualityPrefix` / `animeArtist` 面板对 krea2 同样显示（英文模式共用）。
+  已选风格预设时，质量前缀只写质量（`sharp focus` / `high detail`），不要再写媒介；艺术家标签留空。
+
 ## v1.27.4 — 2026-10-25
 **主题：年龄闸门接通 —— 返回值早已是 true，但全仓库零调用，等于死代码**
 

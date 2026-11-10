@@ -11,6 +11,7 @@ import { rosterDataTextFor, rosterEntries, upsertPerson, applyPersonSegments, im
 import { getProfiles } from './profile.js';
 import { wardrobeDataTextFor, upsertEntry, normKey } from '../wardrobe.js';
 import { statusesDataTextFor, upsertStatus, setStatusActive } from '../statuses.js';
+import { krea2StyleById } from '../style-presets.js';
 
 // ── v1.13.1 管线输出合格性判定（失败重试用）──
 // 判定顺序：空 → 结构标记 → 拒绝语 → **条数** → 单条质量
@@ -138,6 +139,17 @@ function splitDiscipline(core) {
 
 function _p(f) { return isPromptsLoaded() ? (getPrompt(f) || '') : ''; }
 
+// ── v1.28.0：模式 → overlay 文件（单一来源）──
+// 原先用嵌套三元拼文件名：加一个模式要动那一行，漏了就静默回退 zit 中文规则
+// （英文模型收到中文规则 = 输出被清洗成空）。现在一张表，缺项也走 zit（但至少一眼看得见）。
+var MODE_OVERLAY = {
+    zit:       'pipeline/zit-overlay.txt',
+    anima:     'pipeline/anima-overlay.txt',
+    anime:     'pipeline/anime-overlay.txt',
+    anime_tag: 'pipeline/anime-tag-overlay.txt',
+    krea2:     'pipeline/krea2-overlay.txt',
+};
+
 function buildPurgeMessages() {
     var msgs = [];
     function push(text) {
@@ -168,13 +180,9 @@ function buildPurgeMessages() {
     push(['atomic-vocab.txt', 'wardrobe-vocab.txt', 'wardrobe-expand.txt',
           'statuses-vocab.txt', 'statuses-expand.txt']
         .map(_p).filter(Boolean).join('\n\n'));
-    // ⑥ 模式 overlay
+    // ⑥ 模式 overlay（v1.28.0：模式 → 文件收敛成一张表；新增模式只改 settings.MODES + 这张表）
     var pipeMode = getActiveMode();
-    var overlayFile = 'pipeline/' + (pipeMode === 'anima' ? 'anima-overlay'
-        : pipeMode === 'anime_tag' ? 'anime-tag-overlay'
-        : pipeMode === 'anime' ? 'anime-overlay'
-        : 'zit-overlay') + '.txt';
-    push(_p(overlayFile));
+    push(_p(MODE_OVERLAY[pipeMode] || MODE_OVERLAY.zit));
     if (settings.nsfwEnhance) push(_p('pipeline/nsfw-overlay.txt'));
 
     // 兜底开关：有些网关只读第一条 system（或把多条 system 丢弃拼错）。
@@ -280,6 +288,17 @@ function buildRosterUserContent(placeholders, wardrobeInfo, statusInfo) {
     try { avatar = settings.promptPrefix || ''; } catch (e) {}
     var lines = [];
     lines.push('【任务】为每个 [img:] 占位符输出 1 条提示词，按【占位符】编号一一对应。人物外貌必须引用【人物档案】，禁止用名字代替外貌。禁止偷懒：每一幅图都要写完整详情（人物当前状态+衣着发型+表情+动作+场景+光影），不允许省略/概括/一句话带过。');
+    // v1.28.0：Krea 2 风格锁定 —— 风格句由插件统一前置（跨轮稳定），这里告诉模型"别再自己写媒介"
+    if (getActiveMode() === 'krea2') {
+        var _kstyle = krea2StyleById(settings.krea2Style);
+        if (_kstyle && _kstyle.prompt) {
+            lines.push('【风格·已由插件锁定】' + _kstyle.prompt);
+            lines.push('· 上句会由插件加在**每张提示词最前面**，本场所有图共用 —— 这就是本场的媒介 / 质感 / 画风。');
+            lines.push('· 你只写：景别+机位、人物与外貌、衣着、动作表情、场景与光。⛔ **不要另写媒介与画风词**（photograph / anime / oil painting / cinematic / 3D render 等）——会和锁定的风格打架；构图词（close-up / waist-up / from below）照写。');
+        } else {
+            lines.push('【风格】未锁定：你必须自己写清媒介（photograph / anime illustration / digital painting / 3D render…），并在本轮所有图里用**同一套词**。');
+        }
+    }
     // [Fix] 格式硬约束（格式缺失=整轮作废，是此前 0 条提示词/串味的主因）
     lines.push('【输出格式·必须严格遵守·PROFILE 与 IMAGES 漏一段整轮作废】');
     // v1.27.2：模型会把 workflow 的「对每一个占位符依次执行」理解成"每个占位符各输出一份三段"，

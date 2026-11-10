@@ -23,6 +23,9 @@ export function getDefaults() {
         enhancedTheme: '默认',
         nsfwEnhance: false,
         modelType: 'zit',
+        // v1.28.0 Krea 2 风格预设 id（'' = 自动）。清单见 modules/style-presets.js；
+        // 选中后由 comfyui.composeFinalPrompt 统一前置到每张提示词最前面（跨轮稳定）
+        krea2Style: '',
         promptPrefix: '',
         uiTheme: '雪白猫',  // [Fix] 原默认 '奶糖小猫' 主题不存在，每次启动被重置为'雪白猫'（C9）
         textTheme: '默认',
@@ -160,11 +163,34 @@ export function getActiveMode() {
     return settings.modelType || 'zit';
 }
 
-// ── 是否「英文提示词」模式（anime / anime_tag / anima 三种都输出英文）──
+// ── v1.28.0 模式清单（唯一来源）──
+// 新增一个提示词模式要动的只有五处，顺序固定：
+//   ① 本清单加一条  ② isEnglishMode 判定它是不是英文  ③ roster-pipeline 的 MODE_OVERLAY 指向 overlay
+//   ④ prompts/loader.js 加载对应文件  ⑤ prompts/pipeline/<name>-overlay.txt 写规则
+// 以前「四种模式」在设置页下拉 / 扫描下拉 / 首页徽章 / 紧凑条各写一份 → 加一种就要改四遍，必漏。
+export var MODES = [
+    { id: 'zit',       label: 'ZIT（中文提示词）',                                          short: 'ZIT（中文提示词）',            badge: '🖼️ ZIT' },
+    { id: 'anima',     label: '🎬 Anima 混合（标签定结构 + 自然语言写氛围）★ Anima 系模型推荐', short: 'Anima 混合（标签+自然语言）',   badge: '🎬 Anima' },
+    { id: 'anime',     label: 'Anime（纯英文描述）',                                        short: 'Anime（纯英文描述）',          badge: '🎬 Anime' },
+    { id: 'anime_tag', label: 'Anime Tag（纯英文标签）',                                    short: 'Anime Tag（纯英文标签）',      badge: '🎬 Tag' },
+    { id: 'krea2',     label: '🎬 Krea 2（英文自然语言段落）★ Krea 2 / 通用基座模型推荐',      short: 'Krea 2（英文自然语言段落）',   badge: '🎬 Krea2' },
+];
+
+export function modeLabel(id) {
+    for (var i = 0; i < MODES.length; i++) if (MODES[i].id === id) return MODES[i].short;
+    return id || 'zit';
+}
+
+export function modeBadge(id) {
+    for (var i = 0; i < MODES.length; i++) if (MODES[i].id === id) return MODES[i].badge;
+    return '🖼️ ZIT';
+}
+
+// ── 是否「英文提示词」模式（anime / anime_tag / anima / krea2 都输出英文）──
 // 统一入口：以后新增英文模式只改这里，不用再去各处撒 if
 export function isEnglishMode(mode) {
     var m = mode || getActiveMode();
-    return m === 'anime' || m === 'anime_tag' || m === 'anima';
+    return m === 'anime' || m === 'anime_tag' || m === 'anima' || m === 'krea2';
 }
 
 // ── v1.27.0 轻量同步指纹（FNV-1a 32bit + djb2，拼成 16 位 hex）──

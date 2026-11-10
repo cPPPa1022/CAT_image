@@ -1,4 +1,4 @@
-﻿// ── SillyImage Lab v2.0 — 入口文件 ──
+// ── SillyImage Lab v2.0 — 入口文件 ──
 import { extension_settings, getContext } from '../../../extensions.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
@@ -17,8 +17,8 @@ import { imgCacheClear } from './modules/cache.js';
 import { initFrontendBridge } from './modules/frontend-bridge.js';
 
 // ── 版本 ──
-window.SILLYLAB_VERSION = 'v1.27.4';
-slLog('LOADED v1.27.4');
+window.SILLYLAB_VERSION = 'v1.28.0';
+slLog('LOADED v1.28.0');
 
 // ── 初始化设置 ──
 initSettings(getContext, extension_settings);

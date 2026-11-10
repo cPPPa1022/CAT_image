@@ -3,6 +3,7 @@ import { slLog } from './log.js';
 import { settings, getSTHeaders, saveSettings, escapeHtml, getActiveMode, isEnglishMode } from './settings.js';
 import { uploadImageToST } from './cache.js';
 import { getProfiles } from './pipeline/profile.js';
+import { krea2StylePrompt } from './style-presets.js';
 
 // [Fix] 提示词角色名过滤（最后防线）：LLM 偶发违规把角色名写进提示词，或 FACE 占位符残留。
 // 角色名是生图模型无法理解的概念噪音，且会把名字当成画面元素画出来。
@@ -222,6 +223,12 @@ export function composeFinalPrompt(prompt) {
     }
     if (isEnglishMode(curMode) && settings.animeQualityPrefix) prompt = settings.animeQualityPrefix + ', ' + prompt;
     if (isEnglishMode(curMode) && settings.animeArtist) prompt = prompt + ', ' + settings.animeArtist;
+    // v1.28.0：Krea 2 风格锁定 —— 紧跟在全局「前置提示词」之后、质量前缀之前（见下方顺序）。
+    // 风格 = 媒介/质感（本场固定）；质量前缀 = 用户自己的补充。自动模式不插。
+    if (curMode === 'krea2') {
+        var _stylePrompt = krea2StylePrompt(settings.krea2Style);
+        if (_stylePrompt) prompt = _stylePrompt + ', ' + prompt;
+    }
     if (settings.promptPrefix) prompt = settings.promptPrefix + ', ' + prompt;
     return prompt;
 }
